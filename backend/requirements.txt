@@ -3,3 +3,14 @@ uvicorn[standard]==0.24.0
 python-dotenv==1.0.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
+python-multipart==0.0.6 
+
+
+google-generativeai
+supabase==2.3.0
+
+pymupdf==1.23.6
+Pillow==10.1.0
+
+
+httpx==0.24.1
