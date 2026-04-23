@@ -11,6 +11,8 @@ supabase==2.3.0
 
 pymupdf==1.23.6
 Pillow==10.1.0
-
+pypdf
+fpdf2
 
 httpx==0.24.1
+gotrue ==1.3.1
