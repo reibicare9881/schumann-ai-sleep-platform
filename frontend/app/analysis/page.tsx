@@ -20,11 +20,13 @@ const TrendChart = ({ data, color, label, maxVal, showPred = false }: any) => {
   const cW = W - pad.l - pad.r, cH = H - pad.t - pad.b;
   const mx = maxVal || Math.max(...data.map((d: any) => d.v)) * 1.15 || 1;
   
-  const xs = data.map((_: any, i: number) => pad.l + (i / (data.length - 1)) * cW);
+  const n = data.length;
+  // 讓 X 軸動態縮放，如果有預測點，就多留一格的寬度
+  const steps = showPred ? n : Math.max(1, n - 1);
+  const xs = data.map((_: any, i: number) => pad.l + (i / steps) * cW);
   const ys = data.map((d: any) => pad.t + cH * (1 - d.v / mx));
 
   // 線性回歸計算 (線性推測)
-  const n = data.length;
   const xm = (n - 1) / 2, ym = data.reduce((a: any, d: any) => a + d.v, 0) / n;
   const sxy = data.reduce((a: any, d: any, i: number) => a + (i - xm) * (d.v - ym), 0);
   const sxx = data.reduce((a: any, _: any, i: number) => a + (i - xm) ** 2, 0);
@@ -35,7 +37,7 @@ const TrendChart = ({ data, color, label, maxVal, showPred = false }: any) => {
   const ptStr = xs.map((x: number, i: number) => `${x},${ys[i]}`).join(" ");
   const aStr = `${xs[0]},${ys[0]} ${ptStr} ${xs[xs.length - 1]},${H - pad.b} ${xs[0]},${H - pad.b}`;
   
-  const predX = pad.l + (n / (n - 1)) * cW;
+  const predX = pad.l + (n / steps) * cW;
   const predY = pad.t + cH * (1 - pred(n) / mx);
 
   return (
@@ -193,7 +195,33 @@ export default function AnalysisPage() {
           </div>
         </div>
       )}
-
+    {/* 補回：定期評估提醒設定 */}
+      <div className="bg-[#fdf8f3] border border-[#e8ddd4] rounded-3xl p-6 md:p-8 mt-12 shadow-sm">
+        <h3 className="text-lg font-bold text-amber-700 mb-4 flex items-center gap-2">
+          <Calendar className="w-5 h-5" /> 定期評估提醒設定
+        </h3>
+        <p className="text-xs text-slate-600 leading-relaxed mb-6">
+          建議每 4–6 週完成一次評估，追蹤健康變化趨勢。由於本系統為網頁應用程式，無法主動推送通知，建議透過以下方式設定提醒：
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[
+            { icon: "📱", t: "手機行事曆", d: "新增每 4 週循環提醒「完成健康評估」" },
+            { icon: "💬", t: "LINE 提醒", d: "設定 LINE 自訂提醒訊息，每月固定日提醒" },
+            { icon: "📧", t: "Email 循環", d: "請單位管理者設定定期評估通知信" }
+          ].map((r, i) => (
+            <div key={i} className="bg-white border border-slate-200 rounded-2xl p-4 flex gap-4 items-start shadow-sm hover:shadow-md transition-shadow">
+              <span className="text-2xl">{r.icon}</span>
+              <div>
+                <div className="text-sm font-bold text-slate-800 mb-1">{r.t}</div>
+                <div className="text-xs text-slate-500 leading-relaxed">{r.d}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="text-[10px] text-slate-400 mt-6 text-center font-bold tracking-widest uppercase">
+          * 未來版本將整合原生推播通知功能
+        </div>
+      </div>
     </div>
   );
 }

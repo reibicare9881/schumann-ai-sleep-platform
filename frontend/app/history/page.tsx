@@ -70,6 +70,17 @@ export default function HistoryPage() {
     setTimeout(() => URL.revokeObjectURL(url), 15000);
   };
 
+  // 補回：下載純文字紀錄的邏輯
+  const handleExportTxt = () => {
+    if (filtered.length === 0) return alert("目前沒有資料可以匯出");
+    const rows = sorted.map(r => `${r.ts?.slice(0, 10)} 睡眠${r.sScore}/28 疼痛${r.pScore}/50`).join("\n");
+    const b = new Blob(["REIBI健康追蹤報告\n\n" + rows], { type: "text/plain;charset=utf-8" });
+    const u = URL.createObjectURL(b);
+    const a = document.createElement("a");
+    a.href = u; a.download = "健康追蹤.txt"; a.click();
+    URL.revokeObjectURL(u);
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       
@@ -116,14 +127,27 @@ export default function HistoryPage() {
           </div>
         </div>
         
-        {(dateFrom || dateTo) && (
-          <button onClick={() => {setDateFrom(""); setDateTo("");}} className="mt-4 text-xs text-red-500 hover:underline flex items-center gap-1">
-            <XCircle className="w-3 h-3" /> 清除篩選條件
-          </button>
-        )}
+        {/* 清除與下載按鈕區 */}
+        <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
+          <div className="text-xs text-slate-400 font-medium">
+            共篩選出 {filtered.length} 筆資料
+          </div>
+          <div className="flex gap-4">
+            {(dateFrom || dateTo) && (
+              <button onClick={() => {setDateFrom(""); setDateTo("");}} className="text-xs font-bold text-rose-500 hover:text-rose-600 flex items-center gap-1 bg-rose-50 px-3 py-1.5 rounded-lg">
+                <XCircle className="w-3 h-3" /> 清除條件
+              </button>
+            )}
+            {filtered.length > 0 && (
+              <button onClick={handleExportTxt} className="text-xs font-bold text-teal-700 bg-teal-50 px-3 py-1.5 rounded-lg hover:bg-teal-100 flex items-center gap-1 transition-colors border border-teal-100">
+                <Download className="w-3 h-3" /> 下載純文字紀錄
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* 紀錄列表 [cite: 102] */}
+      {/* 紀錄列表 */}
       <div className="space-y-4">
         {sorted.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300">
@@ -164,7 +188,7 @@ export default function HistoryPage() {
                   </button>
                   <button 
                     className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 flex items-center justify-center"
-                    onClick={() => alert("功能開發中，稍後將對接結果頁面")}
+                    onClick={() => router.push(`/report/${rec.id}`)}
                   >
                     查看詳情
                   </button>

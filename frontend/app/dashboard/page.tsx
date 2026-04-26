@@ -5,11 +5,11 @@ import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
-import { ROLES, can } from "@/lib/config";
+import { ROLES, can, LX } from "@/lib/config";
 import { DB } from "@/lib/store";
 import { 
   ClipboardEdit, FileText, BarChart3, Target, 
-  CalendarDays, Leaf, TrendingUp, AlertTriangle, ShieldCheck, LogOut 
+  CalendarDays, Leaf, TrendingUp, AlertTriangle, ShieldCheck, LogOut, ChevronRight
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -91,7 +91,46 @@ export default function DashboardPage() {
           </Link>
         ))}
       </div>
-
+        {/* 補回：最近評估記錄列表 */}
+      {history.length > 0 && (
+        <div className="mt-10 bg-amber-50/50 border border-amber-100 rounded-3xl p-6 md:p-8 shadow-sm">
+          <h3 className="text-lg font-bold text-amber-800 mb-6 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" /> 最近評估記錄
+          </h3>
+          <div className="space-y-3">
+            {history.slice(0, 3).map((rec: any, i: number) => {
+              const sk = rec.sLevel?.key || "green";
+              const pk = rec.pLevel?.key || "green";
+              const sColor = LX[sk as keyof typeof LX]?.c || "#666";
+              const pColor = LX[pk as keyof typeof LX]?.c || "#666";
+              
+              return (
+                <Link href={`/report/${rec.id}`} key={rec.id}>
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 hover:border-amber-300 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 group-hover:bg-amber-100 group-hover:text-amber-600 transition-colors">
+                        {i + 1}
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-slate-800 mb-1">
+                          {new Date(rec.ts).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' })} 的評估
+                        </div>
+                        <div className="flex gap-4 text-xs font-bold">
+                          <span style={{ color: sColor }}>睡眠 {rec.sScore}/28</span>
+                          <span style={{ color: pColor }}>疼痛 {rec.pScore}/50</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg flex items-center gap-1 group-hover:bg-amber-500 group-hover:text-white transition-colors">
+                      查看報告 <ChevronRight className="w-4 h-4" />
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

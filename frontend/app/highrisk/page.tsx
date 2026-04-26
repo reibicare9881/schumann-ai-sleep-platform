@@ -18,13 +18,66 @@ export default function HighRiskPage() {
   const [ready, setReady] = useState(false);
   const [filter, setFilter] = useState<"all" | "critical" | "overdue">("all");
 
+  // useEffect(() => {
+  //   // 只有管理者或部門主管可以看
+  //   if (session?.orgCode && (can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr"))) {
+  //     DB.loadOrgRecs(session.orgCode).then((r: any) => {
+  //       setData(Array.isArray(r) ? r : []);
+  //       setReady(true);
+  //     });
+  //   } else if (session) {
+  //     setReady(true);
+  //   }
+  // }, [session]);
+
   useEffect(() => {
+    // === 🛠️ 開發期假資料 (Mock Data) 測試用 ===
+    const mockData = [
+      {
+        id: "user-001",
+        profile: { name: "王大明" },
+        dept: "工程部",
+        ts: new Date().toISOString(), // 今天剛測
+        sScore: 26,
+        sKey: "red",   // 睡眠紅燈
+        pScore: 45,
+        pKey: "red"    // 疼痛紅燈 -> 這位會是「重度共病」
+      },
+      {
+        id: "user-002",
+        profile: { name: "李小華" },
+        dept: "設計部",
+        ts: new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString(), // 35天前測的 -> 這位會是「追蹤怠惰」
+        sScore: 10,
+        sKey: "green",
+        pScore: 12,
+        pKey: "green"
+      },
+      {
+        id: "user-003",
+        profile: { name: "陳建國" },
+        dept: "工程部",
+        ts: new Date().toISOString(),
+        sScore: 18,
+        sKey: "orange",
+        pScore: 8,
+        pKey: "green"
+      }
+    ];
+
     // 只有管理者或部門主管可以看
     if (session?.orgCode && (can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr"))) {
-      DB.loadOrgRecs(session.orgCode).then((r: any) => {
-        setData(Array.isArray(r) ? r : []);
-        setReady(true);
-      });
+      
+      // 🚧 註解掉原本的 DB 呼叫
+      // DB.loadOrgRecs(session.orgCode).then((r: any) => {
+      //   setData(Array.isArray(r) ? r : []);
+      //   setReady(true);
+      // });
+
+      // 👉 直接將 data 設為我們的假資料
+      setData(mockData);
+      setReady(true);
+      
     } else if (session) {
       setReady(true);
     }
@@ -51,14 +104,16 @@ export default function HighRiskPage() {
   // 1. 將所有評估紀錄「按人」分組，找出每個人「最新」的一筆紀錄
   const userMap = new Map();
   allowedData.forEach(r => {
-    const name = r.profile?.name;
-    if (!name) return;
-    if (!userMap.has(name)) {
-      userMap.set(name, r);
+    // 修正：如果沒有名字，就用 uid 或是報告 id 當作識別，不要直接 return 略過！
+    const key = r.profile?.name || r.session?.name || r.uid || r.id;
+    if (!key) return; 
+    
+    if (!userMap.has(key)) {
+      userMap.set(key, r);
     } else {
-      const existing = userMap.get(name);
+      const existing = userMap.get(key);
       if (new Date(r.ts) > new Date(existing.ts)) {
-        userMap.set(name, r); // 替換為較新的紀錄
+        userMap.set(key, r); // 替換為較新的紀錄
       }
     }
   });
@@ -67,7 +122,10 @@ export default function HighRiskPage() {
   const now = new Date().getTime();
 
   // 2. 判定高風險 (睡眠與疼痛皆在橘燈或紅燈)
-  const isCritical = (r: any) => ["orange", "red"].includes(r.sKey) && ["orange", "red"].includes(r.pKey);
+  // 修正：將 sKey 改為 sLevel?.key，pKey 改為 pLevel?.key
+  const isCritical = (r: any) => 
+    ["orange", "red"].includes(r.sKey) && 
+    ["orange", "red"].includes(r.pKey);
   
   // 3. 判定超過30天未評估
   const isOverdue = (r: any) => (now - new Date(r.ts).getTime()) > 30 * 24 * 60 * 60 * 1000;
