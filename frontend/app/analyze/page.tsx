@@ -36,7 +36,8 @@ export default function AnalyzePage() {
 
     try {
       // 呼叫你的 FastAPI 後端
-      const res = await fetch("http://127.0.0.1:8000/api/analyze", {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${API_URL}/api/analyze`, {
         method: "POST",
         body: formData,
       });

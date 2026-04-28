@@ -9,6 +9,7 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import { C, ROLES, PERMS } from "@/lib/config";
 import { DB, stor } from "@/lib/store";
+import API from "@/lib/api";
 
 // ══ 內部元件：任務橫幅 (Mission Banner) ══
 const MissionBanner = () => (
@@ -78,6 +79,33 @@ export default function LoginPage() {
   const doIndividualLogin = async () => {
     if (!iName.trim()) { setErr("請輸入姓名或代稱"); return; }
     setLoading(true);
+    setErr("");
+
+    try {
+      // 首先嘗試使用後端 API
+      const apiResult = await API.login('sleep', { role: 'individual' });
+      
+      if (apiResult.status === 'success') {
+        // 後端登入成功
+        const { user, session } = apiResult.data;
+        const s = {
+          uid: user.id,
+          name: iName.trim(),
+          systemRole: "individual",
+          loginTs: new Date().toISOString(),
+          apiSession: session,
+          platform: 'sleep'
+        };
+        // 同時保存到本地 (離線備份)
+        await DB.saveSession(s);
+        login(s);
+        return;
+      }
+    } catch (apiError) {
+      console.warn("後端 API 不可用，切換到本地模式:", apiError);
+    }
+
+    // 後退：使用本地存儲
     const s = { 
       uid: Date.now().toString(36), 
       name: iName.trim(), 
@@ -123,6 +151,36 @@ export default function LoginPage() {
       await stor.set("mem_id_" + code + "_" + oRole, { name: oName.trim(), orgName: creds.orgName });
     }
 
+    try {
+      // 嘗試使用後端 API
+      const apiResult = await API.login('sleep', {
+        role: oRole,
+        pin: pin || setupAPin,
+        org_code: code
+      });
+      
+      if (apiResult.status === 'success') {
+        const { user, session } = apiResult.data;
+        const s = {
+          uid: user.id,
+          name: oName.trim(),
+          orgCode: code,
+          orgName: creds.orgName,
+          systemRole: oRole,
+          loginTs: new Date().toISOString(),
+          _pin: pin || setupAPin,
+          apiSession: session,
+          platform: 'sleep'
+        };
+        await DB.saveSession(s);
+        login(s);
+        return;
+      }
+    } catch (apiError) {
+      console.warn("後端 API 不可用，切換到本地模式:", apiError);
+    }
+
+    // 後退：使用本地存儲
     const s = { 
       uid: Date.now().toString(36), 
       name: oName.trim(), 
