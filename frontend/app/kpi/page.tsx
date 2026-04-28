@@ -38,7 +38,7 @@ export default function KPIPage() {
 
   // --- 資料過濾邏輯 (權限 + 部門 + 日期) --- 
   const allData = isDept ? data.filter(r => r.dept === session.dept) : data;
-  const depts = [...new Set(allData.map(r => r.dept).filter(Boolean))];
+  const depts = Array.from(new Set(allData.map(r => r.dept).filter(Boolean)));
   
   let fd = fDept === "全部" ? allData : allData.filter(r => r.dept === fDept);
   if (dateFrom) fd = fd.filter(r => r.ts?.slice(0, 10) >= dateFrom);

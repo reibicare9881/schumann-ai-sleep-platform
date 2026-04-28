@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "downlevelIteration": true,
     "ignoreDeprecations": "6.0",
     "lib": [
       "dom",
