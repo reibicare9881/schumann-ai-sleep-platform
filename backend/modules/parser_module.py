@@ -3,6 +3,9 @@ from PIL import Image
 import io
 import json
 import google.generativeai as genai
+import os
+
+api_key = os.getenv("GEMINI_API_KEY")
 
 def convert_pdf_to_images(uploaded_pdf):
     # 此函數接受 Streamlit 上傳的檔案物件 (PDF 或圖片)
@@ -59,7 +62,7 @@ def crop_focus_regions(main_image):
         print(f"裁切圖片時發生錯誤: {e}")
         return []
 
-def extract_data_with_vision_ai(images, api_key):
+def extract_data_with_vision_ai(images):
     genai.configure(api_key=api_key)
     
     # 使用輕量級的 Flash 模型
@@ -163,7 +166,7 @@ def extract_data_with_vision_ai(images, api_key):
     except Exception as e:
         raise ValueError(f"AI 解析失敗。錯誤資訊: {e}\nAI原始回應: {response.text}")
 
-def parse_schumann_report(uploaded_file, api_key):
+def parse_schumann_report(uploaded_file):
     # 主流程不變：檔案 -> 圖片清單 -> 視覺 AI 萃取
     images = convert_pdf_to_images(uploaded_file)
     extracted_data = extract_data_with_vision_ai(images, api_key)

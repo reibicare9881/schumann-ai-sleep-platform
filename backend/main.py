@@ -6,52 +6,81 @@ Unified Backend: Schumann Platform + Sleep Platform
 
 import os
 import json
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from supabase import create_client, Client
 from dotenv import load_dotenv
+from auth import create_access_token
+from config import settings
+import uuid
 
 # ==========================================
 # 加載環境變數
 # ==========================================
-load_dotenv()
+# load_dotenv()
 
-API_HOST = os.getenv("API_HOST", "0.0.0.0")
-API_PORT = int(os.getenv("API_PORT", 8000))
-DEBUG = os.getenv("DEBUG", "True") == "True"
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+# API_HOST = os.getenv("API_HOST", "0.0.0.0")
+# API_PORT = int(os.getenv("API_PORT", 8000))
+# DEBUG = os.getenv("DEBUG", "True") == "True"
+# FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
-# ==========================================
-# 初始化 FastAPI 應用
-# ==========================================
+# # 1. Supabase 連線設定
+# SUPABASE_URL = os.getenv("SUPABASE_URL")
+# SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+# # 2. JWT 簽章密鑰 (用於 auth.py 核發 Token)
+# JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+
+# # 3. Gemini AI 金鑰 (用於 analyzer 和 parser，取代原本當作參數傳遞的寫法)
+# GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# backend/main.py
+
 app = FastAPI(
     title="統一多平台 API",
     description="舒曼共振平台 + 睡眠平台 統一後端服務",
     version="2.0.0",
+    debug=settings.debug,
     docs_url="/docs",
     redoc_url="/redoc"
 )
 
-# ==========================================
-# CORS 設定
-# ==========================================
+# 1. 初始化 Supabase 客戶端
+# 如果 .env 沒填寫這些變數，啟動伺服器的那一瞬間 settings 就會立刻報錯阻止你
+supabase: Client = create_client(
+    settings.supabase_url, 
+    settings.supabase_service_role_key
+)
+
+# 2. 設定 CORS (跨來源資源共用)
+origins = [
+    "http://localhost:3000",
+    settings.frontend_url
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        FRONTEND_URL,
-        "*" if DEBUG else []
-    ],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
+# 3. 測試一下大管家有沒有正常工作
+@app.get("/")
+async def root():
+    return {
+        "message": "API 伺服器正常運作中",
+        "debug_mode": settings.debug,
+        "frontend_allowed": settings.frontend_url
+    }
+
 
 # ==========================================
 # 數據模型
@@ -60,7 +89,8 @@ app.add_middleware(
 class LoginRequest(BaseModel):
     """登入請求"""
     platform: str  # "schumann" 或 "sleep"
-    role: Optional[str] = None  # 睡眠平台用
+    role: Optional[str] = "individual"  
+    name: Optional[str] = None          # 👈 補上這個！(個人或組織成員的姓名/代稱)
     pin: Optional[str] = None
     org_code: Optional[str] = None
 
@@ -189,72 +219,123 @@ def list_platforms():
 
 @app.post("/api/auth/login")
 async def unified_login(request: LoginRequest):
-    """統一登入 - 支持舒曼和睡眠平台"""
+    """統一登入 - 支持舒曼和睡眠平台，並整合 Supabase 與 JWT"""
     
     platform = request.platform.lower()
     
-    if platform == "schumann":
-        # 舒曼共振平台：簡單登入
-        user_id = f"schumann_user_{int(datetime.now().timestamp())}"
-        user = {
-            "id": user_id,
-            "username": f"舒曼用戶_{user_id[-4:]}",
-            "platform": "schumann",
-            "created_at": datetime.now().isoformat()
-        }
-        db.users[user_id] = user
-        session = create_session(user_id, "schumann")
-        
-        return {
-            "status": "success",
-            "platform": "schumann",
-            "user": user,
-            "session": session,
-            "message": "舒曼共振平台登入成功"
-        }
-    
-    elif platform == "sleep":
-        # 睡眠平台：需驗證角色和PIN
-        if request.role == "individual":
-            # 個人用戶不需PIN
-            user_id = f"sleep_user_{int(datetime.now().timestamp())}"
-            user = {
-                "id": user_id,
-                "username": "個人用戶",
-                "platform": "sleep",
-                "role": "individual",
-                "created_at": datetime.now().isoformat()
-            }
-        else:
-            # 組織用戶需驗證PIN
-            if not verify_pin(request.role, request.pin):
-                raise HTTPException(status_code=401, detail="PIN 碼錯誤")
-            if not request.org_code:
-                raise HTTPException(status_code=400, detail="組織用戶需提供 org_code")
-            
-            user_id = f"sleep_user_{request.org_code}_{int(datetime.now().timestamp())}"
-            user = {
-                "id": user_id,
-                "username": f"{request.role} 用戶",
-                "platform": "sleep",
-                "role": request.role,
-                "org_code": request.org_code,
-                "created_at": datetime.now().isoformat()
-            }
-        
-        db.users[user_id] = user
-        session = create_session(user_id, "sleep", request.role)
-        
-        return {
-            "status": "success",
-            "platform": "sleep",
-            "user": user,
-            "session": session,
-            "message": f"睡眠平台登入成功"
-        }
-    
-    else:
+    if platform not in ["schumann", "sleep"]:
         raise HTTPException(status_code=400, detail=f"不支持的平台: {platform}")
+
+    # ==========================================
+    # 邏輯 A：個人用戶登入 (Individual)
+    # ==========================================
+    if request.role == "individual":
+        if not request.name:
+            raise HTTPException(status_code=400, detail="個人用戶需提供姓名/代稱")
+            
+        # 1. 在 Supabase 的 profiles 表中尋找這個名字的個人用戶
+        # 假設你的表名叫做 profiles，並且有 full_name 和 user_type 欄位
+        response = supabase.table("profiles").select("*").eq("full_name", request.name).eq("system_role", "individual").execute()
+        
+        user_data = None
+        if not response.data:
+            # 2. 找不到，就自動在 Supabase 建立一個新的 (免密碼註冊)
+            new_user = {
+                "id": str(uuid.uuid4()),
+                "full_name": request.name, 
+                "system_role": "individual"
+                # 注意：如果你的 profiles 表的 id 是綁定 auth.users 的，
+                # 這裡可能需要先插入 auth.users，或者拔除 profiles 的 FK 限制。
+                # 簡單起見，這裡假設你的 profiles id 可以由資料庫自動產生 (gen_random_uuid)
+            }
+            insert_res = supabase.table("profiles").insert(new_user).execute()
+            user_data = insert_res.data[0]
+        else:
+            user_data = response.data[0]
+
+        # 3. 準備打包進 JWT 的資料
+        token_payload = {
+            "uid": user_data["id"],
+            "name": user_data["full_name"],
+            "role": "individual",
+            "platform": platform
+        }
+        
+    # ==========================================
+    # 邏輯 B：組織用戶登入 (Member, Dept_Head, Admin)
+    # ==========================================
+    else:
+        if not request.org_code or not request.pin or not request.name:
+            raise HTTPException(status_code=400, detail="組織用戶需提供單位代碼、姓名與通行碼")
+            
+        org_code = request.org_code.upper()
+            
+        # 1. 查詢 Supabase 中的 organizations 資料表
+        org_res = supabase.table("organizations").select("*").eq("org_code", org_code).execute()
+        
+        if not org_res.data:
+            raise HTTPException(status_code=404, detail="找不到該單位代碼")
+            
+        org_data = org_res.data[0]
+        
+        # 2. 驗證該角色的 PIN 碼 (這裡直接比對文字，未來建議加上 Hash 比對)
+        expected_pin = ""
+        if request.role == "member":
+            expected_pin = org_data.get("member_pin")
+        elif request.role == "dept_head":
+            expected_pin = org_data.get("dept_pin")
+        elif request.role == "admin":
+            expected_pin = org_data.get("admin_pin")
+        else:
+             raise HTTPException(status_code=400, detail="未知的角色")
+            
+        if request.pin != expected_pin:
+            raise HTTPException(status_code=401, detail="通行碼錯誤")
+            
+        # 3. 尋找或建立該員工的 profile 資料 (把名字跟 org_code 綁定)
+        user_res = supabase.table("profiles").select("*").eq("full_name", request.name).eq("org_code", org_code).eq("system_role", request.role).execute()
+        
+        if not user_res.data:
+            new_user = {
+                "id": str(uuid.uuid4()),
+                "full_name": request.name, 
+                "system_role": request.role,
+                "org_code": org_code
+            }
+            insert_res = supabase.table("profiles").insert(new_user).execute()
+            user_data = insert_res.data[0]
+        else:
+            user_data = user_res.data[0]
+
+        # 4. 準備打包進 JWT 的資料
+        token_payload = {
+            "uid": user_data["id"],
+            "name": user_data["full_name"],
+            "role": request.role,
+            "org_code": org_code,
+            "platform": platform
+        }
+
+    # ==========================================
+    # 核發 Token 並回傳
+    # ==========================================
+    # 呼叫 auth.py 幫我們簽署 JWT Token
+    access_token = create_access_token(token_payload)
+    
+    return {
+        "status": "success",
+        "platform": platform,
+        # session 只用來讓前端畫面顯示名字，不具備安全效力
+        "session": {
+            "user_id": token_payload["uid"],
+            "name": token_payload["name"],
+            "role": token_payload["role"],
+            "org_code": token_payload.get("org_code")
+        },
+        # access_token 是安全核心，前端之後打 API 都要帶上它
+        "access_token": access_token,
+        "message": f"{platform} 平台登入成功"
+    }
 
 @app.post("/api/auth/logout")
 async def logout(session_id: str, platform: str):
@@ -489,24 +570,19 @@ async def http_exception_handler(request, exc):
 
 if __name__ == "__main__":
     import uvicorn
-    print(f"""
-    🚀 統一多平台 API 正在啟動...
     
-    🌐 API 地址: http://{API_HOST}:{API_PORT}
-    📚 文檔: http://{API_HOST}:{API_PORT}/docs
-    📖 SwaggerUI: http://localhost:8000/docs
+    # 把它們全部換成 settings.xxx 的寫法
+    print("========================================")
+    print(f"🚀 伺服器啟動中...")
+    print(f"🌐 API 地址: http://{settings.api_host}:{settings.api_port}")
+    print(f"📖 Swagger 測試文件: http://{settings.api_host}:{settings.api_port}/docs")
+    print(f"🔒 CORS 允許前端: {settings.frontend_url}")
+    print("========================================")
     
-    ✨ 支持平台:
-       • 舒曼共振平台 (/api/schumann/*)
-       • 睡眠健康平台 (/api/sleep/*)
-    
-    ✅ Debug 模式: {DEBUG}
-    ⏱️ 啟動時間: {datetime.now().isoformat()}
-    """)
-    
+    # 注意這裡的 host, port 和 reload 也要改！
     uvicorn.run(
-        app,
-        host=API_HOST,
-        port=API_PORT,
-        reload=False  # 改為 False 避免警告
+        "main:app", 
+        host=settings.api_host, 
+        port=settings.api_port, 
+        reload=settings.debug
     )

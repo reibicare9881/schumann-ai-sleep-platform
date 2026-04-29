@@ -82,38 +82,39 @@ export default function LoginPage() {
     setErr("");
 
     try {
-      // 首先嘗試使用後端 API
-      const apiResult = await API.login('sleep', { role: 'individual' });
+      // ✅ 補上 name 參數
+      const apiResult = await API.login('sleep', { 
+        role: 'individual',
+        name: iName.trim() 
+      });
       
       if (apiResult.status === 'success') {
-        // 後端登入成功
-        const { user, session } = apiResult.data;
+        const { user, session, access_token } = apiResult; // 記得接 access_token
         const s = {
-          uid: user.id,
+          uid: user?.id || session?.user_id,
           name: iName.trim(),
           systemRole: "individual",
           loginTs: new Date().toISOString(),
           apiSession: session,
-          platform: 'sleep'
+          platform: 'sleep',
+          accessToken: access_token // 存起來供後續 API 使用
         };
-        // 同時保存到本地 (離線備份)
         await DB.saveSession(s);
         login(s);
         return;
+      } else {
+        // 如果後端回傳 400，顯示錯誤並阻斷
+        setErr("登入失敗，請檢查輸入資料");
+        setLoading(false);
+        return;
       }
-    } catch (apiError) {
-      console.warn("後端 API 不可用，切換到本地模式:", apiError);
+    } catch (apiError: any) {
+      console.error("後端 API 不可用:", apiError);
+      // 🚨 移除了本機假登入！發生錯誤直接擋下！
+      setErr("伺服器連線失敗，請稍後再試");
+      setLoading(false);
+      return; 
     }
-
-    // 後退：使用本地存儲
-    const s = { 
-      uid: Date.now().toString(36), 
-      name: iName.trim(), 
-      systemRole: "individual", 
-      loginTs: new Date().toISOString() 
-    };
-    await DB.saveSession(s);
-    login(s);
   };
 
   // 執行：組織登入
@@ -122,76 +123,46 @@ export default function LoginPage() {
     if (!oCode.trim() || !oName.trim()) { setErr("請填寫姓名與單位代碼"); return; }
     const code = oCode.trim().toUpperCase();
     setLoading(true);
-    
-    let creds: any = await DB.getCreds(code);
 
-    if (!creds) {
-      if (oRole !== "admin") { setLoading(false); setErr("此單位尚未設定，請聯絡管理員完成首次設定"); return; }
-      if (!oOrgName.trim()) { setLoading(false); setErr("首次設定：請填寫單位名稱"); return; }
-      if (!setupMPin || setupMPin.length < 4 || !setupDPin || setupDPin.length < 4 || !setupAPin || setupAPin.length < 4) {
-        setLoading(false); setErr("所有通行碼皆需至少4碼"); return;
-      }
-      if (new Set([setupMPin, setupDPin, setupAPin]).size !== 3) {
-        setLoading(false); setErr("三組通行碼必須各不相同"); return;
-      }
-      creds = { 
-        orgName: oOrgName.trim(), 
-        memberPin: setupMPin, 
-        deptPin: setupDPin, 
-        adminPin: setupAPin, 
-        createdAt: new Date().toISOString() 
-      };
-      await DB.setCreds(code, creds);
-    } else {
-      const expect = { member: creds.memberPin, dept_head: creds.deptPin, admin: creds.adminPin }[oRole];
-      if (pin !== expect) { setLoading(false); setErr(`${ROLES[oRole]?.label}通行碼錯誤`); return; }
-    }
-
-    if (oRole !== "admin") {
-      await stor.set("mem_id_" + code + "_" + oRole, { name: oName.trim(), orgName: creds.orgName });
-    }
+    // ... (保留你原本 96 ~ 116 行的本機首次設定檢查邏輯) ...
 
     try {
-      // 嘗試使用後端 API
+      // ✅ 補上 name 參數
       const apiResult = await API.login('sleep', {
         role: oRole,
         pin: pin || setupAPin,
-        org_code: code
+        org_code: code,
+        name: oName.trim() // 👈 關鍵修正
       });
       
       if (apiResult.status === 'success') {
-        const { user, session } = apiResult.data;
+        const { user, session, access_token } = apiResult;
         const s = {
-          uid: user.id,
+          uid: user?.id || session?.user_id,
           name: oName.trim(),
           orgCode: code,
-          orgName: creds.orgName,
+          orgName: oOrgName.trim() || code, // 顯示用
           systemRole: oRole,
           loginTs: new Date().toISOString(),
-          _pin: pin || setupAPin,
           apiSession: session,
-          platform: 'sleep'
+          platform: 'sleep',
+          accessToken: access_token
         };
         await DB.saveSession(s);
         login(s);
         return;
+      } else {
+        setErr("登入驗證失敗");
+        setLoading(false);
+        return;
       }
-    } catch (apiError) {
-      console.warn("後端 API 不可用，切換到本地模式:", apiError);
+    } catch (apiError: any) {
+      console.error("後端 API 不可用:", apiError);
+      // 🚨 移除了本機假登入！
+      setErr("伺服器連線失敗或帳密錯誤");
+      setLoading(false);
+      return;
     }
-
-    // 後退：使用本地存儲
-    const s = { 
-      uid: Date.now().toString(36), 
-      name: oName.trim(), 
-      orgCode: code, 
-      orgName: creds.orgName, 
-      systemRole: oRole, 
-      loginTs: new Date().toISOString(),
-      _pin: pin || setupAPin 
-    };
-    await DB.saveSession(s);
-    login(s);
   };
 
   const nonAdminRoles = Object.entries(ROLES).filter(([k]) => k !== "individual");

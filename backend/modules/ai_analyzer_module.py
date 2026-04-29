@@ -1,7 +1,10 @@
 import google.generativeai as genai
 import re
+import os
 
-def generate_ai_explanation(data, api_key, language="🇹🇼 繁體中文"):
+api_key = os.getenv("GEMINI_API_KEY")
+def generate_ai_explanation(data, language="🇹🇼 繁體中文"):
+    
     genai.configure(api_key=api_key)
     
     # 💡【強烈建議】：Analyzer 負責「長篇結構化寫作」與「多重邏輯推理」

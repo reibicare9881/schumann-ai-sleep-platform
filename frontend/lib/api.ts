@@ -21,6 +21,7 @@ interface Session {
   user_id: string;
   platform: string;
   role?: string;
+  access_token?: string;
 }
 
 // ==========================================
@@ -82,14 +83,26 @@ export const API = {
       const queryString = params.toString();
       if (queryString) url += `?${queryString}`;
     }
+
+    // 🌟 新增：獲取當前 Session 
+    const session = this.getSession();
+    
+    // 🌟 新增：預先組裝 Headers
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      // 如果 options.headers 存在，則展開它
+      ...(options.headers as Record<string, string> || {}),
+    };
+
+    // 🌟 新增：如果 Session 裡面有 Token，就加上 Authorization
+    if (session && session.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
     
     try {
       const response = await fetch(url, {
         ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
+        headers, // 🌟 修改：直接放入我們組裝好的 headers
       });
       
       const data = await response.json();
@@ -124,6 +137,7 @@ export const API = {
     role?: string;
     pin?: string;
     org_code?: string;
+    name?: string;
   }) {
     const response = await this.request('/api/auth/login', {
       method: 'POST',
@@ -133,8 +147,16 @@ export const API = {
       })
     });
     
-    if (response.status === 'success' && response.data?.session) {
-      this.setSession(response.data.session);
+    // 🌟 處理 FastAPI 扁平化的回傳結構 (把 response 當作 any 來取值避開 TS 報錯)
+    const rawResponse = response as any;
+    const sessionData = rawResponse.data?.session || rawResponse.session;
+    const accessToken = rawResponse.data?.access_token || rawResponse.access_token;
+
+    if (response.status === 'success' && sessionData) {
+      this.setSession({
+        ...sessionData,
+        access_token: accessToken // 🌟 把 JWT Token 一起存進 Session 中
+      });
     }
     
     return response;
