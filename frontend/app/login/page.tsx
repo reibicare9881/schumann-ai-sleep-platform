@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Image from "next/image";
 import { 
   User, Building2, ChevronLeft, Lock, ShieldCheck, 
   Info, Check, Globe, HelpCircle 
@@ -48,25 +47,8 @@ export default function LoginPage() {
   const [oOrgName, setOOrgName] = useState("");
   const [oRole, setORole] = useState("member");
   const [pin, setPin] = useState("");
-  const [isFirstTime, setIsFirstTime] = useState<boolean | null>(null);
-  const [setupMPin, setSetupMPin] = useState("");
-  const [setupDPin, setSetupDPin] = useState("");
-  const [setupAPin, setSetupAPin] = useState("");
 
-  // 邏輯：自動填寫單位名稱與偵測首次設定
-  useEffect(() => {
-    if (mode === "org" && oCode.length >= 3) {
-      const code = oCode.toUpperCase();
-      DB.getCreds(code).then((c: any) => {
-        setIsFirstTime(!c);
-        if (c?.orgName && !oOrgName) setOOrgName(c.orgName);
-      });
-    } else {
-      setIsFirstTime(null);
-    }
-  }, [mode, oCode, oOrgName]);
-
-  // 邏輯：載入已儲存的身份
+  // 邏輯：載入已儲存的身份 (提升UX，保留)
   useEffect(() => {
     if (mode === "org" && oCode.length >= 3 && oRole !== "admin") {
       stor.get("mem_id_" + oCode.toUpperCase() + "_" + oRole).then((d: any) => {
@@ -82,14 +64,13 @@ export default function LoginPage() {
     setErr("");
 
     try {
-      // ✅ 補上 name 參數
       const apiResult = await API.login('sleep', { 
         role: 'individual',
         name: iName.trim() 
       });
       
       if (apiResult.status === 'success') {
-        const { user, session, access_token } = apiResult; // 記得接 access_token
+        const { user, session, access_token } = apiResult;
         const s = {
           uid: user?.id || session?.user_id,
           name: iName.trim(),
@@ -97,20 +78,18 @@ export default function LoginPage() {
           loginTs: new Date().toISOString(),
           apiSession: session,
           platform: 'sleep',
-          accessToken: access_token // 存起來供後續 API 使用
+          accessToken: access_token
         };
         await DB.saveSession(s);
         login(s);
         return;
       } else {
-        // 如果後端回傳 400，顯示錯誤並阻斷
         setErr("登入失敗，請檢查輸入資料");
         setLoading(false);
         return;
       }
     } catch (apiError: any) {
       console.error("後端 API 不可用:", apiError);
-      // 🚨 移除了本機假登入！發生錯誤直接擋下！
       setErr("伺服器連線失敗，請稍後再試");
       setLoading(false);
       return; 
@@ -120,19 +99,19 @@ export default function LoginPage() {
   // 執行：組織登入
   const doOrgLogin = async () => {
     setErr("");
-    if (!oCode.trim() || !oName.trim()) { setErr("請填寫姓名與單位代碼"); return; }
+    if (!oCode.trim() || !oName.trim() || !pin.trim()) { 
+      setErr("請填寫姓名、單位代碼與通行碼"); 
+      return; 
+    }
     const code = oCode.trim().toUpperCase();
     setLoading(true);
 
-    // ... (保留你原本 96 ~ 116 行的本機首次設定檢查邏輯) ...
-
     try {
-      // ✅ 補上 name 參數
       const apiResult = await API.login('sleep', {
         role: oRole,
-        pin: pin || setupAPin,
+        pin: pin.trim(),
         org_code: code,
-        name: oName.trim() // 👈 關鍵修正
+        name: oName.trim()
       });
       
       if (apiResult.status === 'success') {
@@ -141,13 +120,19 @@ export default function LoginPage() {
           uid: user?.id || session?.user_id,
           name: oName.trim(),
           orgCode: code,
-          orgName: oOrgName.trim() || code, // 顯示用
+          orgName: oOrgName.trim() || code,
           systemRole: oRole,
           loginTs: new Date().toISOString(),
           apiSession: session,
           platform: 'sleep',
           accessToken: access_token
         };
+        
+        // 記憶姓名，方便下次登入 (UX優化)
+        if (oRole !== "admin") {
+            stor.set("mem_id_" + code + "_" + oRole, { name: oName.trim() });
+        }
+        
         await DB.saveSession(s);
         login(s);
         return;
@@ -158,8 +143,7 @@ export default function LoginPage() {
       }
     } catch (apiError: any) {
       console.error("後端 API 不可用:", apiError);
-      // 🚨 移除了本機假登入！
-      setErr("伺服器連線失敗或帳密錯誤");
+      setErr(apiError.message || "伺服器連線失敗或帳密錯誤");
       setLoading(false);
       return;
     }
@@ -225,7 +209,7 @@ export default function LoginPage() {
                 </div>
                 <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 flex gap-3">
                   <Info className="w-5 h-5 text-amber-600 shrink-0" />
-                  <p className="text-xs text-amber-800 leading-relaxed">提示：個人模式資料僅儲存於本裝置，更換裝置或清除瀏覽器快取將導致資料遺失。</p>
+                  <p className="text-xs text-amber-800 leading-relaxed">提示：您的個人資料與評估結果，將受到嚴密的隱私保護與加密。</p>
                 </div>
               </>
             ) : (
@@ -243,14 +227,14 @@ export default function LoginPage() {
                     <label className="block text-sm font-medium text-slate-700 mb-2">單位代碼 (Org Code)</label>
                     <input 
                       type="text" value={oCode} onChange={e => setOCode(e.target.value.toUpperCase())}
-                      placeholder="例: REIBI001"
+                      placeholder="例: TEST1"
                       className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 outline-none transition-all uppercase"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">單位名稱</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">單位名稱 (選填)</label>
                   <input 
                     type="text" value={oOrgName} onChange={e => setOOrgName(e.target.value)}
                     placeholder="例: 麗媚生化科技"
@@ -278,29 +262,14 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                {isFirstTime === true && oRole === "admin" && (
-                  <div className="bg-purple-50 border border-purple-100 rounded-xl p-6 space-y-4">
-                    <div className="flex items-center gap-2 text-purple-700 font-bold text-sm">
-                      <ShieldCheck className="w-5 h-5" /> 首次設定管理者權限
-                    </div>
-                    <div className="grid grid-cols-1 gap-4">
-                      <input type="password" value={setupMPin} onChange={e => setSetupMPin(e.target.value)} placeholder="設定單位成員通行碼" className="w-full px-4 py-2 text-sm rounded-lg border border-purple-200" />
-                      <input type="password" value={setupDPin} onChange={e => setSetupDPin(e.target.value)} placeholder="設定部門主管通行碼" className="w-full px-4 py-2 text-sm rounded-lg border border-purple-200" />
-                      <input type="password" value={setupAPin} onChange={e => setSetupAPin(e.target.value)} placeholder="設定您的管理者密碼" className="w-full px-4 py-2 text-sm rounded-lg border border-purple-500 bg-white" />
-                    </div>
-                  </div>
-                )}
-
-                {isFirstTime === false && (
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700">🔐 通行碼驗證</label>
-                    <input 
-                      type="password" value={pin} onChange={e => setPin(e.target.value)}
-                      placeholder={`請輸入${ROLES[oRole]?.label}通行碼`}
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 outline-none"
-                    />
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-slate-700">🔐 通行碼驗證</label>
+                  <input 
+                    type="password" value={pin} onChange={e => setPin(e.target.value)}
+                    placeholder={`請輸入${ROLES[oRole]?.label}通行碼`}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 outline-none"
+                  />
+                </div>
               </>
             )}
 
@@ -315,7 +284,7 @@ export default function LoginPage() {
               disabled={loading}
               className={`w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg hover:shadow-xl transition-all transform active:scale-95 ${mode === "individual" ? 'bg-linear-to-r from-emerald-600 to-teal-700' : 'bg-linear-to-r from-purple-600 to-plum-700'}`}
             >
-              {loading ? "驗證中..." : (isFirstTime ? "建立並進入單位 →" : "進入系統 →")}
+              {loading ? "驗證中..." : "進入系統 →"}
             </button>
 
             {/* 權限說明表 (僅在組織模式顯示) */}

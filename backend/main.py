@@ -6,17 +6,16 @@ Unified Backend: Schumann Platform + Sleep Platform
 
 import os
 import json
-from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from auth import create_access_token
+from auth import create_access_token, get_current_user, require_admin
 from config import settings
 import uuid
 
@@ -426,6 +425,7 @@ async def upload_schumann_report(user_id: str, data: Dict):
 @app.get("/api/sleep/health")
 async def sleep_health():
     """睡眠平台健康檢查"""
+    # 💡 保持公開：健康檢查通常供伺服器監控(如 AWS/GCP)使用，不需要也不應該上鎖。
     return {
         "platform": "sleep",
         "status": "healthy",
@@ -434,16 +434,25 @@ async def sleep_health():
     }
 
 @app.post("/api/sleep/assessment", status_code=201)
-async def submit_sleep_assessment(request: AssessmentData):
+async def submit_sleep_assessment(
+    request: AssessmentData,
+    current_user: dict = Depends(get_current_user)
+):
     """提交睡眠評估"""
+    if current_user.get("uid") != request.user_id:
+        raise HTTPException(status_code=403, detail="越權操作：無法替其他使用者提交資料")
+
     sleep_score = sum(request.sleep_scores.values())
     pain_score = sum(request.pain_scores.values())
     work_score = sum(request.work_scores.values())
     
-    report_id = f"sleep_report_{int(datetime.now().timestamp())}"
+    # 💡 修正：使用 UUID 產生不可預測且不會碰撞的報告 ID
+    report_id = str(uuid.uuid4())
+    
     report = {
         "id": report_id,
         "user_id": request.user_id,
+        "org_code": current_user.get("org_code"), # 💡 修正：寫入時綁定所屬單位，為權限隔離打底
         "platform": "sleep",
         "created_at": datetime.now().isoformat(),
         "profile": request.profile,
@@ -455,7 +464,8 @@ async def submit_sleep_assessment(request: AssessmentData):
         "status": "completed"
     }
     
-    db.sleep_reports[report_id] = report
+    # 💡 修正：正式寫入 Supabase 資料庫，淘汰記憶體儲存
+    supabase.table("sleep_reports").insert(report).execute()
     
     return {
         "status": "success",
@@ -466,9 +476,27 @@ async def submit_sleep_assessment(request: AssessmentData):
     }
 
 @app.get("/api/sleep/reports")
-async def list_sleep_reports(user_id: str):
+async def list_sleep_reports(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
     """獲取用戶睡眠報告列表"""
-    reports = [r for r in db.sleep_reports.values() if r.get("user_id") == user_id]
+    
+    # 💡 修正：Admin 權限嚴格隔離。先去 Supabase 查目標用戶所屬的單位
+    target_user_res = supabase.table("profiles").select("org_code").eq("id", user_id).execute()
+    if not target_user_res.data:
+        raise HTTPException(status_code=404, detail="找不到該用戶")
+    target_org_code = target_user_res.data[0].get("org_code")
+
+    # 權限判斷：如果不是查自己，那必須是「同一個單位的 Admin」才能放行
+    if current_user.get("uid") != user_id:
+        if current_user.get("role") != "admin" or current_user.get("org_code") != target_org_code:
+            raise HTTPException(status_code=403, detail="越權存取：您只能查詢自己或同單位成員的報告")
+
+    # 💡 修正：改從 Supabase 讀取資料
+    res = supabase.table("sleep_reports").select("*").eq("user_id", user_id).execute()
+    reports = res.data
+    
     return {
         "status": "success",
         "platform": "sleep",
@@ -477,22 +505,50 @@ async def list_sleep_reports(user_id: str):
     }
 
 @app.get("/api/sleep/reports/{report_id}")
-async def get_sleep_report(report_id: str):
+async def get_sleep_report(
+    report_id: str,
+    current_user: dict = Depends(get_current_user)
+):
     """獲取單份睡眠報告"""
-    report = db.sleep_reports.get(report_id)
-    if not report:
+    # 💡 修正：改從 Supabase 讀取
+    res = supabase.table("sleep_reports").select("*").eq("id", report_id).execute()
+    if not res.data:
         raise HTTPException(status_code=404, detail="睡眠報告不存在")
     
+    report = res.data[0]
+    
+    # 💡 修正：比對這份報告的 org_code 跟管理員的 org_code 是否一致
+    is_owner = report.get("user_id") == current_user.get("uid")
+    is_same_org_admin = current_user.get("role") == "admin" and report.get("org_code") == current_user.get("org_code")
+
+    if not is_owner and not is_same_org_admin:
+        raise HTTPException(status_code=403, detail="越權存取：您無權查看此份報告")
+
     return {
         "status": "success",
         "platform": "sleep",
         "report": report
     }
-
+    
 @app.get("/api/sleep/analysis/{user_id}")
-async def get_sleep_analysis(user_id: str):
+async def get_sleep_analysis(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
     """獲取睡眠趨勢分析"""
-    reports = [r for r in db.sleep_reports.values() if r.get("user_id") == user_id]
+    # 💡 修正：權限隔離邏輯與 list_sleep_reports 相同
+    target_user_res = supabase.table("profiles").select("org_code").eq("id", user_id).execute()
+    if not target_user_res.data:
+        raise HTTPException(status_code=404, detail="找不到該用戶")
+    target_org_code = target_user_res.data[0].get("org_code")
+
+    if current_user.get("uid") != user_id:
+        if current_user.get("role") != "admin" or current_user.get("org_code") != target_org_code:
+            raise HTTPException(status_code=403, detail="越權存取：您只能查詢自己或同單位成員的分析")
+
+    # 💡 修正：改從 Supabase 讀取
+    res = supabase.table("sleep_reports").select("*").eq("user_id", user_id).execute()
+    reports = res.data
     
     if not reports:
         return {
@@ -519,7 +575,7 @@ async def get_sleep_analysis(user_id: str):
         "analysis": analysis,
         "reports": reports
     }
-
+    
 @app.post("/api/auth/switch-platform")
 async def switch_platform(user_id: str, from_platform: str, to_platform: str):
     """在兩個平台間切換"""

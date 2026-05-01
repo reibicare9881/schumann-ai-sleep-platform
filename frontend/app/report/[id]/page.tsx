@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { DB } from "@/lib/store";
+import API from "@/lib/api";
 import { SQ, PQ, ROLES, LX, LL } from "@/lib/config";
 import { ChevronLeft, TrendingUp, BookOpen, Waves, AlertTriangle, FileText, CheckCircle2, Printer } from "lucide-react";
 import html2pdf from "html2pdf.js";
@@ -223,11 +224,40 @@ export default function ReportPage() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (session) {
-      DB.loadReports().then((reports: any[]) => {
-        const found = reports.find(r => r.id === id);
-        if (found) setReport(found);
-        else setError(true);
+    if (session && id) {
+      // 1. 呼叫我們已經上好鎖的 FastAPI 讀取端點
+      API.request(`/api/sleep/reports/${id}`, {
+        method: 'GET'
+      })
+      .then((res: any) => {
+        if (res.status === 'success' && res.report) {
+          const dbData = res.report;
+          
+          // 2. 資料格式轉換 (Data Mapping)
+          // 過去前端存的是駝峰式 (sScore)，現在後端資料庫存的是蛇形式 (sleep_score)
+          // 我們要在這裡把它轉換成畫面與 PDF 套件看得懂的格式
+          setReport({
+            ...dbData,
+            ts: dbData.created_at,
+            sScore: dbData.sleep_score,
+            pScore: dbData.pain_score,
+            wScore: dbData.work_score,
+            // 轉換為前端預期的物件格式
+            sLevel: { key: dbData.sleep_level, label: "" },
+            pLevel: { key: dbData.pain_level, label: "" },
+            profile: dbData.profile || {},
+            // 由於後端目前尚未儲存 sAns, pAns 與 recs，這裡先給予空值避免畫面崩潰
+            sAns: {},
+            pAns: {},
+            recs: {} 
+          });
+        } else {
+          setError(true);
+        }
+      })
+      .catch((err) => {
+        console.error("API 獲取報告失敗:", err);
+        setError(true);
       });
     }
   }, [id, session]);

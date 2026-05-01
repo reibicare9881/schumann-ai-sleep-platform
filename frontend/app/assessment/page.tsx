@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { SQ, PQ, WQ, getSR, getPR, PAIN_LOCS } from "@/lib/config";
-import { DB } from "@/lib/store";
+import API from "@/lib/api";
 import { 
   ChevronLeft, ChevronRight, CheckCircle2, User, 
   Moon, Activity, Briefcase, HeartPulse, ScrollText
@@ -69,29 +69,56 @@ export default function AssessmentPage() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     
-    const sScore = Object.values(sAns).reduce((a, b) => a + b, 0);
-    const pScore = Object.values(pAns).reduce((a, b) => a + b, 0);
-    const wScore = Object.values(wAns).reduce((a, b) => a + b, 0);
-    
-    const sLevel = getSR(sScore);
-    const pLevel = getPR(pScore);
+    try {
+        // 1. 打包後端需要的資料格式 (對應 main.py 的 AssessmentData)
+        const payload = {
+            user_id: session.uid, // 從 session 抓取目前登入者的 ID
+            profile: {
+                name: session.name,
+                age: profile.age,
+                gender: profile.gender,
+                height: profile.height,
+                weight: profile.weight,
+                dept: profile.dept,
+                orgRole: profile.orgRole,
+                industry: profile.industry,
+                shiftWork: profile.shiftWork,
+                hypertension: profile.hypertension,
+                diabetes: profile.diabetes,
+                hyperlipidemia: profile.hyperlipidemia,
+                heartDisease: profile.heartDisease,
+                medications: profile.medications,
+                painLocations: profile.painLocations
+            },
+            sleep_scores: sAns,
+            pain_scores: pAns,
+            work_scores: wAns
+        };
 
-    const report = {
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
-      ts: new Date().toISOString(),
-      declarationTs: declTs, // 🚨 記錄同意聲明的時間
-      session: { systemRole: session.systemRole, name: session.name },
-      profile: { ...profile, name: session.name },
-      sScore, sLevel, sAns,
-      pScore, pLevel, pAns,
-      wScore, wAns,
-      recs: FR
-    };
+        // 2. 呼叫我們已經上好鎖的 FastAPI 端點
+        const result = await API.request('/api/sleep/assessment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        });
 
-    await DB.saveReport(report);
-    if (session.orgCode) await DB.saveOrgRec(session.orgCode, report);
+        // 3. 成功後跳轉到報告頁面 (加入 as any 繞過 TS 檢查)
+        if (result.status === 'success') {
+            // 使用 (result as any) 來告訴 TypeScript 強制讀取 report_id
+            router.push(`/report/${(result as any).report_id}`);
+        } else {
+            console.error("提交失敗:", result);
+            alert("提交失敗，請稍後再試！");
+            setIsSubmitting(false);
+        }
 
-    router.push(`/report/${report.id}`);
+    } catch (error) {
+        console.error("API 錯誤:", error);
+        alert("伺服器連線異常，請檢查網路狀態。");
+        setIsSubmitting(false);
+    }
   };
 
   const steps = [

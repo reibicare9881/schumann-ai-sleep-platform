@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { DB } from "@/lib/store";
+import API from "@/lib/api";
 import { LX, LL, ROLES, SQ, PQ } from "@/lib/config";
 
 // ══ 內部工具：PDF 報表產生器 (100% 移植自原始邏輯) ══
@@ -45,10 +46,47 @@ export default function HistoryPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  // 1. 載入資料
+  // 1. 載入資料 (改由 FastAPI + Supabase 獲取)
   useEffect(() => {
-    if (session) {
-      DB.loadReports().then((r: any) => setReports(Array.isArray(r) ? r : []));
+    // 確保 session 存在且有 uid 才發送請求
+    if (session && session.uid) {
+      // 呼叫我們在 main.py 寫好的列表端點，並把 user_id 當作查詢參數傳過去
+      API.request(`/api/sleep/reports?user_id=${session.uid}`, {
+        method: 'GET'
+      })
+      .then((res: any) => {
+        if (res.status === 'success' && Array.isArray(res.reports)) {
+          
+          // 2. 資料格式轉換 (Data Mapping)
+          // 把後端資料庫的 snake_case 轉換為前端列表與 PDF 需要的格式
+          const formattedReports = res.reports.map((dbData: any) => ({
+            ...dbData,
+            id: dbData.id,
+            ts: dbData.created_at,             // 時間戳記對接
+            sScore: dbData.sleep_score,        // 分數對接
+            pScore: dbData.pain_score,
+            wScore: dbData.work_score,
+            // 轉換燈號與標籤 (結合你 import 進來的 LL 字典)
+            sLevel: { 
+              key: dbData.sleep_level, 
+              label: LL[dbData.sleep_level as keyof typeof LL] || "" 
+            },
+            pLevel: { 
+              key: dbData.pain_level, 
+              label: LL[dbData.pain_level as keyof typeof LL] || "" 
+            },
+            profile: dbData.profile || {},
+          }));
+
+          setReports(formattedReports);
+        } else {
+          setReports([]); // 如果沒資料或狀態不對，設為空陣列
+        }
+      })
+      .catch((err) => {
+        console.error("API 獲取歷史紀錄失敗:", err);
+        setReports([]);
+      });
     }
   }, [session]);
 
@@ -168,7 +206,12 @@ export default function HistoryPage() {
                     <FileText className="w-6 h-6 text-slate-400 group-hover:text-emerald-600" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-800">{rec.profile?.name || "未知使用者"} 的分析報告</h3>
+                    <h3 className="font-bold text-slate-800">
+                      {
+                        rec.profile?.name || 
+                        (rec.user_id === session?.uid ? session?.name : "未知使用者") 
+                      } 的分析報告
+</h3>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
                       <span className="text-xs text-slate-400 flex items-center gap-1">
                         <Calendar className="w-3 h-3" /> {new Date(rec.ts).toLocaleDateString()}
