@@ -7,29 +7,29 @@ import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { ROLES, can, LX } from "@/lib/config";
 import { DB } from "@/lib/store";
+import { useRouter } from "next/navigation";
 import { 
   ClipboardEdit, FileText, BarChart3, Target, 
-  CalendarDays, Leaf, TrendingUp, AlertTriangle, ShieldCheck, LogOut, ChevronRight
+  CalendarDays, Leaf, TrendingUp, AlertTriangle, ShieldCheck, LogOut, ChevronRight, RefreshCw
 } from "lucide-react";
 
 export default function DashboardPage() {
-  const { session, logout } = useAuth();
+  // 解構出 switchPlatform
+  const { session, logout, switchPlatform } = useAuth();
+  const router = useRouter();
   const [history, setHistory] = useState<any[]>([]);
 
-  // 載入歷史報告筆數
   useEffect(() => {
     if (session) {
       DB.loadReports().then((r: any) => setHistory(Array.isArray(r) ? r : []));
     }
   }, [session]);
 
-  // 如果沒有 session，畫面先留白等 AuthProvider 跳轉
   if (!session) return null; 
 
   const roleInfo = ROLES[session.systemRole] || ROLES.individual;
   const isAdmin = session.systemRole === "admin";
 
-  // 依照權限動態過濾功能磚 (Tiles)
   const tiles = [
     { id: "assess", icon: <ClipboardEdit className="w-8 h-8 text-teal-600" />, label: "開始健康評估", sub: "填寫問卷，生成個人報告", color: "border-teal-200 hover:border-teal-500", link: "/assessment", show: can(session.systemRole, "assess") },
     { id: "history", icon: <FileText className="w-8 h-8 text-emerald-600" />, label: "查閱個人報告", sub: `共 ${history.length} 筆記錄`, color: "border-emerald-200 hover:border-emerald-500", link: "/history", show: can(session.systemRole, "view_history") },
@@ -45,7 +45,6 @@ export default function DashboardPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       
-      {/* 頂部歡迎與身分區塊 */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-8 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 bg-slate-50 rounded-xl flex items-center justify-center text-2xl border border-slate-100">
@@ -62,12 +61,36 @@ export default function DashboardPage() {
           </div>
         </div>
         
-        <button 
-          onClick={logout}
-          className="flex items-center gap-2 px-4 py-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
-        >
-          <LogOut className="w-4 h-4" /> 登出
-        </button>
+        <div className="flex items-center gap-2">
+          {/* 切換平台按鈕 */}
+          <button 
+            onClick={async () => {
+               const toPlatform = session.platform === 'sleep' ? 'schumann' : 'sleep';
+               const success = await switchPlatform(toPlatform);
+               if (success) {
+                  // 移除 alert，讓體驗更順暢 (如果你想保留 alert 也可以)
+                  // 🌟 核心修改：根據切換的平台決定去哪裡
+                  if (toPlatform === 'schumann') {
+                      router.push('/'); // 跳轉到舒曼共振首頁 (http://localhost:3000)
+                  } else {
+                      window.location.reload(); // 切回睡眠時，重新整理留在 Dashboard
+                  }
+               } else {
+                  alert("切換平台失敗");
+               }
+            }}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-indigo-600 bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-700 rounded-lg transition-colors border border-transparent font-bold"
+          >
+            <RefreshCw className="w-4 h-4" /> 切換至 {session.platform === 'sleep' ? '舒曼' : '睡眠'}
+          </button>
+
+          <button 
+            onClick={logout}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+          >
+            <LogOut className="w-4 h-4" /> 登出
+          </button>
+        </div>
       </div>
 
       {isAdmin && (
@@ -77,7 +100,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 功能導覽磚 (Tiles) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {tiles.map((t) => (
           <Link href={t.link} key={t.id}>
@@ -91,7 +113,7 @@ export default function DashboardPage() {
           </Link>
         ))}
       </div>
-        {/* 補回：最近評估記錄列表 */}
+      
       {history.length > 0 && (
         <div className="mt-10 bg-amber-50/50 border border-amber-100 rounded-3xl p-6 md:p-8 shadow-sm">
           <h3 className="text-lg font-bold text-amber-800 mb-6 flex items-center gap-2">

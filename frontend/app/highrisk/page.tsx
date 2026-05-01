@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import { DB } from "@/lib/store";
+import API from "@/lib/api"; 
 import { can, LX } from "@/lib/config";
 import { 
   AlertOctagon, ChevronLeft, ShieldAlert, HeartPulse, 
@@ -18,66 +18,39 @@ export default function HighRiskPage() {
   const [ready, setReady] = useState(false);
   const [filter, setFilter] = useState<"all" | "critical" | "overdue">("all");
 
-  // useEffect(() => {
-  //   // 只有管理者或部門主管可以看
-  //   if (session?.orgCode && (can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr"))) {
-  //     DB.loadOrgRecs(session.orgCode).then((r: any) => {
-  //       setData(Array.isArray(r) ? r : []);
-  //       setReady(true);
-  //     });
-  //   } else if (session) {
-  //     setReady(true);
-  //   }
-  // }, [session]);
-
   useEffect(() => {
-    // === 🛠️ 開發期假資料 (Mock Data) 測試用 ===
-    const mockData = [
-      {
-        id: "user-001",
-        profile: { name: "王大明" },
-        dept: "工程部",
-        ts: new Date().toISOString(), // 今天剛測
-        sScore: 26,
-        sKey: "red",   // 睡眠紅燈
-        pScore: 45,
-        pKey: "red"    // 疼痛紅燈 -> 這位會是「重度共病」
-      },
-      {
-        id: "user-002",
-        profile: { name: "李小華" },
-        dept: "設計部",
-        ts: new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString(), // 35天前測的 -> 這位會是「追蹤怠惰」
-        sScore: 10,
-        sKey: "green",
-        pScore: 12,
-        pKey: "green"
-      },
-      {
-        id: "user-003",
-        profile: { name: "陳建國" },
-        dept: "工程部",
-        ts: new Date().toISOString(),
-        sScore: 18,
-        sKey: "orange",
-        pScore: 8,
-        pKey: "green"
-      }
-    ];
-
-    // 只有管理者或部門主管可以看
     if (session?.orgCode && (can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr"))) {
       
-      // 🚧 註解掉原本的 DB 呼叫
-      // DB.loadOrgRecs(session.orgCode).then((r: any) => {
-      //   setData(Array.isArray(r) ? r : []);
-      //   setReady(true);
-      // });
-
-      // 👉 直接將 data 設為我們的假資料
-      setData(mockData);
-      setReady(true);
-      
+      API.request(`/api/org/records?org_code=${session.orgCode}`, { method: 'GET' })
+        .then((res: any) => {
+          if (res.status === 'success' && res.data) {
+             // 【關鍵修復】將資料庫的 snake_case 轉換為畫面需要的 camelCase
+             const mappedData = res.data.map((d: any) => ({
+                 ...d,
+                 id: d.id,
+                 uid: d.user_id,
+                 ts: d.created_at,             // 修復 NaN 天前
+                 sScore: d.sleep_score,        // 修復空白分數
+                 pScore: d.pain_score,
+                 sKey: d.sleep_level,          // 修復燈號顏色抓不到
+                 pKey: d.pain_level,
+                 profile: { 
+                 ...d.profile, 
+                 name: d.profile?.name || "未知使用者" 
+                },
+                 dept: d.profile?.dept || "未分類部門",
+             }));
+             setData(mappedData);
+          } else {
+             setData([]);
+          }
+          setReady(true);
+        })
+        .catch((err) => {
+          console.error("獲取組織資料失敗:", err);
+          setReady(true);
+        });
+        
     } else if (session) {
       setReady(true);
     }
@@ -85,7 +58,6 @@ export default function HighRiskPage() {
 
   if (loading || !ready) return null;
 
-  // 權限阻擋
   if (!can(session?.systemRole, "view_org") && !can(session?.systemRole, "view_dept_okr")) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-20 text-center">
@@ -97,14 +69,11 @@ export default function HighRiskPage() {
     );
   }
 
-  // --- 資料處理與分群邏輯 ---
   const isDept = session?.systemRole === "dept_head";
   const allowedData = isDept ? data.filter(r => r.dept === session?.dept) : data;
 
-  // 1. 將所有評估紀錄「按人」分組，找出每個人「最新」的一筆紀錄
   const userMap = new Map();
   allowedData.forEach(r => {
-    // 修正：如果沒有名字，就用 uid 或是報告 id 當作識別，不要直接 return 略過！
     const key = r.profile?.name || r.session?.name || r.uid || r.id;
     if (!key) return; 
     
@@ -113,7 +82,7 @@ export default function HighRiskPage() {
     } else {
       const existing = userMap.get(key);
       if (new Date(r.ts) > new Date(existing.ts)) {
-        userMap.set(key, r); // 替換為較新的紀錄
+        userMap.set(key, r); 
       }
     }
   });
@@ -121,29 +90,23 @@ export default function HighRiskPage() {
   const uniqueUsers = Array.from(userMap.values());
   const now = new Date().getTime();
 
-  // 2. 判定高風險 (睡眠與疼痛皆在橘燈或紅燈)
-  // 修正：將 sKey 改為 sLevel?.key，pKey 改為 pLevel?.key
   const isCritical = (r: any) => 
-    ["orange", "red"].includes(r.sKey) && 
-    ["orange", "red"].includes(r.pKey);
+    ["orange", "red"].includes(r.sLevel?.key || r.sKey) && 
+    ["orange", "red"].includes(r.pLevel?.key || r.pKey);
   
-  // 3. 判定超過30天未評估
   const isOverdue = (r: any) => (now - new Date(r.ts).getTime()) > 30 * 24 * 60 * 60 * 1000;
 
   const criticalUsers = uniqueUsers.filter(isCritical);
   const overdueUsers = uniqueUsers.filter(isOverdue);
 
-  // 4. 套用畫面篩選器
   let displayUsers = uniqueUsers;
   if (filter === "critical") displayUsers = criticalUsers;
   if (filter === "overdue") displayUsers = overdueUsers;
 
-  // 依照風險嚴重度排序 (分數越高排越前面)
   displayUsers.sort((a, b) => (b.sScore + b.pScore) - (a.sScore + a.pScore));
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
-      {/* 標題與操作區 */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
         <div>
           <button onClick={() => router.back()} className="text-slate-500 hover:text-slate-800 flex items-center gap-1 mb-2 text-sm">
@@ -158,7 +121,6 @@ export default function HighRiskPage() {
         </div>
       </div>
 
-      {/* 隱私與機密警告 */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-8 flex gap-3 shadow-lg">
         <ShieldAlert className="w-6 h-6 text-red-500 shrink-0" />
         <div className="text-xs text-slate-300 leading-relaxed">
@@ -167,7 +129,6 @@ export default function HighRiskPage() {
         </div>
       </div>
 
-      {/* 狀態速覽卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <button onClick={() => setFilter("all")} className={`bg-white border rounded-2xl p-6 text-left transition-all ${filter === "all" ? 'border-slate-800 shadow-md ring-1 ring-slate-800' : 'border-slate-200 hover:border-slate-400'}`}>
           <div className="flex items-center gap-3 mb-2">
@@ -197,7 +158,6 @@ export default function HighRiskPage() {
         </button>
       </div>
 
-      {/* 名單列表 */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
           <h3 className="font-bold text-slate-800">
@@ -216,13 +176,16 @@ export default function HighRiskPage() {
             {displayUsers.map((r, idx) => {
               const c = isCritical(r);
               const o = isOverdue(r);
-              const daysAgo = Math.floor((now - new Date(r.ts).getTime()) / (1000 * 60 * 60 * 24));
+              const timeDiff = now - new Date(r.ts).getTime();
+              const daysAgo = Math.max(0, Math.floor(timeDiff / (1000 * 60 * 60 * 24)));
               
+              const sKey = r.sLevel?.key || r.sKey;
+              const pKey = r.pLevel?.key || r.pKey;
+
               return (
                 <div key={idx} className={`p-6 transition-colors ${c ? 'bg-red-50/30' : 'hover:bg-slate-50'}`}>
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                     
-                    {/* 員工基本資訊 */}
                     <div className="flex items-center gap-4 min-w-[200px]">
                       <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold border-2 ${c ? 'bg-red-100 text-red-700 border-red-200' : 'bg-slate-100 text-slate-700 border-slate-200'}`}>
                         {r.profile?.name?.[0] || "?"}
@@ -240,23 +203,21 @@ export default function HighRiskPage() {
                       </div>
                     </div>
 
-                    {/* 分數與燈號 */}
                     <div className="flex items-center gap-6">
                       <div className="text-center">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">睡眠 (ISI)</div>
-                        <div className="text-sm font-bold px-3 py-1 rounded-full border" style={{ color: LX[r.sKey as keyof typeof LX]?.c, borderColor: LX[r.sKey as keyof typeof LX]?.c, backgroundColor: LX[r.sKey as keyof typeof LX]?.bg }}>
+                        <div className="text-sm font-bold px-3 py-1 rounded-full border" style={{ color: LX[sKey as keyof typeof LX]?.c, borderColor: LX[sKey as keyof typeof LX]?.c, backgroundColor: LX[sKey as keyof typeof LX]?.bg }}>
                           {r.sScore}/28
                         </div>
                       </div>
                       <div className="text-center">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">疼痛 (BPI)</div>
-                        <div className="text-sm font-bold px-3 py-1 rounded-full border" style={{ color: LX[r.pKey as keyof typeof LX]?.c, borderColor: LX[r.pKey as keyof typeof LX]?.c, backgroundColor: LX[r.pKey as keyof typeof LX]?.bg }}>
+                        <div className="text-sm font-bold px-3 py-1 rounded-full border" style={{ color: LX[pKey as keyof typeof LX]?.c, borderColor: LX[pKey as keyof typeof LX]?.c, backgroundColor: LX[pKey as keyof typeof LX]?.bg }}>
                           {r.pScore}/50
                         </div>
                       </div>
                     </div>
 
-                    {/* 系統建議行動 (Actionable UI) */}
                     <div className="min-w-[280px]">
                       {c ? (
                         <div className="bg-white border border-red-200 rounded-xl p-3 shadow-sm">

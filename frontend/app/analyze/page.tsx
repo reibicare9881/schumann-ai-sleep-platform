@@ -3,15 +3,18 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, FileText, Loader2, AlertCircle } from "lucide-react";
+import { useAuth } from "@/components/AuthProvider"; // 引入 AuthProvider
 
 export default function AnalyzePage() {
   const router = useRouter();
+  const { session } = useAuth(); // 取得真實登入狀態
+  
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   
-  // 預設帶入我們在資料庫建好的測試帳號 ID
-  const [userId, setUserId] = useState("33bb2f97-e8ec-4723-b538-30efbfc91827");
+  // 動態取得真實的使用者 ID
+  const currentUserId = session?.id || session?.apiSession?.user_id || "";
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -26,12 +29,24 @@ export default function AnalyzePage() {
       return;
     }
 
+    if (!currentUserId) {
+      setError("無法取得使用者身分，請重新登入");
+      return;
+    }
+
+    // 1. 取得當前的 JWT Token
+    const token = session?.apiSession?.access_token;
+    if (!token) {
+      setError("找不到登入憑證，請重新登入");
+      return;
+    }
+
     setLoading(true);
     setError("");
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("user_id", userId);
+    formData.append("user_id", currentUserId); // 使用真實 ID
     formData.append("assessment_round", "1");
 
     try {
@@ -39,6 +54,10 @@ export default function AnalyzePage() {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const res = await fetch(`${API_URL}/api/analyze`, {
         method: "POST",
+        // 2. 加上 headers 遞交通行證
+        headers: {
+          "Authorization": `Bearer ${token}`
+        },
         body: formData,
       });
 
@@ -66,17 +85,6 @@ export default function AnalyzePage() {
         </div>
 
         <div className="space-y-6">
-          {/* 測試用：User ID 輸入框 */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">使用者 ID (測試用)</label>
-            <input 
-              type="text" 
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
-            />
-          </div>
-
           {/* 拖曳與選擇檔案區塊 */}
           <div className="border-2 border-dashed border-emerald-200 rounded-xl p-10 text-center hover:bg-emerald-50 transition-colors">
             <input 

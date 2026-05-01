@@ -22,6 +22,7 @@ interface Session {
   platform: string;
   role?: string;
   access_token?: string;
+  name?: string; // 🌟 補上 name 欄位，讓 LocalStorage 可以記住使用者的名字
 }
 
 // ==========================================
@@ -182,17 +183,25 @@ export const API = {
     const session = this.getSession();
     if (!session) return { status: 'error', message: '未登录' };
     
+    // 🌟 防呆 1：如果 session.platform 遺失，強制預設為 'sleep'，避免後端報 422 錯誤
+    const currentPlatform = session.platform || 'sleep';
+
     const response = await this.request('/api/auth/switch-platform', {
       method: 'POST',
       query: {
         user_id: session.user_id,
-        from_platform: session.platform,
+        from_platform: currentPlatform, // 確保這裡一定有值送出
         to_platform: toPlatform
       }
     });
     
     if (response.status === 'success' && response.data?.session) {
-      this.setSession(response.data.session);
+      // 🌟 防呆 2：切換平台成功後，把原本的名字繼承過去，避免重新整理後變成 undefined
+      const newSessionData = {
+        ...response.data.session,
+        name: session.name || "使用者" 
+      };
+      this.setSession(newSessionData);
     }
     
     return response;

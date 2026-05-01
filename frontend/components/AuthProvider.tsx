@@ -1,7 +1,7 @@
 // components/AuthProvider.tsx
 "use client";
 import React, { createContext, useContext, useEffect, useState, useRef } from "react";
-import { DB, ZeroTrust, AuditLog, clearCryptoKey } from "@/lib/store";
+import { ZeroTrust, AuditLog, clearCryptoKey } from "@/lib/store"; // 移除了未使用的 DB
 import { useRouter } from "next/navigation";
 import API from "@/lib/api";
 
@@ -14,11 +14,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const router = useRouter();
 
   useEffect(() => {
-    // 首先尝试从后端会话加载
+    // 嚴格使用後端 API Session，不允許退回 LocalStorage
     const backendSession = API.getSession();
     if (backendSession) {
       setSession({
         id: backendSession.user_id,
+        uid: backendSession.user_id, // 確保相容舊變數
         systemRole: backendSession.role || "individual",
         name: `${backendSession.platform} 用户`,
         apiSession: backendSession,
@@ -26,19 +27,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       });
       setUseBackend(true);
       setLoading(false);
-      return;
-    }
-
-    // 然后尝试从本地存储加载
-    DB.loadSession().then(s => {
-      if (s?.systemRole) {
-        setSession(s);
-        setUseBackend(false);
-      } else {
-        router.push("/login");
-      }
+    } else {
+      // 找不到合法 Session 就直接踢回登入頁
+      router.push("/login");
       setLoading(false);
-    });
+    }
   }, [router]);
 
   useEffect(() => {
@@ -74,7 +67,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       await API.logout();
     }
     
-    await DB.clearSession();
+    API.clearSession(); // 清除 API Session，不再使用 DB.clearSession()
     clearCryptoKey();
     AuditLog.record('LOGOUT', 'user logged out', session?.systemRole || '');
     setSession(null);

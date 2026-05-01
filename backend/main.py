@@ -5,7 +5,10 @@ Unified Backend: Schumann Platform + Sleep Platform
 """
 
 import os
+import io
 import json
+from modules.parser_module import parse_schumann_report
+from modules.ai_analyzer_module import generate_ai_explanation
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
@@ -18,6 +21,7 @@ from dotenv import load_dotenv
 from auth import create_access_token, get_current_user, require_admin
 from config import settings
 import uuid
+from fastapi import File, UploadFile, Form
 
 # ==========================================
 # 加載環境變數
@@ -358,64 +362,225 @@ async def get_user_platforms(user_id: str):
         "can_switch": len(platforms) > 1
     }
 
+@app.post("/api/auth/switch-platform")
+async def switch_platform(
+    user_id: str,
+    from_platform: str,
+    to_platform: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """處理平台切換並重新核發 JWT Token"""
+    # 1. 安全防護：確保只能自己切換自己的平台
+    if str(current_user.get("uid")) != user_id:
+        raise HTTPException(status_code=403, detail="越權存取：無法切換他人的平台")
+        
+    # 2. 重新簽發新平台的 JWT Token
+    # 這裡繼承原有的權限 (role, org_code)，但把 platform 標記換掉
+    new_payload = {
+        "uid": user_id,
+        "role": current_user.get("role", "individual"),
+        "org_code": current_user.get("org_code"),
+        "platform": to_platform
+    }
+    
+    # 產生新鑰匙
+    new_token = create_access_token(new_payload)
+    
+    # 3. 回傳給前端覆蓋舊 Session
+    return {
+        "status": "success",
+        "data": {
+            "session": {
+                "session_id": f"sess_{user_id[:8]}",
+                "user_id": user_id,
+                "platform": to_platform,
+                "role": current_user.get("role", "individual"),
+                "access_token": new_token
+            }
+        }
+    }
+
+# ==========================================
+# 高風險分析 API (/api/org/*)
+# ==========================================
+
+@app.get("/api/org/records")
+async def get_org_records(
+    org_code: str, 
+    current_user: dict = Depends(get_current_user)
+):
+    """獲取該單位所有成員的去識別化報告 (限管理員與主管)"""
+    if current_user.get("role") not in ["admin", "dept_head"]:
+        raise HTTPException(status_code=403, detail="權限不足")
+        
+    res = supabase.table("sleep_reports").select("*").eq("org_code", org_code).execute()
+    return {"status": "success", "data": res.data}
+
 # ==========================================
 # 舒曼共振平台 API (/api/schumann/*)
 # ==========================================
 
-@app.get("/api/schumann/health")
-async def schumann_health():
-    """舒曼共振平台健康檢查"""
-    return {
-        "platform": "schumann",
-        "status": "healthy",
-        "total_reports": len(db.schumann_reports),
-        "features": ["PDF分析", "AI解說", "心率分析", "自律神經平衡"]
-    }
+@app.post("/api/analyze")
+async def analyze_schumann_report(
+    file: UploadFile = File(...),
+    user_id: str = Form(...),
+    assessment_round: int = Form(1),
+    current_user: dict = Depends(get_current_user)
+):
+    
+    if str(current_user.get("uid")) != user_id:
+        raise HTTPException(status_code=403, detail="越權操作：您只能為自己的帳號上傳報告")
+    
+    """處理舒曼共振報告上傳、AI解析，並存入 Supabase"""
+    try:
+        # 1. 讀取檔案轉換為 bytes
+        file_bytes = await file.read()
+        
+        # 使用 io.BytesIO 偽裝成檔案物件，讓你的 parser_module 可以讀取
+        file_obj = io.BytesIO(file_bytes)
+        file_obj.name = file.filename 
+
+        # 2. 從檔名擷取名字 (繼承你原本 app.py 的邏輯)
+        extracted_name = None
+        file_name_only = file.filename.split('.')[0]
+        parts = file_name_only.split('_')
+        if len(parts) >= 2 and parts[0] == "record":
+            extracted_name = parts[1]
+
+        # 3. 呼叫你原本的解析模組 (取得 JSON 數據)
+        # 注意：根據你的 parser_module 寫法，可能需要傳入 api_key，請視情況調整
+        parsed_data = parse_schumann_report(file_obj) 
+        
+        # 如果檔名有名字，覆寫進去
+        if extracted_name:
+            parsed_data["Name"] = extracted_name
+
+        # 4. (選用) 如果你想在後端一併產生 AI 建議文本，可以在這裡呼叫
+        # ai_summary_dict = generate_ai_explanation(parsed_data, language="🇹🇼 繁體中文")
+        # ai_summary_text = json.dumps(ai_summary_dict, ensure_ascii=False)
+
+        # 5. 【關鍵轉換】將 AI 抓出的 JSON 映射到 Supabase 的蛇行欄位
+        def safe_float(val):
+            try: return float(val) if val not in ["未提供", "未知", "", None] else None
+            except: return None
+            
+        def safe_int(val):
+            try: return int(val) if val not in ["未提供", "未知", "", None] else None
+            except: return None
+
+        db_payload = {
+            "user_id": user_id,
+            "assessment_round": assessment_round,
+            
+            # 個人資料
+            "name_extracted": str(parsed_data.get("Name", "")),
+            "gender_extracted": str(parsed_data.get("Gender", "")),
+            "age_extracted": safe_int(parsed_data.get("Age")),
+            "occupation_extracted": str(parsed_data.get("Occupation", "")),
+            # "experience_date": ... (日期格式若需轉換可在此處理)
+            "subjective_conditions": str(parsed_data.get("Subjective_Conditions", "")),
+            "experience_time_sec": safe_int(parsed_data.get("Experience_Time_Sec")),
+            
+            # 心率數據
+            "hr_pre": safe_int(parsed_data.get("HR_Pre")),
+            "hr_post": safe_int(parsed_data.get("HR_Post")),
+            "hr_lowest": safe_int(parsed_data.get("HR_Lowest")),
+            "hr_conclusion": str(parsed_data.get("HR_Conclusion", "")),
+            
+            # SDNN 數據
+            "sdnn_pre": safe_float(parsed_data.get("SDNN_Pre")),
+            "sdnn_post": safe_float(parsed_data.get("SDNN_Post")),
+            "sdnn_lowest_trend": str(parsed_data.get("SDNN_Lowest_Trend", "")),
+            "sdnn_conclusion": str(parsed_data.get("SDNN_Conclusion", "")),
+            
+            # 自律神經與陰陽
+            "unity_index": safe_float(parsed_data.get("Unity_Index")),
+            "balance_count": safe_int(parsed_data.get("Balance_Count")),
+            "lf_hf_value": safe_float(parsed_data.get("LF_HF_Value")),
+            "lf_hf_conclusion": str(parsed_data.get("LF_HF_Conclusion", "")),
+            "lf_hf_trend": str(parsed_data.get("LF_HF_Trend", "")),
+            "yin_yang": str(parsed_data.get("Yin_Yang", "")),
+            
+            # 生命之花圖譜
+            "flower_colors": str(parsed_data.get("Flower_of_Life_Colors", "")),
+            "flower_brightness_detail": str(parsed_data.get("Flower_of_Life_Brightness_Detail", "")),
+            "flower_brightness": str(parsed_data.get("Flower_of_Life_Brightness", "")),
+            "flower_shape": str(parsed_data.get("Flower_of_Life_Shape", "")),
+            "flower_extent": str(parsed_data.get("Flower_of_Life_Extent", "")),
+            
+            # 象限圖
+            "scatter_plot_analysis": str(parsed_data.get("Scatter_Plot_Analysis", "")),
+            
+            # 其他
+            # "ai_summary": ai_summary_text, # 若有產生 AI 建議可寫入
+            "report_url": "" # 可後續擴充 PDF 儲存空間網址
+        }
+
+        # 6. 寫入 Supabase 資料庫
+        res = supabase.table("analysis_records").insert(db_payload).execute()
+        
+        if not res.data:
+            raise HTTPException(status_code=500, detail="寫入資料庫失敗")
+            
+        record_id = res.data[0]['id']
+
+        return {
+            "status": "success", 
+            "record_id": record_id, 
+            "report_url": f"/report/{record_id}" # 回傳一個假定的 URL 供前端跳轉
+        }
+
+    except Exception as e:
+        print(f"分析錯誤: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/schumann/reports")
-async def list_schumann_reports(user_id: str):
-    """獲取用戶舒曼報告列表"""
-    reports = [r for r in db.schumann_reports.values() if r.get("user_id") == user_id]
+async def list_schumann_reports(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """獲取用戶舒曼報告列表 (連接 Supabase)"""
+    # 權限驗證：只能看自己的，或者是管理員看同單位的
+    is_owner = str(current_user.get("uid")) == user_id
+    is_admin = current_user.get("role") in ["admin", "dept_head"]
+    
+    if not is_owner and not is_admin:
+        raise HTTPException(status_code=403, detail="越權存取：無權查看此列表")
+        
+    # 從 analysis_records 資料表撈取舒曼報告
+    res = supabase.table("analysis_records").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+    
     return {
         "status": "success",
         "platform": "schumann",
-        "count": len(reports),
-        "reports": reports
+        "count": len(res.data) if res.data else 0,
+        "reports": res.data if res.data else []
     }
 
 @app.get("/api/schumann/reports/{report_id}")
-async def get_schumann_report(report_id: str):
-    """獲取單份舒曼報告"""
-    report = db.schumann_reports.get(report_id)
-    if not report:
-        raise HTTPException(status_code=404, detail="舒曼報告不存在")
+async def get_schumann_report(
+    report_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """獲取單份舒曼報告詳情 (連接 Supabase)"""
+    res = supabase.table("analysis_records").select("*").eq("id", report_id).execute()
     
+    if not res.data:
+        raise HTTPException(status_code=404, detail="舒曼報告不存在")
+        
+    report = res.data[0]
+    
+    # 權限驗證
+    is_owner = report.get("user_id") == current_user.get("uid")
+    # 如果有 org_code 關聯，這裡也可以加入管理員判斷
+    
+    if not is_owner and current_user.get("role") not in ["admin", "dept_head"]:
+        raise HTTPException(status_code=403, detail="越權存取：您無權查看此份報告")
+        
     return {
         "status": "success",
         "platform": "schumann",
         "report": report
-    }
-
-@app.post("/api/schumann/upload")
-async def upload_schumann_report(user_id: str, data: Dict):
-    """上傳舒曼共振分析報告"""
-    report_id = f"schumann_report_{int(datetime.now().timestamp())}"
-    report = {
-        "id": report_id,
-        "user_id": user_id,
-        "platform": "schumann",
-        "created_at": datetime.now().isoformat(),
-        "data": data,
-        "status": "completed"
-    }
-    
-    db.schumann_reports[report_id] = report
-    
-    return {
-        "status": "success",
-        "platform": "schumann",
-        "report_id": report_id,
-        "message": "舒曼報告已上傳"
     }
 
 # ==========================================
