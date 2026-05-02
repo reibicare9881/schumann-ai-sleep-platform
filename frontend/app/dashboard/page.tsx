@@ -5,8 +5,8 @@ import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
-import { ROLES, can, LX } from "@/lib/config";
-import { DB } from "@/lib/store";
+import { ROLES, can, LX, LL } from "@/lib/config";
+import API from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { 
   ClipboardEdit, FileText, BarChart3, Target, 
@@ -20,8 +20,28 @@ export default function DashboardPage() {
   const [history, setHistory] = useState<any[]>([]);
 
   useEffect(() => {
-    if (session) {
-      DB.loadReports().then((r: any) => setHistory(Array.isArray(r) ? r : []));
+    // 確保有登入且有 uid 才發送請求
+    if (session && session.uid) {
+      API.listSleepReports(session.uid).then((res: any) => {
+        if (res.status === 'success' && Array.isArray(res.reports)) {
+          // 將資料庫的蛇形命名轉換為前端顯示需要的格式
+          const formatted = res.reports.map((dbData: any) => ({
+            ...dbData,
+            id: dbData.id,
+            ts: dbData.created_at,
+            sScore: dbData.sleep_score,
+            pScore: dbData.pain_score,
+            sLevel: { key: dbData.sleep_level, label: LL[dbData.sleep_level as keyof typeof LL] || "" },
+            pLevel: { key: dbData.pain_level, label: LL[dbData.pain_level as keyof typeof LL] || "" }
+          }));
+          setHistory(formatted);
+        } else {
+          setHistory([]);
+        }
+      }).catch(err => {
+        console.error("獲取儀表板歷史失敗:", err);
+        setHistory([]);
+      });
     }
   }, [session]);
 

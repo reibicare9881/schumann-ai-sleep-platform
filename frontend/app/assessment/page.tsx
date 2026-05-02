@@ -72,13 +72,13 @@ export default function AssessmentPage() {
     try {
         // 1. 打包後端需要的資料格式 (對應 main.py 的 AssessmentData)
         const payload = {
-            user_id: session.uid, // 從 session 抓取目前登入者的 ID
+            user_id: session?.apiSession?.user_id || session?.uid || session?.id || "", // 從 session 抓取目前登入者的 ID
             profile: {
                 name: session.name,
-                age: profile.age,
+                age: Number(profile.age) || 0,
                 gender: profile.gender,
-                height: profile.height,
-                weight: profile.weight,
+                height: Number(profile.height) || 0,
+                weight: Number(profile.weight) || 0,
                 dept: profile.dept,
                 orgRole: profile.orgRole,
                 industry: profile.industry,

@@ -1,114 +1,48 @@
-# Schumann Platform
+# 麗媚生化科技 REIBI ｜ 健康自主管理平台
+(Schumann Resonance & Sleep Health Platform)
 
-Schumann Platform 是一個現代化的全棧應用，結合了 FastAPI 後端和 Next.js 前端。
+本專案為企業級健康自主管理系統，結合 AI 數據分析與現代化 Web 架構，提供睡眠品質評估、疼痛追蹤、高風險族群預警與舒曼共振數據解析等全方位健康管理服務。
 
-## 項目結構
+## 🌟 系統亮點 (Key Features)
+* **雙軌平台架構**：整合「睡眠健康平台」與「舒曼共振平台」，單一帳號無縫切換。
+* **多層級權限控制 (RBAC)**：支援個人用戶、單位成員、部門主管與高階管理員，資料存取嚴格去識別化。
+* **企業級 KPI & OKR 儀表板**：自動計算健康促進指數 (HPI)、ROI 經濟效益與 ESG 永續健康指標。
+* **AI 深度解析**：整合先進大型語言模型 (LLM)，將量子共振原始數據轉化為個人化身心靈解說報告。
 
-```
-/schumann-platform
-│
-├── /backend            # FastAPI 專案 (AI 處理、數據運算)
-│   ├── main.py         # API 入口
-│   ├── modules/        # 移植過來的 parser, analyzer, pdf_generator
-│   ├── requirements.txt
-│   └── .env
-│
-├── /frontend           # Next.js / Node.js 專案 (使用者介面、Dashboard)
-│   ├── /app            # Next.js App Router
-│   ├── /components     # UI 元件 (如看板、圖表)
-│   ├── .env.local
-│   └── package.json
-│
-├── .gitignore          # 排除 venv, node_modules, .env
-└── README.md
-```
+## 🛡️ 安全與隱私 (Security & Privacy)
+本系統高度重視醫療與健康個資保護，實作以下核心安全機制：
+* **無狀態雲端架構**：採用 JWT (JSON Web Token) 進行身份驗證，後端完全無狀態化 (Stateless)。
+* **Zero Trust 零信任驗證**：嚴格的路由保護機制，逾時自動登出，防範越權存取。
+* **端到端加密準備**：前端敏感操作支援 Web Crypto API (AES-256-GCM) 緩存加密。
+* **k-匿名性保護 (k-Anonymity)**：組織報表自動屏蔽少於最低門檻人數之部門，防止逆向識別個資。
 
-## 快速開始
+## 🚀 技術堆疊 (Tech Stack)
+* **Frontend**: Next.js (React), Tailwind CSS, TypeScript
+* **Backend**: FastAPI (Python), Pydantic
+* **Database & Auth**: Supabase (PostgreSQL)
+* **AI Integration**: Google Gemini Vision & LLM
 
-### 後端 (Backend)
+## ⚙️ 環境建置與啟動 (Getting Started)
 
-1. 創建虛擬環境
+### 1. 環境變數配置
+請複製環境變數範例檔，並填入對應的 API 金鑰與資料庫連線資訊：
+* 後端配置：參考 `backend/.env.example`
+* 前端配置：參考 `frontend/.env.local.example`
+
+### 2. 啟動後端 API 服務
 ```bash
 cd backend
 python -m venv venv
-venv\Scripts\activate  # Windows
-# 或
-source venv/bin/activate  # macOS/Linux
-```
-
-2. 安裝依賴
-```bash
+# 啟動虛擬環境 (Windows: venv\Scripts\activate / macOS: source venv/bin/activate)
 pip install -r requirements.txt
-```
-
-3. 運行 API 服務器
-```bash
-python main.py
-# 或
 uvicorn main:app --reload
 ```
-
-API 將在 `http://localhost:8000` 上運行
-
-### 前端 (Frontend)
-
-1. 安裝依賴
+### 3. 啟動前端使用者介面
 ```bash
 cd frontend
 npm install
-```
-
-2. 運行開發服務器
-```bash
 npm run dev
 ```
-
-前端將在 `http://localhost:3000` 上運行
-
-## API 文檔
-
-啟動後端服務後，訪問 `http://localhost:8000/docs` 查看 Swagger API 文檔。
-
-## 環境變數
-
-### Backend (.env)
-- `API_HOST`: API 服務器主機 (預設: 0.0.0.0)
-- `API_PORT`: API 服務器端口 (預設: 8000)
-- `DEBUG`: 調試模式 (預設: True)
-- `DATABASE_URL`: 數據庫連接字符串
-
-### Frontend (.env.local)
-- `NEXT_PUBLIC_API_URL`: 後端 API 基礎 URL
-
-## 技術棧
-
-- **後端**: FastAPI, Python
-- **前端**: Next.js, React, TypeScript
-- **包管理**: pip (Python), npm (Node.js)
-
-## 開發
-
-### 安裝前端依賴
-```bash
-cd frontend
-npm install
-```
-
-### 建構生產版本
-
-後端:
-```bash
-cd backend
-# 準備部署...
-```
-
-前端:
-```bash
-cd frontend
-npm run build
-npm start
-```
-
-## 許可證
-
-MIT
+## 📄 授權條款 (License)
+* **Copyright © REIBI. All rights reserved.**
+* **本系統版權所有，未經授權禁止任意重製、散佈或作為商業營利用途。**

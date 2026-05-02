@@ -111,7 +111,8 @@ export default function LoginPage() {
         role: oRole,
         pin: pin.trim(),
         org_code: code,
-        name: oName.trim()
+        name: oName.trim(),
+        org_name: oOrgName.trim() || code
       });
       
       if (apiResult.status === 'success') {

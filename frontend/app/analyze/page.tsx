@@ -4,10 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, FileText, Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider"; // 引入 AuthProvider
+import { RefreshCw, ArrowLeft } from "lucide-react";
 
 export default function AnalyzePage() {
   const router = useRouter();
-  const { session } = useAuth(); // 取得真實登入狀態
+  
+  const { session, switchPlatform } = useAuth(); // 取得真實登入狀態
   
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);

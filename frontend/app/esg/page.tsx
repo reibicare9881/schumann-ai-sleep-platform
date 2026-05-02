@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import { DB } from "@/lib/store";
+import API from "@/lib/api";
 import { can } from "@/lib/config";
 import { 
   Leaf, ChevronLeft, Download, Calendar, 
@@ -30,16 +30,30 @@ export default function ESGPage() {
       setReady(true);
       return;
     }
-    Promise.all([DB.loadOrgRecs(session.orgCode), DB.getOKR(session.orgCode)]).then(([recs, okr]: [any, any]) => {
-      setData(Array.isArray(recs) ? recs : []);
-      if (okr) {
+
+    Promise.all([
+      API.request(`/api/org/records?org_code=${session.orgCode}`),
+      API.getOrgSettings(session.orgCode)
+    ]).then(([recsRes, savedRes]: [any, any]) => {
+      
+      if (recsRes.status === 'success' && recsRes.data) {
+        const mappedData = recsRes.data.map((d: any) => ({
+          ...d, sScore: d.sleep_score, sKey: d.sleep_level, ts: d.created_at
+        }));
+        setData(mappedData);
+      } else {
+        setData([]);
+      }
+
+      if (savedRes.status === 'success' && savedRes.data) {
+        const dbData = savedRes.data;
         setParams(p => ({
           ...p,
-          sickDays: okr.sickDays || p.sickDays,
-          dailySalary: okr.dailySalary || p.dailySalary,
-          insSaving: okr.insSaving || p.insSaving,
-          effGain: okr.effGain || p.effGain,
-          implCost: okr.implCost || p.implCost
+          sickDays: dbData.sick_days || p.sickDays,
+          dailySalary: dbData.daily_salary || p.dailySalary,
+          insSaving: dbData.ins_saving || p.insSaving,
+          effGain: dbData.eff_gain || p.effGain,
+          implCost: dbData.impl_cost || p.implCost
         }));
       }
       setReady(true);
@@ -123,8 +137,12 @@ export default function ESGPage() {
   };
 
   const saveParams = async () => {
-    await DB.setOKR(session.orgCode, { ...params, savedAt: new Date().toISOString() });
-    setEditP(false);
+    try {
+      await API.updateOrgSettings(session.orgCode, params);
+      setEditP(false);
+    } catch (err) {
+      alert("儲存失敗，請確認您是否有管理員權限。");
+    }
   };
 
   return (

@@ -1,12 +1,12 @@
 /**
- * 统一 API 客户端
+ * 統一 API 客戶端
  * Unified API Client for Sleep Platform
  */
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // ==========================================
-// 请求配置
+// 請求配置
 // ==========================================
 
 interface APIResponse<T = any> {
@@ -17,23 +17,25 @@ interface APIResponse<T = any> {
 }
 
 interface Session {
-  session_id: string;
+  session_id?: string;
   user_id: string;
   platform: string;
   role?: string;
   access_token?: string;
-  name?: string; // 🌟 補上 name 欄位，讓 LocalStorage 可以記住使用者的名字
+  name?: string;
+  org_code?: string;
+  org_name?: string; 
 }
 
 // ==========================================
-// API 客户端
+// API 客戶端
 // ==========================================
 
 export const API = {
-  // 存储当前会话
+  // 儲存當前會話
   currentSession: null as Session | null,
   
-  // 设置会话
+  // 設置會話
   setSession(session: Session) {
     this.currentSession = session;
     if (typeof window !== 'undefined') {
@@ -41,7 +43,7 @@ export const API = {
     }
   },
   
-  // 获取会话
+  // 獲取會話
   getSession(): Session | null {
     if (this.currentSession) return this.currentSession;
     
@@ -55,7 +57,7 @@ export const API = {
     return null;
   },
   
-  // 清除会话
+  // 清除會話
   clearSession() {
     this.currentSession = null;
     if (typeof window !== 'undefined') {
@@ -64,7 +66,7 @@ export const API = {
   },
   
   // ==========================================
-  // 基础请求方法
+  // 基礎請求方法
   // ==========================================
   
   async request<T>(
@@ -73,7 +75,7 @@ export const API = {
   ): Promise<APIResponse<T>> {
     let url = `${API_BASE_URL}${endpoint}`;
     
-    // 处理查询参数
+    // 處理查詢參數
     if (options.query) {
       const params = new URLSearchParams();
       Object.entries(options.query).forEach(([key, value]) => {
@@ -88,12 +90,19 @@ export const API = {
     // 🌟 新增：獲取當前 Session 
     const session = this.getSession();
     
-    // 🌟 新增：預先組裝 Headers
+    // 🌟 修正：先展開傳入的 headers (不再強制預設 application/json)
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      // 如果 options.headers 存在，則展開它
       ...(options.headers as Record<string, string> || {}),
     };
+
+    // 🌟 核心防呆：判斷是否為檔案上傳 (FormData)
+    // 如果是 FormData，把 Content-Type 交給瀏覽器自動生成 (帶 boundary)
+    // 如果不是 FormData 且沒有指定 Content-Type，才預設為 application/json
+    if (options.body && options.body instanceof FormData) {
+      delete headers['Content-Type'];
+    } else if (!headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
 
     // 🌟 新增：如果 Session 裡面有 Token，就加上 Authorization
     if (session && session.access_token) {
@@ -103,21 +112,22 @@ export const API = {
     try {
       const response = await fetch(url, {
         ...options,
-        headers, // 🌟 修改：直接放入我們組裝好的 headers
+        headers, // 🌟 修改：直接放入我們智慧判斷後的 headers
+        cache: 'no-store'
       });
       
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.detail || data.message || '请求失败');
+        throw new Error(data.detail || data.message || '請求失敗');
       }
       
       return data;
     } catch (error) {
-      console.error('API 请求错误:', error);
+      console.error('API 請求錯誤:', error);
       return {
         status: 'error',
-        message: error instanceof Error ? error.message : '未知错误'
+        message: error instanceof Error ? error.message : '未知錯誤'
       };
     }
   },
@@ -131,7 +141,7 @@ export const API = {
   },
   
   // ==========================================
-  // 认证相关
+  // 認證相關
   // ==========================================
   
   async login(platform: 'schumann' | 'sleep', loginData: {
@@ -139,6 +149,7 @@ export const API = {
     pin?: string;
     org_code?: string;
     name?: string;
+    org_name?: string;
   }) {
     const response = await this.request('/api/auth/login', {
       method: 'POST',
@@ -156,7 +167,10 @@ export const API = {
     if (response.status === 'success' && sessionData) {
       this.setSession({
         ...sessionData,
-        access_token: accessToken // 🌟 把 JWT Token 一起存進 Session 中
+        platform: rawResponse.platform || platform,
+        access_token: accessToken, // 🌟 把 JWT Token 一起存進 Session 中
+        org_code: loginData.org_code,
+        org_name: loginData.org_code
       });
     }
     
@@ -165,12 +179,12 @@ export const API = {
   
   async logout() {
     const session = this.getSession();
-    if (!session) return { status: 'error', message: '未登录' };
+    if (!session) return { status: 'error', message: '未登入' };
     
     const response = await this.request('/api/auth/logout', {
       method: 'POST',
       query: {
-        session_id: session.session_id,
+        session_id: session.session_id || session.user_id || "stateless",
         platform: session.platform
       }
     });
@@ -181,7 +195,7 @@ export const API = {
   
   async switchPlatform(toPlatform: 'schumann' | 'sleep') {
     const session = this.getSession();
-    if (!session) return { status: 'error', message: '未登录' };
+    if (!session) return { status: 'error', message: '未登入' };
     
     // 🌟 防呆 1：如果 session.platform 遺失，強制預設為 'sleep'，避免後端報 422 錯誤
     const currentPlatform = session.platform || 'sleep';
@@ -215,7 +229,7 @@ export const API = {
   // 睡眠平台 API
   // ==========================================
   
-  // 提交评估
+  // 提交評估
   async submitAssessment(assessmentData: {
     user_id: string;
     profile: Record<string, any>;
@@ -229,45 +243,69 @@ export const API = {
     });
   },
   
-  // 获取睡眠报告列表
+  // 獲取睡眠報告列表
   async listSleepReports(userId: string) {
     return this.request('/api/sleep/reports', {
       query: { user_id: userId }
     });
   },
   
-  // 获取单份睡眠报告
+  // 獲取單份睡眠報告
   async getSleepReport(reportId: string) {
     return this.request(`/api/sleep/reports/${reportId}`);
   },
   
-  // 获取睡眠分析
+  // 獲取睡眠分析
   async getSleepAnalysis(userId: string) {
     return this.request(`/api/sleep/analysis/${userId}`);
   },
   
-  // 获取 KPI
+  // 獲取 KPI
   async getOrgKPI(orgCode: string) {
     return this.request(`/api/sleep/kpi/${orgCode}`);
+  },
+
+  async getOrgSettings(orgCode: string) {
+    return this.request(`/api/org/settings/${orgCode}`);
+  },
+
+  async updateOrgSettings(orgCode: string, settings: any) {
+    // 將前端的駝峰命名轉換為後端資料庫的蛇形命名
+    const payload = {
+      base_budget: settings.baseBudget,
+      activation_pct: settings.activationPct,
+      value_multiplier: settings.valueMultiplier,
+      sick_days: settings.sickDays,
+      daily_salary: settings.dailySalary,
+      ins_saving: settings.insSaving,
+      prod_gain: settings.prodGain,
+      impl_cost: settings.implCost,
+      eff_gain: settings.effGain
+    };
+
+    return this.request(`/api/org/settings/${orgCode}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
   },
   
   // ==========================================
   // 舒曼共振平台 API
   // ==========================================
   
-  // 获取舒曼报告列表
+  // 獲取舒曼報告列表
   async listSchumannReports(userId: string) {
     return this.request('/api/schumann/reports', {
       query: { user_id: userId }
     });
   },
   
-  // 获取单份舒曼报告
+  // 獲取單份舒曼報告
   async getSchumannReport(reportId: string) {
     return this.request(`/api/schumann/reports/${reportId}`);
   },
   
-  // 上传舒曼报告
+  // 上傳舒曼報告
   async uploadSchumannReport(userId: string, data: Record<string, any>) {
     return this.request('/api/schumann/upload', {
       method: 'POST',
@@ -282,7 +320,7 @@ export const API = {
   
   async getHealth() {
     return this.request('/api/health');
-  }
+  },
 };
 
 export default API;

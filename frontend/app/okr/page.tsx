@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import { DB } from "@/lib/store";
+import API from "@/lib/api";
 import { 
   Target, ChevronLeft, Save, Edit3, DollarSign, 
   TrendingUp, Award, Activity, Briefcase, Calculator, CheckCircle2 
@@ -43,18 +43,42 @@ export default function OKRPage() {
       setReady(true);
       return;
     }
-    Promise.all([DB.loadOrgRecs(code), DB.getOKR(code)]).then(([recs, saved]: [any, any]) => {
-      setData(Array.isArray(recs) ? recs : []);
-      if (saved) {
-        if (saved.baseBudget) setBaseBudget(saved.baseBudget);
-        if (saved.activationPct) setActivationPct(saved.activationPct);
-        if (saved.valueMultiplier) setValueMultiplier(saved.valueMultiplier);
-        if (saved.sickDays) setSickDays(saved.sickDays);
-        if (saved.dailySalary) setDailySalary(saved.dailySalary);
-        if (saved.insSaving) setInsSaving(saved.insSaving);
-        if (saved.prodGain) setProdGain(saved.prodGain);
-        if (saved.implCost) setImplCost(saved.implCost);
-        if (saved.effGain) setEffGain(saved.effGain);
+    
+    // 同時向後端請求「單位所有成員報告」與「單位參數設定」
+    Promise.all([
+      API.request(`/api/org/records?org_code=${code}`),
+      API.getOrgSettings(code)
+    ]).then(([recsRes, savedRes]: [any, any]) => {
+      
+      // 處理成員報告 (轉換欄位名稱)
+      if (recsRes.status === 'success' && recsRes.data) {
+        const mappedData = recsRes.data.map((d: any) => ({
+          ...d,
+          sScore: d.sleep_score,
+          pScore: d.pain_score,
+          wScore: d.work_score,
+          sKey: d.sleep_level,
+          pKey: d.pain_level,
+          dept: d.profile?.dept || "未分類",
+          ts: d.created_at
+        }));
+        setData(mappedData);
+      } else {
+        setData([]);
+      }
+
+      // 處理單位設定參數 (將蛇形轉回駝峰賦值給 State)
+      if (savedRes.status === 'success' && savedRes.data) {
+        const dbData = savedRes.data;
+        if (dbData.base_budget) setBaseBudget(dbData.base_budget);
+        if (dbData.activation_pct) setActivationPct(dbData.activation_pct);
+        if (dbData.value_multiplier) setValueMultiplier(dbData.value_multiplier);
+        if (dbData.sick_days) setSickDays(dbData.sick_days);
+        if (dbData.daily_salary) setDailySalary(dbData.daily_salary);
+        if (dbData.ins_saving) setInsSaving(dbData.ins_saving);
+        if (dbData.prod_gain) setProdGain(dbData.prod_gain);
+        if (dbData.impl_cost) setImplCost(dbData.impl_cost);
+        if (dbData.eff_gain) setEffGain(dbData.eff_gain);
       }
       setReady(true);
     });
@@ -76,13 +100,17 @@ export default function OKRPage() {
 
   // 儲存參數 [cite: 118]
   const saveParams = async () => {
-    await DB.setOKR(code, {
-      baseBudget, activationPct, valueMultiplier, 
-      sickDays, dailySalary, insSaving, prodGain, implCost, effGain, 
-      savedAt: new Date().toISOString()
-    });
-    setEditBonus(false);
-    setEditROI(false);
+    try {
+      await API.updateOrgSettings(code, {
+        baseBudget, activationPct, valueMultiplier, 
+        sickDays, dailySalary, insSaving, prodGain, implCost, effGain
+      });
+      setEditBonus(false);
+      setEditROI(false);
+      // 可以加上一個小通知 alert("參數儲存成功！");
+    } catch (err) {
+      alert("儲存失敗，請確認您是否有管理員權限。");
+    }
   };
 
   // 核心統計計算 [cite: 120-123]

@@ -21,9 +21,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         id: backendSession.user_id,
         uid: backendSession.user_id, // 確保相容舊變數
         systemRole: backendSession.role || "individual",
-        name: `${backendSession.platform} 用户`,
+        name: backendSession.name || "使用者", 
+        orgCode: backendSession.org_code, 
+        orgName: backendSession.org_name || backendSession.org_code,
         apiSession: backendSession,
-        platform: backendSession.platform
+        // 🟢 順便補上防呆機制
+        platform: backendSession.platform || "sleep"
       });
       setUseBackend(true);
       setLoading(false);

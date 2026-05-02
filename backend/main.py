@@ -15,7 +15,7 @@ from typing import Optional, Dict, List
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from auth import create_access_token, get_current_user, require_admin
@@ -86,88 +86,74 @@ async def root():
 
 
 # ==========================================
-# 數據模型
+# 數據模型 (Pydantic Schemas)
 # ==========================================
 
 class LoginRequest(BaseModel):
     """登入請求"""
     platform: str  # "schumann" 或 "sleep"
     role: Optional[str] = "individual"  
-    name: Optional[str] = None          # 👈 補上這個！(個人或組織成員的姓名/代稱)
+    name: Optional[str] = None          
     pin: Optional[str] = None
     org_code: Optional[str] = None
 
+# --- 新增：為 AssessmentData 建立子模型 ---
+
+class UserProfile(BaseModel):
+    """使用者基本健康與職務資料"""
+    name: str = Field(..., description="使用者姓名")
+    age: int = Field(..., ge=0, le=120, description="年齡 (0-120歲)")
+    gender: str = Field(..., description="性別 (male/female/other)")
+    height: Optional[float] = Field(None, gt=0, description="身高 (cm)")
+    weight: Optional[float] = Field(None, gt=0, description="體重 (kg)")
+    
+    # 職場資訊 (單位成員必填，個人可選)
+    dept: Optional[str] = Field(None, description="部門")
+    orgRole: Optional[str] = Field(None, description="職稱")
+    industry: Optional[str] = Field(None, description="行業別")
+    shiftWork: Optional[str] = Field(None, description="輪班情況")
+    
+    # 慢病史
+    hypertension: Optional[str] = Field(None, description="高血壓狀態")
+    diabetes: Optional[str] = Field(None, description="糖尿病狀態")
+    hyperlipidemia: Optional[str] = Field(None, description="高血脂狀態")
+    heartDisease: Optional[str] = Field(None, description="心臟疾病狀態")
+    
+    # 其他
+    medications: Optional[str] = Field(None, description="目前長期用藥")
+    painLocations: list[str] = Field(default_factory=list, description="疼痛部位清單")
+
+class SleepScores(BaseModel):
+    """睡眠品質評估 (ISI) 7題"""
+    s1: int = Field(..., ge=0, le=4)
+    s2: int = Field(..., ge=0, le=4)
+    s3: int = Field(..., ge=0, le=4)
+    s4: int = Field(..., ge=0, le=4)
+    s5: int = Field(..., ge=0, le=4)
+    s6: int = Field(..., ge=0, le=4)
+    s7: int = Field(..., ge=0, le=4)
+
+class PainScores(BaseModel):
+    """疼痛影響評估 (BPI) 5題"""
+    p1: int = Field(..., ge=0, le=10)
+    p2: int = Field(..., ge=0, le=10)
+    p3: int = Field(..., ge=0, le=10)
+    p4: int = Field(..., ge=0, le=10)
+    p5: int = Field(..., ge=0, le=10)
+
+class WorkScores(BaseModel):
+    """工作效率評估 3題"""
+    w1: int = Field(..., ge=0, le=10)
+    w2: int = Field(..., ge=0, le=10)
+    w3: int = Field(..., ge=0, le=10)
+
 class AssessmentData(BaseModel):
-    """睡眠評估數據"""
-    user_id: str
-    profile: Dict
-    sleep_scores: Dict
-    pain_scores: Dict
-    work_scores: Dict
-
-# ==========================================
-# 內存數據庫 (開發用)
-# ==========================================
-class UnifiedDB:
-    def __init__(self):
-        # 跨平台用戶
-        self.users = {}
-        
-        # 舒曼共振平台數據
-        self.schumann_reports = {}
-        self.schumann_sessions = {}
-        
-        # 睡眠平台數據
-        self.sleep_reports = {}
-        self.sleep_sessions = {}
-        
-        # 用戶平台關聯
-        self.user_platforms = {}
-
-db = UnifiedDB()
-
-# ==========================================
-# PIN 驗證
-# ==========================================
-VALID_PINS = {
-    "member": "1111",
-    "dept_head": "2222",
-    "admin": "3333"
-}
-
-def verify_pin(role: str, pin: str) -> bool:
-    return VALID_PINS.get(role) == pin
-
-def create_session(user_id: str, platform: str, role: Optional[str] = None) -> Dict:
-    """建立跨平台會話"""
-    session_id = f"session_{platform}_{user_id}_{int(datetime.now().timestamp())}"
-    
-    session_data = {
-        "user_id": user_id,
-        "platform": platform,
-        "role": role,
-        "created_at": datetime.now(),
-        "expires_at": datetime.now() + timedelta(hours=8)
-    }
-    
-    if platform == "schumann":
-        db.schumann_sessions[session_id] = session_data
-    elif platform == "sleep":
-        db.sleep_sessions[session_id] = session_data
-    
-    # 記錄用戶可訪問的平台
-    if user_id not in db.user_platforms:
-        db.user_platforms[user_id] = []
-    if platform not in db.user_platforms[user_id]:
-        db.user_platforms[user_id].append(platform)
-    
-    return {
-        "session_id": session_id,
-        "user_id": user_id,
-        "platform": platform,
-        "role": role
-    }
-
+    """完整評估提交資料 (具備嚴格型別驗證)"""
+    user_id: str = Field(..., description="提交者的 User ID")
+    profile: UserProfile
+    sleep_scores: SleepScores
+    pain_scores: PainScores
+    work_scores: WorkScores
 # ==========================================
 # 主路由：健康檢查
 # ==========================================
@@ -188,10 +174,7 @@ def api_health():
     """API 健康檢查"""
     return {
         "status": "healthy",
-        "schumann_reports": len(db.schumann_reports),
-        "sleep_reports": len(db.sleep_reports),
-        "active_users": len(db.users),
-        "api_url": f"http://{API_HOST}:{API_PORT}"
+        "api_url": f"http://{settings.api_host}:{settings.api_port}"
     }
 
 @app.get("/api/platforms")
@@ -342,25 +325,10 @@ async def unified_login(request: LoginRequest):
 
 @app.post("/api/auth/logout")
 async def logout(session_id: str, platform: str):
-    """登出"""
-    if platform == "schumann":
-        if session_id in db.schumann_sessions:
-            del db.schumann_sessions[session_id]
-    elif platform == "sleep":
-        if session_id in db.sleep_sessions:
-            del db.sleep_sessions[session_id]
-    
+    """登出 (JWT 無狀態機制)"""
+    # JWT 登出主要由前端清除 LocalStorage 來實現
+    # 後端收到通知僅回傳成功即可
     return {"status": "success", "message": "已登出"}
-
-@app.get("/api/auth/user-platforms/{user_id}")
-async def get_user_platforms(user_id: str):
-    """獲取用戶可訪問的平台"""
-    platforms = db.user_platforms.get(user_id, [])
-    return {
-        "user_id": user_id,
-        "platforms": platforms,
-        "can_switch": len(platforms) > 1
-    }
 
 @app.post("/api/auth/switch-platform")
 async def switch_platform(
@@ -416,6 +384,54 @@ async def get_org_records(
     res = supabase.table("sleep_reports").select("*").eq("org_code", org_code).execute()
     return {"status": "success", "data": res.data}
 
+class OrgSettingsUpdate(BaseModel):
+    """單位 OKR/ESG 參數更新模型"""
+    base_budget: Optional[float] = None
+    activation_pct: Optional[float] = None
+    value_multiplier: Optional[float] = None
+    sick_days: Optional[float] = None
+    daily_salary: Optional[float] = None
+    ins_saving: Optional[float] = None
+    prod_gain: Optional[float] = None
+    impl_cost: Optional[float] = None
+    eff_gain: Optional[float] = None
+
+@app.get("/api/org/settings/{org_code}")
+async def get_org_settings(
+    org_code: str, 
+    current_user: dict = Depends(get_current_user)
+):
+    """獲取單位 OKR/ESG 設定參數"""
+    # 資安防護：只能查看自己單位的設定
+    if current_user.get("org_code") != org_code:
+        raise HTTPException(status_code=403, detail="越權存取：只能查看所屬單位的設定")
+
+    res = supabase.table("organizations").select("*").eq("org_code", org_code).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="找不到單位資料")
+
+    return {"status": "success", "data": res.data[0]}
+
+@app.put("/api/org/settings/{org_code}")
+async def update_org_settings(
+    org_code: str, 
+    settings: OrgSettingsUpdate, 
+    current_user: dict = Depends(get_current_user)
+):
+    """更新單位 OKR/ESG 設定參數 (限管理員)"""
+    # 資安防護：必須是該單位的 admin 才能修改
+    if current_user.get("role") != "admin" or current_user.get("org_code") != org_code:
+        raise HTTPException(status_code=403, detail="越權操作：只有該單位的管理員可以修改設定")
+
+    # 過濾掉未提供的參數，只更新有傳值的欄位
+    update_data = {k: v for k, v in settings.model_dump().items() if v is not None}
+
+    if not update_data:
+        return {"status": "success", "message": "沒有需要更新的資料"}
+
+    res = supabase.table("organizations").update(update_data).eq("org_code", org_code).execute()
+    return {"status": "success", "data": res.data[0] if res.data else None}
+
 # ==========================================
 # 舒曼共振平台 API (/api/schumann/*)
 # ==========================================
@@ -425,6 +441,7 @@ async def analyze_schumann_report(
     file: UploadFile = File(...),
     user_id: str = Form(...),
     assessment_round: int = Form(1),
+    language: str = Form("🇹🇼 繁體中文"),
     current_user: dict = Depends(get_current_user)
 ):
     
@@ -455,9 +472,15 @@ async def analyze_schumann_report(
         if extracted_name:
             parsed_data["Name"] = extracted_name
 
-        # 4. (選用) 如果你想在後端一併產生 AI 建議文本，可以在這裡呼叫
-        # ai_summary_dict = generate_ai_explanation(parsed_data, language="🇹🇼 繁體中文")
-        # ai_summary_text = json.dumps(ai_summary_dict, ensure_ascii=False)
+        # 4. 呼叫 AI 撰寫深度解說報告 (🌟 解除封印)
+        try:
+            # 呼叫你寫好的模組來生成 8 段式報告
+            ai_summary_dict = generate_ai_explanation(parsed_data, language=language)
+            # 將 AI 回傳的字典轉成 JSON 字串，以便存入 Supabase 的 text 欄位
+            ai_summary_text = json.dumps(ai_summary_dict, ensure_ascii=False)
+        except Exception as e:
+            print(f"AI 報告生成失敗: {e}")
+            ai_summary_text = None # 容錯機制：就算 AI 寫作失敗，原始數據還是要存進去
 
         # 5. 【關鍵轉換】將 AI 抓出的 JSON 映射到 Supabase 的蛇行欄位
         def safe_float(val):
@@ -512,7 +535,7 @@ async def analyze_schumann_report(
             "scatter_plot_analysis": str(parsed_data.get("Scatter_Plot_Analysis", "")),
             
             # 其他
-            # "ai_summary": ai_summary_text, # 若有產生 AI 建議可寫入
+            "ai_summary": ai_summary_text, # 若有產生 AI 建議可寫入
             "report_url": "" # 可後續擴充 PDF 儲存空間網址
         }
 
@@ -590,11 +613,9 @@ async def get_schumann_report(
 @app.get("/api/sleep/health")
 async def sleep_health():
     """睡眠平台健康檢查"""
-    # 💡 保持公開：健康檢查通常供伺服器監控(如 AWS/GCP)使用，不需要也不應該上鎖。
     return {
         "platform": "sleep",
         "status": "healthy",
-        "total_reports": len(db.sleep_reports),
         "features": ["睡眠評估", "疼痛管理", "工作效率", "KPI統計", "OKR管理"]
     }
 
@@ -607,9 +628,10 @@ async def submit_sleep_assessment(
     if current_user.get("uid") != request.user_id:
         raise HTTPException(status_code=403, detail="越權操作：無法替其他使用者提交資料")
 
-    sleep_score = sum(request.sleep_scores.values())
-    pain_score = sum(request.pain_scores.values())
-    work_score = sum(request.work_scores.values())
+    # 🌟 修改 1：使用 model_dump() 將 Pydantic 模型轉回字典，才能用 values() 加總
+    sleep_score = sum(request.sleep_scores.model_dump().values())
+    pain_score = sum(request.pain_scores.model_dump().values())
+    work_score = sum(request.work_scores.model_dump().values())
     
     # 💡 修正：使用 UUID 產生不可預測且不會碰撞的報告 ID
     report_id = str(uuid.uuid4())
@@ -620,7 +642,10 @@ async def submit_sleep_assessment(
         "org_code": current_user.get("org_code"), # 💡 修正：寫入時綁定所屬單位，為權限隔離打底
         "platform": "sleep",
         "created_at": datetime.now().isoformat(),
-        "profile": request.profile,
+        
+        # 🌟 修改 2：Profile 也要加上 model_dump()，Supabase 才能將其存為 JSON
+        "profile": request.profile.model_dump(),
+        
         "sleep_score": sleep_score,
         "sleep_level": "green" if sleep_score <= 7 else "yellow" if sleep_score <= 14 else "orange" if sleep_score <= 21 else "red",
         "pain_score": pain_score,
@@ -739,35 +764,6 @@ async def get_sleep_analysis(
         "platform": "sleep",
         "analysis": analysis,
         "reports": reports
-    }
-    
-@app.post("/api/auth/switch-platform")
-async def switch_platform(user_id: str, from_platform: str, to_platform: str):
-    """在兩個平台間切換"""
-    
-    if user_id not in db.users:
-        raise HTTPException(status_code=404, detail="用戶不存在")
-    
-    if to_platform not in ["schumann", "sleep"]:
-        raise HTTPException(status_code=400, detail="無效的平台")
-    
-    # 確保用戶可訪問目標平台
-    if to_platform not in db.user_platforms.get(user_id, []):
-        if user_id not in db.user_platforms:
-            db.user_platforms[user_id] = []
-        db.user_platforms[user_id].append(to_platform)
-    
-    # 建立新平台的會話
-    user = db.users[user_id]
-    session = create_session(user_id, to_platform, user.get("role"))
-    
-    return {
-        "status": "success",
-        "message": f"已從 {from_platform} 切換到 {to_platform}",
-        "previous_platform": from_platform,
-        "current_platform": to_platform,
-        "session": session,
-        "user_platforms": db.user_platforms.get(user_id, [])
     }
 
 # ==========================================
