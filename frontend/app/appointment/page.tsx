@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import { DB } from "@/lib/store";
+import API from "@/lib/api";
 import { 
   CalendarDays, ChevronLeft, PlusCircle, CheckCircle2, 
   XCircle, Clock, Trash2, ShieldAlert, Waves, Zap 
@@ -33,8 +33,32 @@ export default function AppointmentPage() {
   // 載入該項目的所有預約紀錄
   const loadAppts = async () => {
     if (!session?.orgCode) return;
-    const list = await DB.getAppts(session.orgCode, activeTab);
-    setAppts(Array.isArray(list) ? list : []);
+    try {
+      const res = await API.getAppointments(session.orgCode, activeTab);
+      if (res.status === 'success' && res.data) {
+        const mapped = res.data.map((d: any) => {
+          // 🛡️ 防呆 1：處理 Supabase 回傳的 profiles 可能是陣列或物件的問題
+          const profile = Array.isArray(d.profiles) ? d.profiles[0] : d.profiles;
+          
+          return {
+            id: d.id,
+            uid: d.user_id,
+            name: profile?.full_name || "未知",
+            dept: profile?.department || "未分類",
+            // 🛡️ 防呆 2：確保 date 與 time 絕對不會是 undefined
+            date: d.execution_date || "", 
+            time: d.appointment_time || "",
+            svc: d.service_type,
+            status: d.status,
+            ts: d.created_at
+          };
+        });
+        setAppts(mapped);
+      }
+    } catch (err) {
+      console.error("載入預約失敗", err);
+      setAppts([]);
+    }
   };
 
   useEffect(() => {
@@ -55,52 +79,64 @@ export default function AppointmentPage() {
     );
   }
 
+  const currentUserId = session?.uid || session?.id || session?.apiSession?.user_id;
+
   // --- 送出預約邏輯 ---
   const handleBook = async () => {
     if (!formDate || !formTime) return alert("請選擇日期與時間");
     setIsSubmitting(true);
     
-    const newAppt = {
-      id: Date.now().toString(36),
-      uid: session.uid,
-      name: session.name,
-      dept: session.dept || "未分類",
-      date: formDate,
-      time: formTime,
-      svc: activeTab,
-      status: "pending", // 預設為審核中
-      ts: new Date().toISOString()
-    };
+    try {
+      const res = await API.createAppointment({
+        user_id: currentUserId, // 🛡️ 防呆 3：確保絕對有 ID 傳給後端
+        execution_date: formDate,
+        appointment_time: formTime,
+        service_type: activeTab
+      });
 
-    const currentList = await DB.getAppts(session.orgCode, activeTab) || [];
-    await DB.setAppts(session.orgCode, activeTab, [...currentList, newAppt]);
-    
-    setFormDate("");
-    setFormTime("");
-    setIsSubmitting(false);
-    loadAppts();
-    alert("預約已送出，請靜待管理員審核確認！");
+      if (res.status === 'success') {
+        setFormDate("");
+        setFormTime("");
+        alert("預約已送出，請靜待管理員審核確認！");
+        loadAppts();
+      }
+    } catch (err) {
+      alert("預約送出失敗，請稍後再試。");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // --- 管理員操作邏輯 ---
   const handleStatusChange = async (id: string, newStatus: string) => {
-    const updated = appts.map(a => a.id === id ? { ...a, status: newStatus } : a);
-    await DB.setAppts(session.orgCode, activeTab, updated);
-    setAppts(updated);
+    try {
+      await API.updateAppointmentStatus(id, newStatus);
+      loadAppts(); // 重新載入以確保狀態同步
+    } catch (err) {
+      alert("狀態更新失敗");
+    }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("確定要刪除這筆預約嗎？")) return;
-    const updated = appts.filter(a => a.id !== id);
-    await DB.setAppts(session.orgCode, activeTab, updated);
-    setAppts(updated);
+    if (!confirm("確定要刪除/取消這筆預約嗎？")) return;
+    try {
+      await API.deleteAppointment(id);
+      loadAppts(); // 重新載入以確保狀態同步
+    } catch (err) {
+      alert("刪除失敗");
+    }
   };
 
   // --- 過濾顯示邏輯 ---
   // 管理員看全部，一般成員只看自己的
-  const displayAppts = isAdmin ? appts : appts.filter(a => a.uid === session.uid);
+  const displayAppts = isAdmin ? appts : appts.filter(a => a.uid === currentUserId);
   // 按日期與時間排序 (最新的在下面，因為是未來的排程)
-  displayAppts.sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime());
+  displayAppts.sort((a, b) => {
+    // 🛡️ 防呆 4：如果遇到沒有日期的壞資料，給予預設值 0 避免排序當機
+    const timeA = a.date && a.time ? new Date(`${a.date}T${a.time}`).getTime() : 0;
+    const timeB = b.date && b.time ? new Date(`${b.date}T${b.time}`).getTime() : 0;
+    return timeA - timeB;
+  });
 
   const svc = SVCS[activeTab];
 
@@ -209,7 +245,7 @@ export default function AppointmentPage() {
                     <div className="flex items-center gap-4">
                       <div className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center bg-white border shadow-sm ${svc.border}`}>
                         <div className="text-xs font-bold text-slate-400 uppercase">{new Date(a.date).toLocaleDateString('en-US', { month: 'short' })}</div>
-                        <div className={`text-xl font-black ${svc.color}`}>{a.date.split('-')[2]}</div>
+                        <div className={`text-xl font-black ${svc.color}`}>{a.date ? a.date.split('-')[2] : '--'}</div>
                       </div>
                       <div>
                         <div className="font-bold text-slate-800 text-lg flex items-center gap-2">

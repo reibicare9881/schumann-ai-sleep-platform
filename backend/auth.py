@@ -69,6 +69,20 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
 # --- 選擇性：進階權限檢查 ---
 # 如果你想在路由層級直接限制只有 admin 或 dept_head 能呼叫，可以擴充以下依賴：
 def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    """守門員 1：僅限單位平台管理者"""
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="權限不足：限單位平台管理者使用")
     return current_user
+
+def require_org_manager(current_user: dict = Depends(get_current_user)) -> dict:
+    """守門員 2：僅限管理者與部門主管"""
+    if current_user.get("role") not in ["admin", "dept_head"]:
+        raise HTTPException(status_code=403, detail="權限不足：限單位主管或管理者使用")
+    return current_user
+
+def require_member_or_above(current_user: dict = Depends(get_current_user)) -> dict:
+    """守門員 3：必須是單位成員 (排除 individual)"""
+    if current_user.get("role") == "individual":
+        raise HTTPException(status_code=403, detail="權限不足：此功能不開放給個人帳號")
+    return current_user
+

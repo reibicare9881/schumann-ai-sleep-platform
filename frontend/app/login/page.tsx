@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   User, Building2, ChevronLeft, Lock, ShieldCheck, 
-  Info, Check, Globe, HelpCircle 
+  Info, Check, XCircle, Loader2
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { C, ROLES, PERMS } from "@/lib/config";
@@ -45,8 +45,37 @@ export default function LoginPage() {
   const [oName, setOName] = useState("");
   const [oCode, setOCode] = useState("");
   const [oOrgName, setOOrgName] = useState("");
+  const [oDept, setODept] = useState("");
   const [oRole, setORole] = useState("member");
   const [pin, setPin] = useState("");
+  
+  // 🟢 新增：動態驗證標籤專用 State
+  const [verifiedOrgName, setVerifiedOrgName] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [orgCodeError, setOrgCodeError] = useState(false);
+
+  // 🟢 新增：背景驗證函式
+  const handleVerifyOrg = async () => {
+    const code = oCode.trim().toUpperCase();
+    if (!code || code.length < 2) return; // 太短不查
+
+    setIsVerifying(true);
+    setOrgCodeError(false);
+    setVerifiedOrgName(null);
+
+    try {
+      const res = await API.verifyOrgCode(code);
+      if (res.status === 'success' && res.data?.org_name) {
+        setVerifiedOrgName(res.data.org_name);
+      } else {
+        setOrgCodeError(true);
+      }
+    } catch (err) {
+      setOrgCodeError(true);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
 
   // 邏輯：載入已儲存的身份 (提升UX，保留)
   useEffect(() => {
@@ -112,7 +141,8 @@ export default function LoginPage() {
         pin: pin.trim(),
         org_code: code,
         name: oName.trim(),
-        org_name: oOrgName.trim() || code
+        org_name: oOrgName.trim() || code,
+        dept: oRole === "dept_head" ? oDept.trim() : undefined
       });
       
       if (apiResult.status === 'success') {
@@ -227,22 +257,42 @@ export default function LoginPage() {
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">單位代碼 (Org Code)</label>
                     <input 
-                      type="text" value={oCode} onChange={e => setOCode(e.target.value.toUpperCase())}
+                      type="text" value={oCode} 
+                      onChange={e => {
+                        setOCode(e.target.value.toUpperCase());
+                        // 🟢 使用者一打字，就把舊的驗證結果清掉
+                        setVerifiedOrgName(null);
+                        setOrgCodeError(false);
+                      }}
+                      onBlur={handleVerifyOrg} // 🟢 滑鼠點到別的地方時，觸發驗證
                       placeholder="例: TEST1"
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 outline-none transition-all uppercase"
+                      className={`w-full px-4 py-3 rounded-xl border focus:ring-2 outline-none transition-all uppercase ${
+                        orgCodeError ? 'border-red-300 focus:ring-red-500 bg-red-50' : 
+                        verifiedOrgName ? 'border-emerald-300 focus:ring-emerald-500 bg-emerald-50' : 
+                        'border-slate-200 focus:ring-purple-500'
+                      }`}
                     />
+                    {/* 🟢 動態標籤顯示區：固定佔據 24px 高度避免畫面跳動 */}
+                    <div className="h-6 mt-1.5 flex items-start">
+                      {isVerifying && (
+                        <span className="text-xs text-slate-400 flex items-center gap-1 animate-pulse">
+                          <Loader2 className="w-3 h-3 animate-spin" /> 驗證中...
+                        </span>
+                      )}
+                      {!isVerifying && verifiedOrgName && (
+                        <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 animate-in fade-in slide-in-from-top-1">
+                          <Building2 className="w-3 h-3" /> 您正在登入：{verifiedOrgName}
+                        </span>
+                      )}
+                      {!isVerifying && orgCodeError && (
+                        <span className="text-xs font-bold text-red-500 flex items-center gap-1 animate-in fade-in slide-in-from-top-1">
+                          <XCircle className="w-3 h-3" /> 找不到此單位，請確認代碼
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">單位名稱 (選填)</label>
-                  <input 
-                    type="text" value={oOrgName} onChange={e => setOOrgName(e.target.value)}
-                    placeholder="例: 麗媚生化科技"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-                  />
-                </div>
-
+                
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-3 text-center">請選擇登入角色</label>
                   <div className="space-y-3">
@@ -262,6 +312,20 @@ export default function LoginPage() {
                     ))}
                   </div>
                 </div>
+                
+                {/* 🟢 新增：部門名稱輸入框 (只有當角色選到 dept_head 時才會出現) */}
+                {oRole === "dept_head" && (
+                  <div className="animate-in fade-in slide-in-from-top-2">
+                    <label className="block text-sm font-medium text-purple-800 mb-2">
+                      管理的部門名稱 <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="text" value={oDept} onChange={e => setODept(e.target.value)}
+                      placeholder="例: 研發部 (需與員工填寫完全一致)"
+                      className="w-full px-4 py-3 rounded-xl border border-purple-300 bg-purple-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-slate-700">🔐 通行碼驗證</label>

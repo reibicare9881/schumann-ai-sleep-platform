@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import API from "@/lib/api"; 
+import { MappedSleepReport, BackendSleepReport } from "@/types";
 import { can, LX } from "@/lib/config";
 import { 
   AlertOctagon, ChevronLeft, ShieldAlert, HeartPulse, 
@@ -14,30 +15,38 @@ export default function HighRiskPage() {
   const { session, loading } = useAuth();
   const router = useRouter();
   
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<MappedSleepReport[]>([]);
   const [ready, setReady] = useState(false);
   const [filter, setFilter] = useState<"all" | "critical" | "overdue">("all");
 
   useEffect(() => {
     if (session?.orgCode && (can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr"))) {
       
-      API.request(`/api/org/records?org_code=${session.orgCode}`, { method: 'GET' })
+      // 🟢 綁定 API 參數，加入分頁限制保護記憶體
+      API.request(`/api/org/records`, { 
+        method: 'GET',
+        query: {
+          org_code: session.orgCode,
+          page: 1,
+          size: 1000
+        }
+      })
         .then((res: any) => {
           if (res.status === 'success' && res.data) {
-             // 【關鍵修復】將資料庫的 snake_case 轉換為畫面需要的 camelCase
-             const mappedData = res.data.map((d: any) => ({
+             const mappedData: MappedSleepReport[] = res.data.map((d: BackendSleepReport) => ({
                  ...d,
                  id: d.id,
                  uid: d.user_id,
-                 ts: d.created_at,             // 修復 NaN 天前
-                 sScore: d.sleep_score,        // 修復空白分數
+                 ts: d.created_at,             
+                 sScore: d.sleep_score,        
                  pScore: d.pain_score,
-                 sKey: d.sleep_level,          // 修復燈號顏色抓不到
+                 wScore: d.work_score, 
+                 sKey: d.sleep_level,          
                  pKey: d.pain_level,
                  profile: { 
-                 ...d.profile, 
-                 name: d.profile?.name || "未知使用者" 
-                },
+                   ...d.profile, 
+                   name: d.profile?.name || "未知使用者" 
+                 },
                  dept: d.profile?.dept || "未分類部門",
              }));
              setData(mappedData);
@@ -69,12 +78,12 @@ export default function HighRiskPage() {
     );
   }
 
+  // 🟢 無情刪除多餘的 isDept 前端過濾邏輯，直接使用 data
   const isDept = session?.systemRole === "dept_head";
-  const allowedData = isDept ? data.filter(r => r.dept === session?.dept) : data;
-
   const userMap = new Map();
-  allowedData.forEach(r => {
-    const key = r.profile?.name || r.session?.name || r.uid || r.id;
+  
+  data.forEach(r => {
+    const key = r.profile?.name || r.uid || r.id;
     if (!key) return; 
     
     if (!userMap.has(key)) {
@@ -90,11 +99,11 @@ export default function HighRiskPage() {
   const uniqueUsers = Array.from(userMap.values());
   const now = new Date().getTime();
 
-  const isCritical = (r: any) => 
-    ["orange", "red"].includes(r.sLevel?.key || r.sKey) && 
-    ["orange", "red"].includes(r.pLevel?.key || r.pKey);
+  const isCritical = (r: MappedSleepReport) => 
+    ["orange", "red"].includes(r.sLevel?.key || r.sKey || "") && 
+    ["orange", "red"].includes(r.pLevel?.key || r.pKey || "");
   
-  const isOverdue = (r: any) => (now - new Date(r.ts).getTime()) > 30 * 24 * 60 * 60 * 1000;
+  const isOverdue = (r: MappedSleepReport) => (now - new Date(r.ts).getTime()) > 30 * 24 * 60 * 60 * 1000;
 
   const criticalUsers = uniqueUsers.filter(isCritical);
   const overdueUsers = uniqueUsers.filter(isOverdue);
@@ -179,8 +188,8 @@ export default function HighRiskPage() {
               const timeDiff = now - new Date(r.ts).getTime();
               const daysAgo = Math.max(0, Math.floor(timeDiff / (1000 * 60 * 60 * 24)));
               
-              const sKey = r.sLevel?.key || r.sKey;
-              const pKey = r.pLevel?.key || r.pKey;
+              const sKey = r.sLevel?.key || r.sKey || "green";
+              const pKey = r.pLevel?.key || r.pKey || "green";
 
               return (
                 <div key={idx} className={`p-6 transition-colors ${c ? 'bg-red-50/30' : 'hover:bg-slate-50'}`}>

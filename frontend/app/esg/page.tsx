@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import { MappedSleepReport, BackendSleepReport } from "@/types"; // 🟢 加入型別
 import API from "@/lib/api";
 import { can } from "@/lib/config";
 import { 
@@ -14,12 +15,12 @@ export default function ESGPage() {
   const { session, loading } = useAuth();
   const router = useRouter();
   
-  const [data, setData] = useState<any[]>([]);
+  // 🟢 替換為嚴謹的型別
+  const [data, setData] = useState<MappedSleepReport[]>([]);
   const [ready, setReady] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   
-  // 經濟效益參數
   const [params, setParams] = useState({
     sickDays: 3, dailySalary: 3000, insSaving: 15000, effGain: 5, implCost: 80000
   });
@@ -32,13 +33,36 @@ export default function ESGPage() {
     }
 
     Promise.all([
-      API.request(`/api/org/records?org_code=${session.orgCode}`),
+      // 🟢 綁定日期過濾與分頁參數
+      API.request(`/api/org/records`, {
+        query: {
+          org_code: session.orgCode,
+          start_date: dateFrom || undefined,
+          end_date: dateTo || undefined,
+          page: 1,
+          size: 1000
+        }
+      }),
       API.getOrgSettings(session.orgCode)
     ]).then(([recsRes, savedRes]: [any, any]) => {
       
       if (recsRes.status === 'success' && recsRes.data) {
-        const mappedData = recsRes.data.map((d: any) => ({
-          ...d, sScore: d.sleep_score, sKey: d.sleep_level, ts: d.created_at
+        // 🟢 型別綁定與資料清理 mapping
+        const mappedData: MappedSleepReport[] = recsRes.data.map((d: BackendSleepReport) => ({
+             ...d,
+             id: d.id,
+             uid: d.user_id,
+             ts: d.created_at,             
+             sScore: d.sleep_score,        
+             pScore: d.pain_score,
+             wScore: d.work_score,
+             sKey: d.sleep_level,          
+             pKey: d.pain_level,
+             profile: { 
+               ...d.profile, 
+               name: d.profile?.name || "未知使用者" 
+             },
+             dept: d.profile?.dept || "未分類部門",
         }));
         setData(mappedData);
       } else {
@@ -58,11 +82,10 @@ export default function ESGPage() {
       }
       setReady(true);
     });
-  }, [session?.orgCode]);
+  }, [session?.orgCode, dateFrom, dateTo]); // 🟢 將日期變數加入觸發依賴
 
   if (loading || !ready) return null;
 
-  // 權限阻擋 (僅限管理者)
   if (!can(session?.systemRole, "view_esg")) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-20 text-center">
@@ -74,24 +97,18 @@ export default function ESGPage() {
     );
   }
 
-  // --- 資料過濾與統計計算 (100% 移植原始邏輯) ---
-  let fd = data;
-  if (dateFrom) fd = fd.filter(r => r.ts?.slice(0, 10) >= dateFrom);
-  if (dateTo) fd = fd.filter(r => r.ts?.slice(0, 10) <= dateTo);
-  
-  const n = fd.length;
-  const sHighRisk = fd.filter(r => ["orange", "red"].includes(r.sKey)).length;
-  const sGreen = fd.filter(r => r.sKey === "green").length;
+  // 🟢 無情刪除多餘的 dateFrom/dateTo 前端過濾，直接使用 data
+  const n = data.length;
+  const sHighRisk = data.filter(r => ["orange", "red"].includes(r.sKey || "")).length;
+  const sGreen = data.filter(r => r.sKey === "green").length;
   const improved = sGreen;
   
   const prevalencePct = n > 0 ? Math.round(sHighRisk / n * 100) : 0;
   const improvePct = sHighRisk > 0 ? Math.round(sGreen / sHighRisk * 100) : 0;
   const impactPct = n > 0 ? Math.round(sGreen / n * 100) : 0;
   
-  // 原系統在此頁面採用簡化的 HPI 顯示邏輯
-  const hpi = n > 0 ? Math.round(100 - fd.reduce((a, r) => a + (r.sScore || 0), 0) / n / 28 * 100) : 0;
+  const hpi = n > 0 ? Math.round(100 - data.reduce((a, r) => a + (r.sScore || 0), 0) / n / 28 * 100) : 0;
   
-  // 經濟效益試算
   const sickSav = params.sickDays * params.dailySalary * improved;
   const insS = params.insSaving * improved;
   const perPersonProd = Math.round((params.dailySalary / 22) * (params.effGain / 100) * 240);
@@ -99,7 +116,6 @@ export default function ESGPage() {
   const totalBenefit = params.implCost > 0 ? Math.max(0, sickSav + insS + prodTotal - params.implCost) : 0;
   const roiPct = params.implCost > 0 ? Math.round((sickSav + insS + prodTotal - params.implCost) / params.implCost * 100) : 0;
 
-  // 匯出純文字報告邏輯
   const exportESG = () => {
     const lines = [
       `REIBI麗媚生化科技 · ESG健康效益報告`,

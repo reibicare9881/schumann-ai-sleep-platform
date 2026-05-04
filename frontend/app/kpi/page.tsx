@@ -3,7 +3,9 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import { DB, K_MIN } from "@/lib/store";
+import { K_MIN } from "@/lib/store";
+import { MappedSleepReport, BackendSleepReport } from "@/types";
+import API from "@/lib/api"; // 🟢 新增 API 引入
 import { C, LX, LL, can } from "@/lib/config";
 import { 
   BarChart3, ChevronLeft, Download, Calendar, 
@@ -14,7 +16,8 @@ export default function KPIPage() {
   const { session, loading } = useAuth();
   const router = useRouter();
   
-  const [data, setData] = useState<any[]>([]);
+  // 🟢 步驟 1：替換 any 為明確的型別
+  const [data, setData] = useState<MappedSleepReport[]>([]);
   const [ready, setReady] = useState(false);
   const [fDept, setFDept] = useState("全部");
   const [dateFrom, setDateFrom] = useState("");
@@ -23,44 +26,73 @@ export default function KPIPage() {
   const isAdmin = session?.systemRole === "admin";
   const isDept = session?.systemRole === "dept_head";
 
+  // 🟢 步驟 2：改寫 useEffect，直接呼叫後端 API 並綁定日期參數
   useEffect(() => {
     if (session?.orgCode) {
-      DB.loadOrgRecs(session.orgCode).then((r: any) => {
-        setData(Array.isArray(r) ? r : []);
+      API.request(`/api/org/records`, {
+        query: {
+          org_code: session.orgCode,
+          start_date: dateFrom || undefined,
+          end_date: dateTo || undefined,
+          page: 1,
+          size: 1000 
+        }
+      }).then((res: any) => {
+        if (res.status === 'success' && res.data) {
+          const mappedData: MappedSleepReport[] = res.data.map((d: BackendSleepReport) => ({
+               ...d,
+               id: d.id,
+               uid: d.user_id,
+               ts: d.created_at,             
+               sScore: d.sleep_score,        
+               pScore: d.pain_score,
+               wScore: d.work_score, 
+               sKey: d.sleep_level,          
+               pKey: d.pain_level,
+               profile: { 
+                 ...d.profile, 
+                 name: d.profile?.name || "未知使用者" 
+               },
+               dept: d.profile?.dept || "未分類部門",
+           }));
+           setData(mappedData);
+        } else {
+           setData([]);
+        }
+        setReady(true);
+      }).catch((err) => {
+        console.error("獲取組織資料失敗:", err);
+        setData([]);
         setReady(true);
       });
     } else if (session) {
-      setReady(true); // 沒有 orgCode 的個人用戶會顯示無資料
+      setReady(true);
     }
-  }, [session]);
+  }, [session, dateFrom, dateTo]); // 🟢 綁定 dateFrom 與 dateTo 觸發重新撈取
 
   if (loading || !ready) return null;
 
-  // --- 資料過濾邏輯 (權限 + 部門 + 日期) --- 
-  const allData = isDept ? data.filter(r => r.dept === session.dept) : data;
-  const depts = Array.from(new Set(allData.map(r => r.dept).filter(Boolean)));
-  
-  let fd = fDept === "全部" ? allData : allData.filter(r => r.dept === fDept);
-  if (dateFrom) fd = fd.filter(r => r.ts?.slice(0, 10) >= dateFrom);
-  if (dateTo) fd = fd.filter(r => r.ts?.slice(0, 10) <= dateTo);
-  
+  // 🟢 步驟 3：無情刪除前端的多餘過濾邏輯
+  // 後端已經處理好主管權限與日期過濾了，這裡只保留 Admin 切換部門的邏輯
+  const depts = Array.from(new Set(data.map(r => r.dept).filter(Boolean)));
+  const fd = fDept === "全部" ? data : data.filter(r => r.dept === fDept);
   const n = fd.length;
 
-  if (!allData.length) {
+  if (!data.length) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-16 text-center">
         <BarChart3 className="w-16 h-16 text-slate-200 mx-auto mb-4" />
         <h2 className="text-xl font-bold text-slate-800">單位：{session?.orgName}</h2>
-        <p className="text-slate-500 mt-2 mb-6">目前尚無成員的評估記錄。</p>
+        <p className="text-slate-500 mt-2 mb-6">目前尚無符合條件的評估記錄。</p>
         <button onClick={() => router.back()} className="px-6 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50">← 返回主選單</button>
       </div>
     );
   }
 
-  // --- 統計計算 --- [cite: 106-107]
-  const avgOf = (key: string) => n > 0 ? fd.reduce((a, r) => a + (r[key] || 0), 0) / n : 0;
+  // --- 統計計算 ---
+  const avgOf = (key: keyof MappedSleepReport) => n > 0 ? fd.reduce((a, r) => a + ((r[key] as number) || 0), 0) / n : 0;
   const avgS = avgOf("sScore"), avgP = avgOf("pScore"), avgW = avgOf("wScore");
-  const cb = fd.filter(r => ["yellow", "orange", "red"].includes(r.sKey) && ["yellow", "orange", "red"].includes(r.pKey)).length;
+  const cb = fd.filter(r => ["yellow", "orange", "red"].includes(r.sKey || "") && ["yellow", "orange", "red"].includes(r.pKey || "")).length;
   
   const HPI = n > 0 ? Math.round(100 - ((avgS / 28 * 40) + (avgP / 50 * 40) + (avgW / 30 * 20))) : 0;
   const hc = HPI >= 75 ? "text-emerald-600" : HPI >= 50 ? "text-amber-600" : "text-rose-600";
@@ -74,10 +106,10 @@ export default function KPIPage() {
   });
 
   const locCounts: any = {};
-  fd.forEach(r => (r.painLocs || []).forEach((l: string) => { locCounts[l] = (locCounts[l] || 0) + 1; }));
+  fd.forEach(r => (r.profile?.painLocations || []).forEach((l: string) => { locCounts[l] = (locCounts[l] || 0) + 1; }));
   const topLocs = Object.entries(locCounts).sort((a: any, b: any) => b[1] - a[1]).slice(0, 5);
   
-  const sHighRisk = fd.filter(r => ["orange", "red"].includes(r.sKey)).length;
+  const sHighRisk = fd.filter(r => ["orange", "red"].includes(r.sKey || "")).length;
   const sGreen = fd.filter(r => r.sKey === "green").length;
   const pGreen = fd.filter(r => r.pKey === "green").length;
   
@@ -85,7 +117,7 @@ export default function KPIPage() {
   const prevalencePct = n > 0 ? Math.round(sHighRisk / n * 100) : 0;
   const impactPct = n > 0 ? Math.round(sGreen / n * 100) : 0;
 
-  // --- 下載報告邏輯 --- [cite: 110-111]
+  // --- 下載報告邏輯 ---
   const exportReport = () => {
     const lines = [
       `REIBI 麗媚生化科技 單位KPI報告`,
@@ -109,7 +141,7 @@ export default function KPIPage() {
     URL.revokeObjectURL(u);
   };
 
-  // --- 分布長條圖元件 --- [cite: 109]
+  // --- 分布長條圖元件 ---
   const DistBar = ({ dist }: { dist: any }) => (
     <div className="space-y-3 mt-4">
       {Object.entries(dist).map(([k, c]: [string, any]) => {
@@ -141,7 +173,7 @@ export default function KPIPage() {
             <BarChart3 className="w-6 h-6 text-purple-600" /> {isDept ? "部門" : "單位"} KPI 報表
           </h1>
           <p className="text-xs text-slate-500 mt-2 bg-slate-100 inline-block px-3 py-1 rounded-full">
-            🏢 {session.orgName} · 總計 {allData.length} 筆 · 資料已去識別化
+            🏢 {session.orgName} · 總計 {data.length} 筆 · 資料已去識別化
           </p>
         </div>
         
@@ -184,7 +216,7 @@ export default function KPIPage() {
             </div>
           )}
         </div>
-        <div className="mt-4 text-xs text-slate-400 font-medium">顯示 {n} / {allData.length} 筆符合條件的紀錄</div>
+        <div className="mt-4 text-xs text-slate-400 font-medium">顯示 {n} / {data.length} 筆符合條件的紀錄</div>
       </div>
 
       {/* 🔒 k-Anonymity 保護機制 */}

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/AuthProvider";
 import { ROLES, can, LX, LL } from "@/lib/config";
 import API from "@/lib/api";
+import { MappedSleepReport, BackendSleepReport } from "@/types";
 import { useRouter } from "next/navigation";
 import { 
   ClipboardEdit, FileText, BarChart3, Target, 
@@ -17,22 +18,24 @@ export default function DashboardPage() {
   // 解構出 switchPlatform
   const { session, logout, switchPlatform } = useAuth();
   const router = useRouter();
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<MappedSleepReport[]>([]);
 
   useEffect(() => {
     // 確保有登入且有 uid 才發送請求
     if (session && session.uid) {
       API.listSleepReports(session.uid).then((res: any) => {
         if (res.status === 'success' && Array.isArray(res.reports)) {
-          // 將資料庫的蛇形命名轉換為前端顯示需要的格式
-          const formatted = res.reports.map((dbData: any) => ({
+          const formatted: MappedSleepReport[] = res.reports.map((dbData: BackendSleepReport) => ({
             ...dbData,
             id: dbData.id,
+            uid: dbData.user_id, // 補上遺漏的 uid
             ts: dbData.created_at,
             sScore: dbData.sleep_score,
             pScore: dbData.pain_score,
+            wScore: dbData.work_score, // 補上遺漏的 wScore
             sLevel: { key: dbData.sleep_level, label: LL[dbData.sleep_level as keyof typeof LL] || "" },
-            pLevel: { key: dbData.pain_level, label: LL[dbData.pain_level as keyof typeof LL] || "" }
+            pLevel: { key: dbData.pain_level, label: LL[dbData.pain_level as keyof typeof LL] || "" },
+            profile: dbData.profile || { name: "" } // 補上 profile
           }));
           setHistory(formatted);
         } else {
@@ -140,7 +143,7 @@ export default function DashboardPage() {
             <TrendingUp className="w-5 h-5" /> 最近評估記錄
           </h3>
           <div className="space-y-3">
-            {history.slice(0, 3).map((rec: any, i: number) => {
+            {history.slice(0, 3).map((rec: MappedSleepReport, i: number) => {
               const sk = rec.sLevel?.key || "green";
               const pk = rec.pLevel?.key || "green";
               const sColor = LX[sk as keyof typeof LX]?.c || "#666";

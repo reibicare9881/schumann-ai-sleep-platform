@@ -8,13 +8,13 @@ import {
   TrendingUp, Plus, ChevronLeft, Search, XCircle 
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
-import { DB } from "@/lib/store";
+import { MappedSleepReport, BackendSleepReport } from "@/types";
 import API from "@/lib/api";
 import { LX, LL, ROLES, SQ, PQ } from "@/lib/config";
 
 // ══ 內部工具：PDF 報表產生器 (100% 移植自原始邏輯) ══
-const buildPDF = (report: any, session: any) => {
-  const { profile = {}, sScore = 0, sLevel = {}, sAns = {}, pScore = 0, pLevel = {}, pAns = {}, ts, id = "" } = report;
+const buildPDF = (report: MappedSleepReport, session: any) => {
+  const { profile = { name: "" }, sScore = 0, sLevel = { key: "green", label: "" }, pScore = 0, pLevel = { key: "green", label: "" }, ts, id = "" } = report;
   const date = new Date(ts).toLocaleDateString("zh-TW", { year: "numeric", month: "long", day: "numeric" });
   const lc: any = { green: "#2d7a5a", yellow: "#b07015", orange: "#c05a28", red: "#b82020" };
   
@@ -42,7 +42,7 @@ export default function HistoryPage() {
   const { session, loading } = useAuth();
   const router = useRouter();
   
-  const [reports, setReports] = useState<any[]>([]);
+  const [reports, setReports] = useState<MappedSleepReport[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
@@ -56,17 +56,15 @@ export default function HistoryPage() {
       })
       .then((res: any) => {
         if (res.status === 'success' && Array.isArray(res.reports)) {
-          
-          // 2. 資料格式轉換 (Data Mapping)
-          // 把後端資料庫的 snake_case 轉換為前端列表與 PDF 需要的格式
-          const formattedReports = res.reports.map((dbData: any) => ({
+          // 🟢 替換 dbData 的型別為 BackendSleepReport
+          const formattedReports: MappedSleepReport[] = res.reports.map((dbData: BackendSleepReport) => ({
             ...dbData,
             id: dbData.id,
-            ts: dbData.created_at,             // 時間戳記對接
-            sScore: dbData.sleep_score,        // 分數對接
+            uid: dbData.user_id, // 確保有映射 uid
+            ts: dbData.created_at,
+            sScore: dbData.sleep_score,
             pScore: dbData.pain_score,
             wScore: dbData.work_score,
-            // 轉換燈號與標籤 (結合你 import 進來的 LL 字典)
             sLevel: { 
               key: dbData.sleep_level, 
               label: LL[dbData.sleep_level as keyof typeof LL] || "" 
@@ -194,10 +192,10 @@ export default function HistoryPage() {
           </div>
         ) : (
           sorted.map((rec, idx) => {
-            const sLevel = rec.sLevel || {};
-            const pLevel = rec.pLevel || {};
-            const sColor = LX[sLevel.key as keyof typeof LX]?.c || "#666";
-            const pColor = LX[pLevel.key as keyof typeof LX]?.c || "#666";
+            const sKey = rec.sLevel?.key || "green";
+            const pKey = rec.pLevel?.key || "green";
+            const sColor = LX[sKey as keyof typeof LX]?.c || "#666";
+            const pColor = LX[pKey as keyof typeof LX]?.c || "#666";
 
             return (
               <div key={rec.id} className="bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-md transition-all flex flex-col sm:flex-row items-center justify-between gap-4 group">
@@ -209,7 +207,7 @@ export default function HistoryPage() {
                     <h3 className="font-bold text-slate-800">
                       {
                         rec.profile?.name || 
-                        (rec.user_id === session?.uid ? session?.name : "未知使用者") 
+                        (rec.uid === session?.uid ? session?.name : "未知使用者") 
                       } 的分析報告
 </h3>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">

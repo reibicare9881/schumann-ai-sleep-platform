@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { DB } from "@/lib/store";
+import { MappedSleepReport } from "@/types";
 import { C, LX } from "@/lib/config";
 import { 
   ChevronLeft, TrendingUp, AlertCircle, Calendar, 
@@ -84,7 +85,7 @@ const TrendChart = ({ data, color, label, maxVal, showPred = false }: any) => {
 export default function AnalysisPage() {
   const { session, loading } = useAuth();
   const router = useRouter();
-  const [reports, setReports] = useState<any[]>([]);
+  const [reports, setReports] = useState<MappedSleepReport[]>([]);
 
   useEffect(() => {
     if (session) {
@@ -95,8 +96,8 @@ export default function AnalysisPage() {
   if (loading || !session) return null;
 
   const sorted = [...reports].sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
-  const sData = sorted.map((r, i) => ({ v: r.sScore || 0, label: `第${i+1}次` }));
-  const pData = sorted.map((r, i) => ({ v: r.pScore || 0, label: `第${i+1}次` }));
+  const sData = sorted.map((r: MappedSleepReport, i: number) => ({ v: r.sScore || 0, label: `第${i+1}次` }));
+  const pData = sorted.map((r: MappedSleepReport, i: number) => ({ v: r.pScore || 0, label: `第${i+1}次` }));
   
   const latest = sorted[sorted.length - 1];
   const sTrend = sData.length >= 2 ? sData[sData.length - 1].v - sData[0].v : 0;

@@ -1,82 +1,138 @@
 import google.generativeai as genai
-import re
+import json
+from pydantic import BaseModel, Field
 from config import settings
 
+# ==========================================
+# 🟢 1. 極度細緻的「資料表單」(Pydantic Schema)
+# 為不同的段落量身打造專屬的欄位，對應你指定的特例標籤
+# ==========================================
+
+# 適用於第 1、3 段 (心率、自律神經平衡)
+class StandardSection(BaseModel):
+    indicator_meaning: str = Field(description="指標意義純文字，絕對不要加標籤或冒號")
+    your_data: str = Field(description="您的數據純文字，絕對不要加標籤或冒號")
+    comprehensive_analysis: str = Field(description="綜合解析純文字，絕對不要加標籤或冒號")
+
+# 適用於第 2 段 (SDNN分析) -> 包含【年齡標準】
+class SdnnSection(BaseModel):
+    indicator_meaning: str = Field(description="指標意義純文字")
+    your_data: str = Field(description="您的數據純文字")
+    age_standard: str = Field(description="年齡標準純文字，絕對不要加標籤或冒號")
+    comprehensive_analysis: str = Field(description="綜合解析純文字")
+
+# 適用於第 4 段 (動態象限) -> 包含【您的軌跡】
+class QuadrantSection(BaseModel):
+    indicator_meaning: str = Field(description="指標意義純文字")
+    your_trajectory: str = Field(description="您的軌跡純文字，絕對不要加標籤或冒號")
+    comprehensive_analysis: str = Field(description="綜合解析純文字")
+
+# 適用於第 5 段 (陰陽比例) -> 包含【性別標準】
+class YinyangSection(BaseModel):
+    indicator_meaning: str = Field(description="指標意義純文字")
+    your_data: str = Field(description="您的數據純文字")
+    gender_standard: str = Field(description="性別標準純文字，絕對不要加標籤或冒號")
+    comprehensive_analysis: str = Field(description="綜合解析純文字")
+
+# 適用於第 6 段 (靈性)
+class SpiritualSection(BaseModel):
+    indicator_meaning: str = Field(description="指標意義純文字")
+    your_data: str = Field(description="您的數據純文字")
+    implicit_desc: str = Field(description="內隱階段說明純文字 (嚴格照抄十牛圖，不加標籤)")
+    mind_analysis: str = Field(description="心境解析純文字")
+    explicit_traits: str = Field(description="外顯特徵純文字 (嚴格照抄十牛圖，不加標籤)")
+
+# 第 7 段與第 8 段保持不變...
+class FlowerChakraItem(BaseModel):
+    color_name: str = Field(description="例如：橘色、綠色系(橄欖綠)")
+    wuxing: str = Field(description="例如：(無五行直接對應)、土、木")
+    chakra: str = Field(description="例如：本我輪/臍輪、太陽神經叢輪")
+    meaning: str = Field(description="色彩含意純文字")
+    status: str = Field(description="狀態與情緒地雷解析純文字")
+
+class FlowerSection(BaseModel):
+    visual_features: str = Field(description="圖譜意義與視覺特徵純文字")
+    space_structure: str = Field(description="空間與結構解析純文字")
+    chakra_analysis: list[FlowerChakraItem] = Field(description="多種顏色的五行與脈輪解析清單")
+
+class RecommendationItem(BaseModel):
+    title: str = Field(description="建議標題，例如：陽氣溫養與下盤保暖 (不要加中括號)")
+    content: str = Field(description="建議內容純文字")
+
+class RecommendationSection(BaseModel):
+    items: list[RecommendationItem] = Field(description="針對個人的修復建議清單")
+    blessing: str = Field(description="結尾溫暖祝福純文字")
+
+# 🟢 綁定專屬的 Schema
+class AIReportResponse(BaseModel):
+    sec_1: StandardSection
+    sec_2: SdnnSection
+    sec_3: StandardSection
+    sec_4: QuadrantSection
+    sec_5: YinyangSection
+    sec_6: SpiritualSection
+    sec_7: FlowerSection
+    sec_8: RecommendationSection
+
+# ==========================================
+# 🟢 2. 主程式
+# ==========================================
 def generate_ai_explanation(data, language="🇹🇼 繁體中文"):
     
     genai.configure(api_key=settings.gemini_api_key)
     
-    # 💡【強烈建議】：Analyzer 負責「長篇結構化寫作」與「多重邏輯推理」
-    # 為了確保 AI 能嚴格遵守 7 段格式且不產生幻覺，建議這裡使用 Pro 模型
-    model = genai.GenerativeModel('gemini-2.5-flash') 
+    generation_config = genai.GenerationConfig(
+        response_mime_type="application/json",
+        response_schema=AIReportResponse,
+        temperature=0.3 # 降溫確保資料精準萃取
+    )
     
-    # ==========================================
-    # 1. 變數安全對接與前處理
-    # ==========================================
-    # 嘗試將秒數轉換為分鐘，避免報錯
+    model = genai.GenerativeModel('gemini-2.5-flash', generation_config=generation_config) 
+    
+    # === 變數安全對接 ===
     try:
         total_seconds = int(data.get('Experience_Time_Sec', 0))
         total_minutes = total_seconds // 60
     except:
         total_minutes = "未知"
         
-    # 安全地提取所有變數，若無資料則給予預設值 '未提供'
     gender = data.get('Gender', '未提供')
     age = data.get('Age', '未提供')
     occupation = data.get('Occupation', '未提供')
     subjective_cond = data.get('Subjective_Conditions', '無特別勾選')
     exp_time_sec = data.get('Experience_Time_Sec', '未提供')
-    
     hr_pre = data.get('HR_Pre', '未提供')
     hr_post = data.get('HR_Post', '未提供')
     hr_lowest = data.get('HR_Lowest', '未提供')
     hr_conclusion = data.get('HR_Conclusion', '未提供')
-    
     sdnn_pre = data.get('SDNN_Pre', '未提供')
     sdnn_post = data.get('SDNN_Post', '未提供')
     sdnn_lowest_trend = data.get('SDNN_Lowest_Trend', '未提供')
     sdnn_conclusion = data.get('SDNN_Conclusion', '未提供')
-    
     lf_hf_value = data.get('LF_HF_Value', '未提供')
     balance_count = data.get('Balance_Count', '未提供')
     lf_hf_conclusion = data.get('LF_HF_Conclusion', '未提供')
     lf_hf_trend = data.get('LF_HF_Trend', '未提供')
-    
     yin_yang = data.get('Yin_Yang', '未提供')
     unity_index = data.get('Unity_Index', '未提供')
-    
     flower_colors = data.get('Flower_of_Life_Colors', '未提供')
     flower_brightness = data.get('Flower_of_Life_Brightness', '未提供')
     flower_brightness_detail = data.get('Flower_of_Life_Brightness_Detail', '未提供')
     flower_shape = data.get('Flower_of_Life_Shape', '未提供')
     flower_extent = data.get('Flower_of_Life_Extent', '未提供')
-    
     scatter_analysis = data.get('Scatter_Plot_Analysis', '未提供')
 
-    # ==========================================
-    # 2. 核心 Prompt 組合
-    # ==========================================
-    
     lang_mapping = {
-        "🇹🇼 繁體中文": "繁體中文 (Traditional Chinese)",
-        "🇨🇳 簡體中文": "简体中文 (Simplified Chinese)",
-        "🇯🇵 日本語": "日本語 (Japanese)",
+        "🇹🇼 繁體中文": "繁體中文",
+        "🇨🇳 簡體中文": "简体中文",
+        "🇯🇵 日本語": "日本語",
         "🇺🇸 English": "English"
     }
     precise_lang = lang_mapping.get(language, language)
     
-    # 🌟 新增：強力語言指令
-    language_instruction = f"""
-    【極度重要：語言設定 / CRITICAL: Language Setting】
-    請務必全程使用「{precise_lang}」來撰寫這份所有的分析報告內容 (包含所有分析、文字與表格內容)。
-    如果你被要求使用簡體中文，請確保每一個字都轉換為簡體。
-    如果語言設定為 English，請確保使用國際標準的醫學、心理學與能量學專業術語，並保持溫暖、專業的語氣。
-    如果語言設定為 日本語 (Japanese)，請務必使用自然、有禮貌的敬語（丁寧語，以 です/ます 結尾），確保專有名詞符合日本當地的醫學與身心靈習慣用語，並展現出日式服務特有的溫暖、委婉與同理心。
-    """
-
+    # 🟢 完整保留你的 Prompt 領域知識！
     prompt = f"""
-    {language_instruction}
-    
+    請務必全程使用「{precise_lang}」撰寫分析內容。
     您是一位專業且充滿溫暖同理心的「舒曼共振與身心靈健康顧問」。
     請根據以下體驗者的【舒曼共振床體驗結果數據】與【個人背景狀況】，為其撰寫一份專屬的深度解說報告。
     
@@ -115,7 +171,7 @@ def generate_ai_explanation(data, language="🇹🇼 繁體中文"):
          * 61-70歲：20~25ms
          * 71-80歲：15~20ms
          * 81-90歲：10~15ms
-       - 寫作邏輯：請先寫出體驗前後的 SDNN 數值變化。接著，明確告訴體驗者「以您的年齡來說，正常的標準區間大約落在 X~Y 之間」。
+       - 寫作邏輯：請先寫出體驗前後的 SDNN 數值變化。接著，明確告訴體驗者「以您的年齡來說，正常的標準區間大約落在 X~Y 之間」，並說明在體驗過程中SDNN數值有沒有接近或低於20。
        - 評估與結合：將體驗者的數值與該年齡標準進行比對。如果低於標準，請結合系統判定的警告，溫和提醒其心臟抗壓彈性較弱、可能承受較大壓力；若在標準內或高於標準，請給予肯定。
     3. 自律神經 (LF/HF圖表) 解讀指南：
        - 說明自律神經佔神經系統九成，受外在環境與情緒影響，人體無法自主控制。
@@ -184,6 +240,8 @@ def generate_ai_explanation(data, language="🇹🇼 繁體中文"):
        - 局部明暗辨識邏輯：
          * 若某顏色標註為「明亮」：代表該臟腑/脈輪能量充沛，心性特質展現順暢。
          * 若某顏色標註為「暗沉」：代表該對應系統正處於「過度消耗」或「能量阻塞」狀態。這通常與長期累積的負面情緒（地雷）有關，是身體發出的修復警訊。
+       - 同色系(例如多種橘色)請合併為一組解析。
+       - 狀態說明填寫鐵律：絕對嚴禁輸出「能量活躍飽滿，對應系統運作順暢」或任何類似的重複性罐頭文字。請嚴格比對傳入的顏色明暗清單，結合情緒地雷給予具體的心理覺察建議。
     7. 寫作修辭鐵律 (防機器人語氣)：
        - 絕對禁止在文章中使用「系統判定」、「根據系統顯示」、「系統提醒」、「數據顯示」等冷冰冰的機器詞彙。
        - 嚴禁寫出「中間是黃色」、「外圍是紅色」等無中生有的排版敘述。請統一視為「多種能量色彩相互交織、融合」。
@@ -193,130 +251,89 @@ def generate_ai_explanation(data, language="🇹🇼 繁體中文"):
        - X軸(左右)意義：點群主體偏左代表副交感神經(HF)活躍，身體可能處於疲憊狀態；點群主體偏右代表交感神經(LF)活躍，身體處於發炎或應激狀態；若呈現從左到右綿延的「帶狀分佈」，代表交感與副交感達成動態平衡。
        - Y軸(高低)意義：點的高度代表心率快慢。位置愈高代表心跳較快，暗示有「缺氧、心氧不足」現象；主體位置偏低或置中代表心率平穩、心臟負荷適中。
        - 寫作邏輯：請依據「體驗初期 ➔ 體驗中期 ➔ 體驗後期」的時間順序，講述體驗者自律神經的變化故事。嚴禁因為極少數的離群點 (如一兩顆特別高或特別偏的點) 就下達嚴重警告，請一律以該顏色的「主體重心」來論述。
+       - 若無提及綠色嚴禁出現相關字眼。
     9. 背景融合指令：請將體驗者的「職業」與「主觀狀況（如失眠、生理期等）」自然地融入分析中。例如：若勾選失眠，請在自律神經段落強調睡眠品質；若為生理期，請在陰陽比例段落給予溫暖的體貼提醒。
     10.【主觀狀態引用鐵律】：在撰寫任何段落的「綜合解析」並試圖連結使用者的生活狀態時，【絕對只能】嚴格對照傳入之「已勾選主觀項目」名單進行論述。嚴禁自行聯想、猜測或捏造任何未出現在該傳入名單中的症狀。
 
     【 輸出格式與最終語言警告 / FINAL OUTPUT & LANGUAGE WARNING 】
-    請用溫暖、專業且誠實的語氣，直接輸出以下幾個段落的內容。
-    ⚠️ 終極語言鐵律：你現在的大腦已經切換為 {precise_lang} 模式。你輸出的「每一個字」（包含【指標意義】等標籤名稱與所有十牛圖古文解說），都必須完全翻譯並使用「{precise_lang}」輸出！絕對禁止在報告中混入其他語言的字元！
-    
-    絕對禁止輸出任何段落標題 (例如「一、心率分析」等)。
-    無編號與強制換行排版鐵律：請直接使用「【指標意義】：」等全形中括號標籤開頭，絕對禁止加上任何數字編號（如 1. 2. 3.）。最重要的是：每個標籤項目寫完後，【必須強制換行 (Enter)，並且空一行】，絕對禁止將所有標籤擠在同一個段落裡！
-    
-    ⚠️【分隔符號鐵律】：請【僅使用】「===SECTION_SEPARATOR===」這串英文代碼來隔開以下八個獨立段落。這串英文是系統用來切斷文章的程式碼，【絕對禁止翻譯、絕對禁止更改大小寫、絕對禁止加上任何空格】！
-    
-    [第一段：心率分析。：
-    【指標意義】：簡述心率代表的基礎生理狀態與放鬆指標。
-    【您的數據】：列出體驗前與體驗後的心率數值。【轉場邏輯】：若體驗後數值為0或其他異常，請直接忽略該值，改為列出「過程中最低心率：[最低心率] BPM」。
-    【綜合解析】：依據數值變化(如心率下降)與官方判定，用溫和語氣說明身體進入放鬆或小睡狀態。若體驗後為 0，請勿提到「誤判」。請將解析焦點轉向「波動趨勢」，點出體驗前和體驗中的最低BPM差異，這象徵身體已成功進入放鬆狀態]
-    ===SECTION_SEPARATOR===
-    [第二段：SDNN分析。：
-    【指標意義】：解釋 SDNN 代表心臟的彈性與對壓力的適應能力。
-    【您的數據】：列出體驗前與體驗後的 SDNN 數值變化。並根據波形觀察，點出過程中「是否有接近或低於20」的狀況。【數值處理】：若體驗後為0或異常，請勿顯示該數值，亦不可寫出「系統誤判」
-    【年齡標準】：根據體驗者的年齡，明確指出該年齡層對應的 SDNN 健康標準區間。
-    【綜合解析】：比對數據與年齡標準。若低於標準，以「這一般代表...」溫馨提醒心臟抗壓彈性較弱、可能有潛在壓力；若達標則給予肯定，並給予日常保養建議。【波形低谷警訊】：若波形觀察顯示有「接近或低於20」，請務必溫和地補充提醒。若體驗後數值異常，請將解析焦點鎖定在「起始狀態」與「圖表穩定度」]
-    ===SECTION_SEPARATOR===
-    [第三段：自律神經平衡狀態。：
-    【指標意義】：請先說明自律神經佔神經系統九成，極易受外在環境與情緒影響，且為人體無法自主控制之系統。接著解釋圖表三條線的意義：紅線(交感)代表活動力、行動力與樂觀度；藍線(副交感)代表修復能力；綠線則代表天人合一指數的即時波動，可輔助觀察靈性與免疫能量的穩定度。
-    【您的數據】：明確列出體驗者的 LF-HF 數值與平衡次數。
-    【綜合解析】：【波形特徵與健康推演鐵律】請嚴格依據體驗者的「平衡次數」與「數值」，套用以下顧問邏輯進行深度解析：
-      - 條件 A (副交感過旺)：若藍線整體明顯較高，請說明副交感過於旺盛代表身體目前處於「偏累」狀態，急需深層的休息。
-      - 條件 B (交感過旺)：若紅線整體明顯較高，請說明這通常代表身體可能正處於慢性發炎、壓力過載或無法放鬆的緊繃狀態。
-      - 條件 C (良好交集)：若紅藍線有良好的交集（平衡次數達標），代表交感與副交感取得平衡，身體具備極佳的自我調節與恢復彈性。
-      - 條件 D (無交集脫節警告)：若紅藍線明顯「開開的沒有交集」(平衡次數極低或趨近於零)，請務必以溫和關懷的語氣指出：這通常代表五臟六腑的運作出現脫節現象，容易導致消化、循環、吸收與代謝不良，甚至會讓睡眠品質變差。
-    (請依據實際數據狀況，精準選擇上述符合的條件進行客製化解說，並給予溫暖的建議。)]
-    ===SECTION_SEPARATOR===
-    [第四段：自律神經動態象限解析。：
-    【指標意義】：請溫和解釋動態象限圖是用來追蹤 40 分鐘體驗過程中，自律神經的即時變化與穩定度 (紅點為初期10分鐘、藍點為中期20分鐘、綠點為後期10分鐘)。
-    【您的軌跡】：⚠️【核彈級防幻覺填空法】：請「完全照抄」上方傳入的象限點分佈變數，嚴禁自己造句！
-    【綜合解析】：請結合上述的「時間軸(初期/中期/後期)」、「X軸(左右平衡)」、「Y軸(高低心氧)」進行深度時序解讀。
-    - 寫作結構：請自然地將點位狀態翻譯成白話文故事（例如：「在體驗初期的前10分鐘... 進入中期的20分鐘... 最後的10分鐘...」）。
-    - 完美平衡狀態處理：⚠️ 若傳入的數據顯示三色皆為「水平置中均勻分佈(帶狀)」且「高度偏低」，請直接讚美並總結：「這代表在長達 40 分鐘的體驗裡，您的交感與副交感神經始終維持在極佳的動態平衡帶上，且心臟負荷適中、無缺氧現象，展現了身體極為強大的自我調節與穩定能力」。
-    - ⚠️若傳入的數據無提及綠色，本段解析【絕對嚴禁】出現「綠」這個字元或「體驗後期」的描述。]
-    ===SECTION_SEPARATOR===
-    [第五段：體內陰陽能量比例。：
-    【指標意義】：從中醫角度解釋陰陽平衡的重要性，以及陽氣對身體循環的影響。
-    【您的數據】：列出體驗者的陽氣與陰氣百分比。
-    【性別標準】：點出該性別的陽氣健康基準(如女性通常約30%以上)。
-    【綜合解析】：比對數據與標準。若陽氣過低，以溫柔語氣提醒可能造成的下盤、泌尿或水腫狀況，並給予日常保暖或運動建議。]
-    ===SECTION_SEPARATOR===
-   [第六段：天人合一指數與十牛圖靈性分析。：
-    【指標意義】：說明此指數代表靈性層面、宇宙能量連結與免疫力狀態。
-    【您的數據】：列出天人合一分數與對應的十牛圖階段名稱，並說明是否達到及格線(70分)。
-    【內隱階段說明】：【禁止默寫與知識庫覆寫鐵律】：請根據分數，【絕對只能】一字不漏地照抄上述指南中對應的「內隱階段說明」原文。嚴禁調用外部知識庫，嚴禁自行默寫其他階段的解釋！有多少字就印多少字。
-    【心境解析】：將上述古典原文的意思，轉化為溫暖、現代人易懂的白話文，解釋其靈性覺察的進展與鼓勵。
-    【外顯特徵】：請嚴格照抄上述指南中該階段的「外顯」原文，並以顧問的口吻描述其心理現象與行為特徵。]
-    ===SECTION_SEPARATOR===
-    [第七段：生命之花。：
-    【圖譜意義與視覺特徵】：簡述生命之花圖譜是氣場、靈性狀態與身心綜合能量的視覺展現。請流暢地將「空間佔比」、「花形結構(尖銳/圓滑)」、「主要顏色」與「明亮度」串聯描述。
-
-    【空間與結構解析】：請依據【解讀指南】中「廣度邏輯」與「花形結構」的知識，對應傳入的變數寫成流暢的解析段落。
-
-    【五行與脈輪分析 (表格呈現鐵律)】：⚠️【絕對強制使用 Markdown 表格】請嚴格依據傳入的「主要顏色」，對照【解讀指南】的色彩知識繪製解析表格。絕對嚴禁在表格中加入未傳入的顏色！
-    - 表格區塊開始前，必須先換行兩次。
-    - 表格標題欄位必須完全吻合：| 顏色 | 對應五行 | 脈輪 | 含意 | 狀態說明 |
-    - 【同色系合併鐵律】：若 Parser 傳入的多種顏色屬於相同的五行與脈輪，請【絕對必須】將它們合併為表格中的「單一列 (Row)」進行綜合解說！嚴禁為同色系拆分多行導致內容冗餘！
-      * 寫法範例：在「顏色色系」欄位填寫總稱（如：綠色系）。
-    - 👉 【狀態說明】填寫鐵律：
-      1. **絕對嚴禁**輸出「能量活躍飽滿，對應系統運作順暢」或任何類似的重複性罐頭文字。
-      2. 請嚴格比對傳入的 `Flower_of_Life_Brightness_Detail`（顏色明暗清單）。
-      3. 將 [顏色名稱] 與 [明亮度] 結合為開頭描述。 
-      4. 若該顏色為「明亮」：描述該能量活躍飽滿，對應系統運作順暢。
-      5. 若該顏色為「暗沉」：⚠️禁止寫飽滿！請直接指出「該能量目前顯得抑鬱或疲累」，並結合【解讀指南】中的情緒地雷，給予具體的心理覺察建議。
-      6. 內容必須包含：[視覺狀態特徵] + [身心影響解析] + [溫和的微調建議]。]
-      ===SECTION_SEPARATOR===
-    [第八段：整體修復建議，綜合整份報告關鍵數據與上述警訊，給出專屬的日常調養建議。：
-    【排版絕對要求】本段落起手式【絕對禁止】輸出「【整體修復建議】」等總標題！請直接從條列式重點開始印出。絕對禁止寫成冗長的一長串段落！請嚴格使用「條列式 (Bullet points)」呈現 3~4 個重點建議。
-    - 每一點請使用「【標題】精簡說明的內文。」的格式。
-    - 內容需聚焦於中醫五行臟腑保養、情緒釋放或日常作息，【絕對嚴禁】捏造具體的西方醫學病名。
-    - 在條列建議結束後，請另起一行，給予持續體驗舒曼共振床的最終溫暖祝福。]]
+    請用溫暖、專業且誠實的語氣，嚴格根據上述 10 點鐵律，填入指定的 JSON 結構中。
+    ⚠️ 終極語言鐵律：你現在的大腦已經切換為 {precise_lang} 模式。你輸出的「每一個字」，都必須完全翻譯並使用「{precise_lang}」輸出！絕對禁止混入其他語言！
     """
-    
-    # ==========================================
-    # 3. 執行生成與段落切割
-    # ==========================================
+
     try:
         response = model.generate_content(prompt)
-        raw_text = response.text
+        res = json.loads(response.text)
         
-        # 🌟 萬用防呆切斷器：不管 AI 是印英文、繁體還是簡體，都能精準攔截
-        raw_text = re.sub(r'###分隔[線线]###|分隔线|分隔線|===SECTION_SEPARATOR===', '===SECTION_SEPARATOR===', raw_text)
+        # ==========================================
+        # 🟢 3. Python 絕對防呆的排版組裝廠
+        # 針對特例段落撰寫專屬的組裝邏輯
+        # ==========================================
         
-        # 🌟 表格終極救援術：將擠在同一行的 "| |" 強制切成兩行 "|\n|"
-        raw_text = re.sub(r'\|\s*\|', '|\n|', raw_text)
+        # 適用於第 1、3 段
+        def build_std_sec(data: dict) -> str:
+            return f"【指標意義】\n:{data.get('indicator_meaning', '')}\n\n【您的數據】\n:{data.get('your_data', '')}\n\n【綜合解析】\n:{data.get('comprehensive_analysis', '')}"
+
+        # 🟢 適用於第 2 段 (加入【年齡標準】)
+        def build_sdnn_sec(data: dict) -> str:
+            return f"【指標意義】\n:{data.get('indicator_meaning', '')}\n\n【您的數據】\n:{data.get('your_data', '')}\n\n【年齡標準】\n:{data.get('age_standard', '')}\n\n【綜合解析】\n:{data.get('comprehensive_analysis', '')}"
+
+        # 🟢 適用於第 4 段 (將數據替換為【您的軌跡】)
+        def build_quadrant_sec(data: dict) -> str:
+            return f"【指標意義】\n:{data.get('indicator_meaning', '')}\n\n【您的軌跡】\n:{data.get('your_trajectory', '')}\n\n【綜合解析】\n:{data.get('comprehensive_analysis', '')}"
+
+        # 🟢 適用於第 5 段 (加入【性別標準】)
+        def build_yinyang_sec(data: dict) -> str:
+            return f"【指標意義】\n:{data.get('indicator_meaning', '')}\n\n【您的數據】\n:{data.get('your_data', '')}\n\n【性別標準】\n:{data.get('gender_standard', '')}\n\n【綜合解析】\n:{data.get('comprehensive_analysis', '')}"
+
+        # 第 6 段：靈性分析
+        s6 = res.get('sec_6', {})
+        sec_6_str = f"【指標意義】\n:{s6.get('indicator_meaning', '')}\n\n【您的數據】\n:{s6.get('your_data', '')}\n\n【內隱階段說明】\n:{s6.get('implicit_desc', '')}\n\n【心境解析】\n:{s6.get('mind_analysis', '')}\n\n【外顯特徵】\n:{s6.get('explicit_traits', '')}"
+
+        # 第 7 段：生命之花
+        s7 = res.get('sec_7', {})
+        sec_7_parts = [
+            f"【圖譜意義與視覺特徵】\n:{s7.get('visual_features', '')}",
+            f"【空間與結構解析】\n:{s7.get('space_structure', '')}",
+            "\n【五行與脈輪分析】\n| 顏色 | 對應五行 | 脈輪 | 含意 | 狀態說明 |",
+            "|---|---|---|---|---|"
+        ]
         
-        # 🌟 確保表格開頭有正確換行 (把 "： |" 變成 "：\n\n|")
-        raw_text = re.sub(r'[：:]\s*\|', '：\n\n|', raw_text)
+        for item in s7.get('chakra_analysis', []):
+            color = item.get('color_name', '').replace('|', '｜')
+            wuxing = item.get('wuxing', '').replace('|', '｜')
+            chakra = item.get('chakra', '').replace('|', '｜')
+            meaning = item.get('meaning', '').replace('|', '｜')
+            status = item.get('status', '').replace('|', '｜')
+            
+            sec_7_parts.append(f"| {color} | {wuxing} | {chakra} | {meaning} | {status} |")
+            
+        sec_7_str = "\n".join(sec_7_parts) # 生命之花表格內距不用兩次換行
         
-        sections = raw_text.split("===SECTION_SEPARATOR===")
-        
-        # 檢查是否剛好切成 8 個段落
-        if len(sections) == 8:
-            return {
-                "section_1": sections[0].strip(),
-                "section_2": sections[1].strip(),
-                "section_3": sections[2].strip(),
-                "section_4": sections[3].strip(),
-                "section_5": sections[4].strip(),
-                "section_6": sections[5].strip(),
-                "section_7": sections[6].strip(),
-                "section_8": sections[7].strip()
-            }
-        else:
-            # 萬一 AI 暴走沒有乖乖切成 8 段的防呆處理
-            return {
-                "section_1": f"生成失敗，AI 未按格式輸出（目前切出 {len(sections)} 段）。",
-                "section_2": "以下為 AI 原始回傳內容，請檢查格式：",
-                "section_3": response.text,
-                "section_4": "",
-                "section_5": "",
-                "section_6": "",
-                "section_7": "",
-                "section_8": ""
-            }
-    except Exception as e:
+        # 第 8 段：整體修復建議
+        s8 = res.get('sec_8', {})
+        sec_8_parts = []
+        for item in s8.get('items', []):
+            sec_8_parts.append(f"【{item.get('title', '')}】:{item.get('content', '')}")
+        sec_8_parts.append(f"\n{s8.get('blessing', '')}")
+        sec_8_str = "\n\n".join(sec_8_parts)
+
+        # 輸出最終字典，精準綁定對應的組裝函式
         return {
-            "section_1": f"API 呼叫失敗，錯誤資訊：{str(e)}",
-            "section_2": "", "section_3": "", "section_4": "",
-            "section_5": "", "section_6": "", "section_7": "", "section_8": ""
+            "section_1": build_std_sec(res.get('sec_1', {})),
+            "section_2": build_sdnn_sec(res.get('sec_2', {})),     # 使用 SDNN 專屬組裝
+            "section_3": build_std_sec(res.get('sec_3', {})),
+            "section_4": build_quadrant_sec(res.get('sec_4', {})), # 使用象限專屬組裝
+            "section_5": build_yinyang_sec(res.get('sec_5', {})),  # 使用陰陽專屬組裝
+            "section_6": sec_6_str,
+            "section_7": sec_7_str,
+            "section_8": sec_8_str
+        }
+        
+    except Exception as e:
+        print(f"AI 生成或解析失敗: {e}")
+        return {
+            "section_1": f"生成失敗，錯誤資訊：{str(e)}",
+            "section_2": "請確認您的網路連線或 API Key 額度狀態。",
+            "section_3": "", "section_4": "", "section_5": "", 
+            "section_6": "", "section_7": "", "section_8": ""
         }

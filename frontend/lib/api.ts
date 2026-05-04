@@ -143,6 +143,10 @@ export const API = {
   // ==========================================
   // 認證相關
   // ==========================================
+  async verifyOrgCode(orgCode: string) {
+    // 這個請求不會帶 Token
+    return this.request(`/api/auth/verify-org/${orgCode}`);
+  },
   
   async login(platform: 'schumann' | 'sleep', loginData: {
     role?: string;
@@ -150,6 +154,7 @@ export const API = {
     org_code?: string;
     name?: string;
     org_name?: string;
+    dept?: string;
   }) {
     const response = await this.request('/api/auth/login', {
       method: 'POST',
@@ -289,6 +294,37 @@ export const API = {
     });
   },
   
+  async getAppointments(orgCode: string, serviceType: string) {
+    return this.request('/api/appointments', {
+      query: { org_code: orgCode, service_type: serviceType }
+    });
+  },
+
+  async createAppointment(apptData: {
+    user_id: string;
+    execution_date: string;
+    appointment_time: string;
+    service_type: string;
+  }) {
+    return this.request('/api/appointments', {
+      method: 'POST',
+      body: JSON.stringify(apptData)
+    });
+  },
+
+  async updateAppointmentStatus(apptId: string, status: string) {
+    return this.request(`/api/appointments/${apptId}/status`, {
+      method: 'PATCH',
+      query: { status }
+    });
+  },
+
+  async deleteAppointment(apptId: string) {
+    return this.request(`/api/appointments/${apptId}`, {
+      method: 'DELETE'
+    });
+  },
+
   // ==========================================
   // 舒曼共振平台 API
   // ==========================================

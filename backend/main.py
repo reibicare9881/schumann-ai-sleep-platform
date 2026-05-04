@@ -4,7 +4,6 @@ Unified Backend: Schumann Platform + Sleep Platform
 支持兩個應用的無縫切換
 """
 
-import os
 import io
 import json
 from modules.parser_module import parse_schumann_report
@@ -21,7 +20,12 @@ from dotenv import load_dotenv
 from auth import create_access_token, get_current_user, require_admin
 from config import settings
 import uuid
+import shutil
+import tempfile
+import os
 from fastapi import File, UploadFile, Form
+from passlib.context import CryptContext
+from auth import create_access_token, get_current_user, require_admin, require_org_manager, require_member_or_above
 
 # ==========================================
 # 加載環境變數
@@ -84,6 +88,16 @@ async def root():
         "frontend_allowed": settings.frontend_url
     }
 
+# 建立密碼加密上下文
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def verify_pin(plain_pin: str, hashed_pin: str) -> bool:
+    """驗證明文 PIN 碼是否與 Hash 相符"""
+    return pwd_context.verify(plain_pin, hashed_pin)
+
+def get_pin_hash(pin: str) -> str:
+    """將明文 PIN 碼轉換為 Hash 值 (未來新增單位時使用)"""
+    return pwd_context.hash(pin)
 
 # ==========================================
 # 數據模型 (Pydantic Schemas)
@@ -91,11 +105,12 @@ async def root():
 
 class LoginRequest(BaseModel):
     """登入請求"""
-    platform: str  # "schumann" 或 "sleep"
+    platform: str  
     role: Optional[str] = "individual"  
     name: Optional[str] = None          
     pin: Optional[str] = None
     org_code: Optional[str] = None
+    dept: Optional[str] = None
 
 # --- 新增：為 AssessmentData 建立子模型 ---
 
@@ -154,6 +169,18 @@ class AssessmentData(BaseModel):
     sleep_scores: SleepScores
     pain_scores: PainScores
     work_scores: WorkScores
+    
+class OrgSettingsUpdate(BaseModel):
+    """單位 OKR/ESG 參數更新模型"""
+    base_budget: Optional[float] = None
+    activation_pct: Optional[float] = None
+    value_multiplier: Optional[float] = None
+    sick_days: Optional[float] = None
+    daily_salary: Optional[float] = None
+    ins_saving: Optional[float] = None
+    prod_gain: Optional[float] = None
+    impl_cost: Optional[float] = None
+    eff_gain: Optional[float] = None
 # ==========================================
 # 主路由：健康檢查
 # ==========================================
@@ -202,6 +229,17 @@ def list_platforms():
 # ==========================================
 # 統一認證模塊
 # ==========================================
+
+@app.get("/api/auth/verify-org/{org_code}")
+async def verify_org_code(org_code: str):
+    """登入前動態驗證單位代碼並取得名稱 (不需 Token)"""
+    # 這裡只 select org_name，絕不回傳 pin 碼等敏感資訊
+    res = supabase.table("organizations").select("org_name").eq("org_code", org_code.upper()).execute()
+    
+    if not res.data:
+        return {"status": "error", "message": "找不到此單位"}
+        
+    return {"status": "success", "data": {"org_name": res.data[0]["org_name"]}}
 
 @app.post("/api/auth/login")
 async def unified_login(request: LoginRequest):
@@ -264,18 +302,19 @@ async def unified_login(request: LoginRequest):
             
         org_data = org_res.data[0]
         
-        # 2. 驗證該角色的 PIN 碼 (這裡直接比對文字，未來建議加上 Hash 比對)
-        expected_pin = ""
+        # 2. 取得該角色對應的 Hash 密碼 (注意：資料庫裡存的必須要是 Hash 過的字串)
+        expected_pin_hash = ""
         if request.role == "member":
-            expected_pin = org_data.get("member_pin")
+            expected_pin_hash = org_data.get("member_pin")
         elif request.role == "dept_head":
-            expected_pin = org_data.get("dept_pin")
+            expected_pin_hash = org_data.get("dept_pin")
         elif request.role == "admin":
-            expected_pin = org_data.get("admin_pin")
+            expected_pin_hash = org_data.get("admin_pin")
         else:
              raise HTTPException(status_code=400, detail="未知的角色")
             
-        if request.pin != expected_pin:
+        # 🟢 修正：使用 bcrypt 進行安全比對，嚴禁使用 request.pin != expected_pin_hash
+        if not expected_pin_hash or not verify_pin(request.pin, expected_pin_hash):
             raise HTTPException(status_code=401, detail="通行碼錯誤")
             
         # 3. 尋找或建立該員工的 profile 資料 (把名字跟 org_code 綁定)
@@ -299,7 +338,9 @@ async def unified_login(request: LoginRequest):
             "name": user_data["full_name"],
             "role": request.role,
             "org_code": org_code,
-            "platform": platform
+            "platform": platform,
+            "dept": request.dept or user_data.get("department"),
+            "org_name": org_data.get("org_name", org_code) 
         }
 
     # ==========================================
@@ -316,7 +357,8 @@ async def unified_login(request: LoginRequest):
             "user_id": token_payload["uid"],
             "name": token_payload["name"],
             "role": token_payload["role"],
-            "org_code": token_payload.get("org_code")
+            "org_code": token_payload.get["org_code"],
+            "org_name": token_payload["org_name"]
         },
         # access_token 是安全核心，前端之後打 API 都要帶上它
         "access_token": access_token,
@@ -375,42 +417,53 @@ async def switch_platform(
 @app.get("/api/org/records")
 async def get_org_records(
     org_code: str, 
-    current_user: dict = Depends(get_current_user)
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    page: int = 1,                    
+    size: int = 1000,
+    current_user: dict = Depends(require_org_manager) 
 ):
-    """獲取該單位所有成員的去識別化報告 (限管理員與主管)"""
-    if current_user.get("role") not in ["admin", "dept_head"]:
-        raise HTTPException(status_code=403, detail="權限不足")
+    """獲取該單位成員的去識別化報告"""
+    # 這裡已經保證對方絕對是 admin 或 dept_head 了，不用再寫 if 判斷角色
+    
+    if current_user.get("org_code") != org_code:
+        raise HTTPException(status_code=403, detail="越權存取：只能查看所屬單位的資料")
         
-    res = supabase.table("sleep_reports").select("*").eq("org_code", org_code).execute()
+    query = supabase.table("sleep_reports").select("*", count="exact").eq("org_code", org_code)
+    
+    if start_date:
+        query = query.gte("created_at", start_date)
+    if end_date:
+        # 加上 23:59:59 確保包含結束日當天的所有資料
+        query = query.lte("created_at", f"{end_date}T23:59:59")
+    
+    # 部門主管加上第二道鎖
+    if current_user.get("role") == "dept_head":
+        dept = current_user.get("dept")
+        query = query.eq("profile->>dept", dept)
+
+    start_idx = (page - 1) * size
+    end_idx = start_idx + size - 1
+    query = query.range(start_idx, end_idx).order("created_at", desc=True)
+    
+    res = query.execute()
     return {"status": "success", "data": res.data}
 
-class OrgSettingsUpdate(BaseModel):
-    """單位 OKR/ESG 參數更新模型"""
-    base_budget: Optional[float] = None
-    activation_pct: Optional[float] = None
-    value_multiplier: Optional[float] = None
-    sick_days: Optional[float] = None
-    daily_salary: Optional[float] = None
-    ins_saving: Optional[float] = None
-    prod_gain: Optional[float] = None
-    impl_cost: Optional[float] = None
-    eff_gain: Optional[float] = None
 
-@app.get("/api/org/settings/{org_code}")
-async def get_org_settings(
+@app.put("/api/org/settings/{org_code}")
+async def update_org_settings(
     org_code: str, 
-    current_user: dict = Depends(get_current_user)
+    settings: OrgSettingsUpdate, 
+    current_user: dict = Depends(require_admin)
 ):
-    """獲取單位 OKR/ESG 設定參數"""
-    # 資安防護：只能查看自己單位的設定
+    """更新單位 OKR/ESG 設定參數 (限管理員)"""
+    # 這裡已經保證絕對是 admin 了
     if current_user.get("org_code") != org_code:
-        raise HTTPException(status_code=403, detail="越權存取：只能查看所屬單位的設定")
+        raise HTTPException(status_code=403, detail="越權操作：無法修改其他單位的設定")
 
-    res = supabase.table("organizations").select("*").eq("org_code", org_code).execute()
-    if not res.data:
-        raise HTTPException(status_code=404, detail="找不到單位資料")
-
-    return {"status": "success", "data": res.data[0]}
+    update_data = {k: v for k, v in settings.model_dump().items() if v is not None}
+    res = supabase.table("organizations").update(update_data).eq("org_code", org_code).execute()
+    return {"status": "success", "data": res.data[0] if res.data else None}
 
 @app.put("/api/org/settings/{org_code}")
 async def update_org_settings(
@@ -433,6 +486,103 @@ async def update_org_settings(
     return {"status": "success", "data": res.data[0] if res.data else None}
 
 # ==========================================
+# 睡眠平台預約 API (/api/appointment/*)
+# ==========================================
+
+class AppointmentCreate(BaseModel):
+    """建立預約單模型"""
+    user_id: str
+    activity_type: Optional[str] = "自主健管" # 預留給未來擴充
+    item_name: Optional[str] = None
+    execution_date: str # 對應前端的 date
+    appointment_time: str # 對應前端的 time
+    service_type: str # 對應前端的 svc (schumann 或 laser)
+
+@app.get("/api/appointments")
+async def get_appointments(
+    org_code: str,
+    service_type: str,
+    # 🛡️ 守門員 3 號：擋掉個人帳號
+    current_user: dict = Depends(require_member_or_above)
+):
+    """獲取單位預約清單 (依據服務類型)"""
+    if current_user.get("org_code") != org_code:
+         raise HTTPException(status_code=403, detail="越權存取")
+
+    query = supabase.table("appointments").select("*, profiles!inner(full_name, department)").eq("org_code", org_code).eq("service_type", service_type)
+    
+    if current_user.get("role") not in ["admin", "dept_head"]:
+        query = query.eq("user_id", current_user.get("uid"))
+
+    res = query.order("execution_date", desc=False).order("appointment_time", desc=False).execute()
+    
+    return {"status": "success", "data": res.data}
+
+@app.post("/api/appointments")
+async def create_appointment(
+    appt: AppointmentCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """新增預約單"""
+    if current_user.get("uid") != appt.user_id:
+         raise HTTPException(status_code=403, detail="越權操作：只能為自己預約")
+         
+    # 組裝寫入 Supabase 的資料 (讓 Supabase 自己生成 uuid)
+    payload = {
+        "user_id": appt.user_id,
+        "org_code": current_user.get("org_code"),
+        "activity_type": appt.activity_type,
+        "item_name": appt.item_name,
+        "execution_date": appt.execution_date,
+        "appointment_time": appt.appointment_time,
+        "service_type": appt.service_type,
+        "status": "pending"
+    }
+
+    res = supabase.table("appointments").insert(payload).execute()
+    if not res.data:
+        raise HTTPException(status_code=500, detail="預約建立失敗")
+        
+    return {"status": "success", "data": res.data[0]}
+
+@app.patch("/api/appointments/{appt_id}/status")
+async def update_appointment_status(
+    appt_id: str,
+    status: str,
+    # 🛡️ 守門員 2 號：擋掉一般成員自己審核自己的預約單
+    current_user: dict = Depends(require_org_manager)
+):
+    """更新預約狀態 (核准/退回)"""
+    # 因為 Depends 已經擋掉了，這裡可以把原本的 if 判斷刪除
+    # if current_user.get("role") not in ["admin", "dept_head"]: ...
+        
+    res = supabase.table("appointments").update({"status": status}).eq("id", appt_id).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="找不到該預約單")
+        
+    return {"status": "success", "data": res.data[0]}
+
+@app.delete("/api/appointments/{appt_id}")
+async def delete_appointment(
+    appt_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """刪除/取消預約單"""
+    # 先查詢該預約單，確認權限
+    res = supabase.table("appointments").select("*").eq("id", appt_id).execute()
+    if not res.data:
+         raise HTTPException(status_code=404, detail="找不到該預約單")
+         
+    appt = res.data[0]
+    
+    # 只有本人或管理層可以刪除
+    if current_user.get("uid") != appt.get("user_id") and current_user.get("role") not in ["admin", "dept_head"]:
+        raise HTTPException(status_code=403, detail="越權操作：無法刪除他人的預約")
+        
+    supabase.table("appointments").delete().eq("id", appt_id).execute()
+    return {"status": "success", "message": "預約已刪除"}
+
+# ==========================================
 # 舒曼共振平台 API (/api/schumann/*)
 # ==========================================
 
@@ -448,35 +598,32 @@ async def analyze_schumann_report(
     if str(current_user.get("uid")) != user_id:
         raise HTTPException(status_code=403, detail="越權操作：您只能為自己的帳號上傳報告")
     
-    """處理舒曼共振報告上傳、AI解析，並存入 Supabase"""
+    tmp_path = ""
     try:
-        # 1. 讀取檔案轉換為 bytes
-        file_bytes = await file.read()
-        
-        # 使用 io.BytesIO 偽裝成檔案物件，讓你的 parser_module 可以讀取
-        file_obj = io.BytesIO(file_bytes)
-        file_obj.name = file.filename 
+        # 🟢 優化 1：安全地將大型上傳檔案分塊寫入硬碟暫存檔，避免塞爆 RAM
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            shutil.copyfileobj(file.file, tmp)
+            tmp_path = tmp.name
 
-        # 2. 從檔名擷取名字 (繼承你原本 app.py 的邏輯)
+        # 🟢 優化 2：從檔名擷取名字
         extracted_name = None
         file_name_only = file.filename.split('.')[0]
         parts = file_name_only.split('_')
         if len(parts) >= 2 and parts[0] == "record":
             extracted_name = parts[1]
 
-        # 3. 呼叫你原本的解析模組 (取得 JSON 數據)
-        # 注意：根據你的 parser_module 寫法，可能需要傳入 api_key，請視情況調整
-        parsed_data = parse_schumann_report(file_obj) 
+        # 🟢 優化 3：開啟磁碟上的暫存檔交給 Parser 處理
+        with open(tmp_path, 'rb') as f:
+            file_obj = io.BytesIO(f.read())
+            file_obj.name = file.filename 
+            parsed_data = parse_schumann_report(file_obj) 
         
-        # 如果檔名有名字，覆寫進去
         if extracted_name:
             parsed_data["Name"] = extracted_name
 
-        # 4. 呼叫 AI 撰寫深度解說報告 (🌟 解除封印)
+        # ... (下方保留你原本的「4. 呼叫 AI 撰寫深度解說報告」邏輯) ...
         try:
-            # 呼叫你寫好的模組來生成 8 段式報告
             ai_summary_dict = generate_ai_explanation(parsed_data, language=language)
-            # 將 AI 回傳的字典轉成 JSON 字串，以便存入 Supabase 的 text 欄位
             ai_summary_text = json.dumps(ai_summary_dict, ensure_ascii=False)
         except Exception as e:
             print(f"AI 報告生成失敗: {e}")
@@ -556,6 +703,11 @@ async def analyze_schumann_report(
     except Exception as e:
         print(f"分析錯誤: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+    finally:
+        # 🟢 優化 4：確保無論成功或失敗，硬碟上的暫存檔都會被刪除
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 @app.get("/api/schumann/reports")
 async def list_schumann_reports(
@@ -622,30 +774,26 @@ async def sleep_health():
 @app.post("/api/sleep/assessment", status_code=201)
 async def submit_sleep_assessment(
     request: AssessmentData,
-    current_user: dict = Depends(get_current_user)
+    # 🛡️ 守門員 3 號：擋掉個人帳號，因為此報告會計算 KPI，需要有 org_code
+    current_user: dict = Depends(require_member_or_above)
 ):
     """提交睡眠評估"""
     if current_user.get("uid") != request.user_id:
         raise HTTPException(status_code=403, detail="越權操作：無法替其他使用者提交資料")
 
-    # 🌟 修改 1：使用 model_dump() 將 Pydantic 模型轉回字典，才能用 values() 加總
     sleep_score = sum(request.sleep_scores.model_dump().values())
     pain_score = sum(request.pain_scores.model_dump().values())
     work_score = sum(request.work_scores.model_dump().values())
     
-    # 💡 修正：使用 UUID 產生不可預測且不會碰撞的報告 ID
     report_id = str(uuid.uuid4())
     
     report = {
         "id": report_id,
         "user_id": request.user_id,
-        "org_code": current_user.get("org_code"), # 💡 修正：寫入時綁定所屬單位，為權限隔離打底
+        "org_code": current_user.get("org_code"), 
         "platform": "sleep",
         "created_at": datetime.now().isoformat(),
-        
-        # 🌟 修改 2：Profile 也要加上 model_dump()，Supabase 才能將其存為 JSON
         "profile": request.profile.model_dump(),
-        
         "sleep_score": sleep_score,
         "sleep_level": "green" if sleep_score <= 7 else "yellow" if sleep_score <= 14 else "orange" if sleep_score <= 21 else "red",
         "pain_score": pain_score,
@@ -654,7 +802,6 @@ async def submit_sleep_assessment(
         "status": "completed"
     }
     
-    # 💡 修正：正式寫入 Supabase 資料庫，淘汰記憶體儲存
     supabase.table("sleep_reports").insert(report).execute()
     
     return {
