@@ -29,7 +29,6 @@ export default function PrivacyPage() {
   // --- 資料抹除邏輯 ---
   const handleDataErase = async () => {
     AuditLog.record("DATA_ERASE", "user requested data erasure", session?.systemRole);
-    await DB.clearSession();
     clearCryptoKey();
     alert("您的本機資料與安全金鑰已成功清除。");
     // 呼叫 AuthProvider 的 logout 確保狀態清空並跳轉

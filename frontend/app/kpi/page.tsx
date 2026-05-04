@@ -28,17 +28,14 @@ export default function KPIPage() {
 
   // 🟢 步驟 2：改寫 useEffect，直接呼叫後端 API 並綁定日期參數
   useEffect(() => {
-    if (session?.orgCode) {
-      API.request(`/api/org/records`, {
-        query: {
-          org_code: session.orgCode,
-          start_date: dateFrom || undefined,
-          end_date: dateTo || undefined,
-          page: 1,
-          size: 1000 
-        }
-      }).then((res: any) => {
-        if (res.status === 'success' && res.data) {
+    if (session?.orgCode && (can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr"))) {
+      
+      // 🟢 強制宣告 GET 並將必填參數直接寫在網址上
+      API.request(`/api/org/records?org_code=${session.orgCode}&page=1&size=1000`, { 
+        method: 'GET' 
+      })
+        .then((res: any) => {
+          if (res.status === 'success' && res.data) {
           const mappedData: MappedSleepReport[] = res.data.map((d: BackendSleepReport) => ({
                ...d,
                id: d.id,

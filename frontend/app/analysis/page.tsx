@@ -3,9 +3,9 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import { DB } from "@/lib/store";
-import { MappedSleepReport } from "@/types";
-import { C, LX } from "@/lib/config";
+import API from "@/lib/api";
+import { MappedSleepReport, BackendSleepReport } from "@/types";
+import { C, LX, LL } from "@/lib/config";
 import { 
   ChevronLeft, TrendingUp, AlertCircle, Calendar, 
   ArrowDownCircle, ArrowUpCircle, Info, Zap, Waves 
@@ -88,8 +88,21 @@ export default function AnalysisPage() {
   const [reports, setReports] = useState<MappedSleepReport[]>([]);
 
   useEffect(() => {
-    if (session) {
-      DB.loadReports().then((r: any) => setReports(Array.isArray(r) ? r : []));
+    if (session && session.uid) {
+      API.listSleepReports(session.uid).then((res: any) => {
+        if (res.status === 'success' && Array.isArray(res.reports)) {
+          const formatted = res.reports.map((dbData: BackendSleepReport) => ({
+            ...dbData,
+            id: dbData.id,
+            ts: dbData.created_at,
+            sScore: dbData.sleep_score,
+            pScore: dbData.pain_score,
+            sLevel: { key: dbData.sleep_level, label: LL[dbData.sleep_level as keyof typeof LL] || "" },
+            pLevel: { key: dbData.pain_level, label: LL[dbData.pain_level as keyof typeof LL] || "" }
+          }));
+          setReports(formatted);
+        }
+      });
     }
   }, [session]);
 

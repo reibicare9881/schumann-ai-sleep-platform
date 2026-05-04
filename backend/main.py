@@ -314,7 +314,7 @@ async def unified_login(request: LoginRequest):
              raise HTTPException(status_code=400, detail="未知的角色")
             
         # 🟢 修正：使用 bcrypt 進行安全比對，嚴禁使用 request.pin != expected_pin_hash
-        if not expected_pin_hash or not verify_pin(request.pin, expected_pin_hash):
+        if not expected_pin_hash or not pwd_context.verify(request.pin, expected_pin_hash):
             raise HTTPException(status_code=401, detail="通行碼錯誤")
             
         # 3. 尋找或建立該員工的 profile 資料 (把名字跟 org_code 綁定)
@@ -354,11 +354,11 @@ async def unified_login(request: LoginRequest):
         "platform": platform,
         # session 只用來讓前端畫面顯示名字，不具備安全效力
         "session": {
-            "user_id": token_payload["uid"],
-            "name": token_payload["name"],
-            "role": token_payload["role"],
-            "org_code": token_payload.get["org_code"],
-            "org_name": token_payload["org_name"]
+            "user_id": token_payload.get("uid"),
+            "name": token_payload.get("name"),
+            "role": token_payload.get("role"),
+            "org_code": token_payload.get("org_code"),
+            "org_name": token_payload.get("org_name")
         },
         # access_token 是安全核心，前端之後打 API 都要帶上它
         "access_token": access_token,
@@ -465,25 +465,19 @@ async def update_org_settings(
     res = supabase.table("organizations").update(update_data).eq("org_code", org_code).execute()
     return {"status": "success", "data": res.data[0] if res.data else None}
 
-@app.put("/api/org/settings/{org_code}")
-async def update_org_settings(
-    org_code: str, 
-    settings: OrgSettingsUpdate, 
-    current_user: dict = Depends(get_current_user)
-):
-    """更新單位 OKR/ESG 設定參數 (限管理員)"""
-    # 資安防護：必須是該單位的 admin 才能修改
-    if current_user.get("role") != "admin" or current_user.get("org_code") != org_code:
-        raise HTTPException(status_code=403, detail="越權操作：只有該單位的管理員可以修改設定")
+@app.get("/api/org/settings/{org_code}")
+async def get_org_settings(org_code: str):
+    """獲取單位 OKR/ESG 設定參數"""
+    
+    # 從資料庫中抓取該單位的資料
+    res = supabase.table("organizations").select("*").eq("org_code", org_code.upper()).execute()
+    
+    if not res.data:
+        raise HTTPException(status_code=404, detail="找不到該單位的設定資料")
+        
+    # 將整包資料回傳，讓前端提取需要的 base_budget, sick_days 等參數
+    return {"status": "success", "data": res.data[0]}
 
-    # 過濾掉未提供的參數，只更新有傳值的欄位
-    update_data = {k: v for k, v in settings.model_dump().items() if v is not None}
-
-    if not update_data:
-        return {"status": "success", "message": "沒有需要更新的資料"}
-
-    res = supabase.table("organizations").update(update_data).eq("org_code", org_code).execute()
-    return {"status": "success", "data": res.data[0] if res.data else None}
 
 # ==========================================
 # 睡眠平台預約 API (/api/appointment/*)

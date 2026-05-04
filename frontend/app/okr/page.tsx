@@ -37,16 +37,22 @@ export default function OKRPage() {
   const isDept = session?.systemRole === "dept_head";
   const code = session?.orgCode || "";
 
-  // 載入資料與儲存的參數 [cite: 117]
   useEffect(() => {
     if (!code) {
       setReady(true);
       return;
     }
     
-    // 同時向後端請求「單位所有成員報告」與「單位參數設定」
+    // 🟢 1. 安全組裝網址參數 (補上 page 和 size 保護記憶體)
+    const params = new URLSearchParams({
+      org_code: code,
+      page: "1",
+      size: "1000"
+    });
+
+    // 🟢 2. 明確宣告 method: 'GET'
     Promise.all([
-      API.request(`/api/org/records?org_code=${code}`),
+      API.request(`/api/org/records?${params.toString()}`, { method: 'GET' }),
       API.getOrgSettings(code)
     ]).then(([recsRes, savedRes]: [any, any]) => {
       

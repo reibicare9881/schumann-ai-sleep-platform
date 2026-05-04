@@ -22,14 +22,9 @@ export default function HighRiskPage() {
   useEffect(() => {
     if (session?.orgCode && (can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr"))) {
       
-      // 🟢 綁定 API 參數，加入分頁限制保護記憶體
-      API.request(`/api/org/records`, { 
-        method: 'GET',
-        query: {
-          org_code: session.orgCode,
-          page: 1,
-          size: 1000
-        }
+      // 🟢 強制宣告 GET 並將必填參數直接寫在網址上
+      API.request(`/api/org/records?org_code=${session.orgCode}&page=1&size=1000`, { 
+        method: 'GET' 
       })
         .then((res: any) => {
           if (res.status === 'success' && res.data) {

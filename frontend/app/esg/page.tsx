@@ -32,22 +32,24 @@ export default function ESGPage() {
       return;
     }
 
+    // 🟢 1. 安全組裝網址參數
+    const params = new URLSearchParams({
+      org_code: session.orgCode,
+      page: "1",
+      size: "1000"
+    });
+    // 如果有選日期才加進去
+    if (dateFrom) params.append("start_date", dateFrom);
+    if (dateTo) params.append("end_date", dateTo);
+
+    // 🟢 2. 明確宣告 method: 'GET'
     Promise.all([
-      // 🟢 綁定日期過濾與分頁參數
-      API.request(`/api/org/records`, {
-        query: {
-          org_code: session.orgCode,
-          start_date: dateFrom || undefined,
-          end_date: dateTo || undefined,
-          page: 1,
-          size: 1000
-        }
-      }),
+      API.request(`/api/org/records?${params.toString()}`, { method: 'GET' }),
       API.getOrgSettings(session.orgCode)
     ]).then(([recsRes, savedRes]: [any, any]) => {
       
       if (recsRes.status === 'success' && recsRes.data) {
-        // 🟢 型別綁定與資料清理 mapping
+        // 型別綁定與資料清理 mapping
         const mappedData: MappedSleepReport[] = recsRes.data.map((d: BackendSleepReport) => ({
              ...d,
              id: d.id,
@@ -82,7 +84,7 @@ export default function ESGPage() {
       }
       setReady(true);
     });
-  }, [session?.orgCode, dateFrom, dateTo]); // 🟢 將日期變數加入觸發依賴
+  }, [session?.orgCode, dateFrom, dateTo]);
 
   if (loading || !ready) return null;
 
