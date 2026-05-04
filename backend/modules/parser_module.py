@@ -2,7 +2,8 @@ import fitz  # PyMuPDF
 from PIL import Image
 import io
 import json
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from config import settings
 
 
@@ -63,19 +64,13 @@ def crop_focus_regions(main_image):
         return []
 
 def extract_data_with_vision_ai(images):
-    genai.configure(api_key=settings.gemini_api_key)
+    # 🟢 1. 建立新版 Client (取代舊的 genai.configure)
+    client = genai.Client(api_key=settings.gemini_api_key)
     
     # 使用輕量級的 Flash 模型
     model_name = 'gemini-2.5-flash'
-    # model_name = 'gemini-2.5-flash-lite'
     
-    # ⚠️ 核心優化 1：強制模型只能輸出 JSON 格式 (Response Schema)，徹底消滅 Markdown 符號錯誤
-    generation_config = genai.GenerationConfig(
-        response_mime_type="application/json"
-    )
-    model = genai.GenerativeModel(model_name, generation_config=generation_config)
-    
-    # ⚠️ 核心優化 2：準備「1張全圖 + 3張局部放大圖」的聯合影像陣列
+    # ⚠️ 核心優化 2：準備「1張全圖 + 多張局部放大圖」的聯合影像陣列
     main_image = images[0]
     cropped_images = crop_focus_regions(main_image)
     vision_input_images = [main_image] + cropped_images
@@ -138,12 +133,20 @@ def extract_data_with_vision_ai(images):
     }
     """
     
-    # 將 Prompt 與 4 張圖片一起發送
+    # 將 Prompt 與圖片陣列組合在一起
     request_content = [prompt] + vision_input_images
-    response = model.generate_content(request_content)
     
     try:
-        # 因為啟用了 response_mime_type="application/json"，回傳必定是純 JSON 字串
+        # 🟢 2. 新版呼叫語法：將 model, contents 與 config 統一放在 generate_content 中
+        response = client.models.generate_content(
+            model=model_name,
+            contents=request_content,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+        
+        # 取得純 JSON 字串並解析
         extracted_data = json.loads(response.text.strip())
         
         # 移除供 AI 思考用的輔助欄位，讓最終字典保持乾淨
@@ -164,7 +167,8 @@ def extract_data_with_vision_ai(images):
         
         return extracted_data
     except Exception as e:
-        raise ValueError(f"AI 解析失敗。錯誤資訊: {e}\nAI原始回應: {response.text}")
+        error_msg = getattr(response, 'text', '無法取得回應內容') if 'response' in locals() else '發送請求前發生錯誤'
+        raise ValueError(f"AI 解析失敗。錯誤資訊: {e}\nAI原始回應: {error_msg}")
 
 def parse_schumann_report(uploaded_file):
     # 主流程不變：檔案 -> 圖片清單 -> 視覺 AI 萃取

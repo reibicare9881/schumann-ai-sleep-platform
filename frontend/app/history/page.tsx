@@ -65,6 +65,10 @@ export default function HistoryPage() {
             sScore: dbData.sleep_score,
             pScore: dbData.pain_score,
             wScore: dbData.work_score,
+
+            sAns: dbData.sleep_scores || {},
+            pAns: dbData.pain_scores || {},
+            
             sLevel: { 
               key: dbData.sleep_level, 
               label: LL[dbData.sleep_level as keyof typeof LL] || "" 
@@ -221,12 +225,6 @@ export default function HistoryPage() {
                 </div>
 
                 <div className="flex gap-2 w-full sm:w-auto">
-                  <button 
-                    onClick={() => handleDownloadPDF(rec)}
-                    className="flex-1 sm:flex-none px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 flex items-center justify-center gap-2"
-                  >
-                    <Download className="w-3 h-3" /> PDF
-                  </button>
                   <button 
                     className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 flex items-center justify-center"
                     onClick={() => router.push(`/report/${rec.id}`)}

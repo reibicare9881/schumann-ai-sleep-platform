@@ -33,6 +33,8 @@ export interface MappedSleepReport {
   pKey?: string;
   dept?: string;        // 為了方便高風險/KPI過濾拉出來的欄位
   profile: UserProfile;
+  sAns?: any;
+  pAns?: any;
 }
 
 // 這是後端 API 原始回傳的結構 (Snake Case)
@@ -47,6 +49,9 @@ export interface BackendSleepReport {
   pain_score: number;
   pain_level: string;
   work_score: number;
+  sleep_scores?: any; 
+  pain_scores?: any;
+  work_scores?: any;
   profile: UserProfile;
   status: string;
 }

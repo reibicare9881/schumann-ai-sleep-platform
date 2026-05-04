@@ -3,11 +3,20 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import { DB } from "@/lib/store";
 import API from "@/lib/api";
 import { SQ, PQ, ROLES, LX, LL } from "@/lib/config";
 import { ChevronLeft, TrendingUp, BookOpen, Waves, AlertTriangle, FileText, CheckCircle2, Printer } from "lucide-react";
 import html2pdf from "html2pdf.js";
+
+// ══ 預設衛教庫 (Fallback Recommendations) ══
+const FR = {
+  generalHealth: "依據衛福部2023–2026年國民健康白皮書，健康自主管理為慢性病防治核心策略。建議每日監測血壓血糖，每週150分鐘中等強度有氧運動，並落實規律作息與睡眠衛生。三高患者應積極參與整合照護計畫，定期完成年度健康檢查，透過數位化工具持續追蹤健康型態改變。",
+  painEducation: "2023年IASP建議採多模式疼痛管理，整合藥物與非藥物治療。疼痛神經科學教育（PNE）有助改變對疼痛的認知，降低恐懼迴避行為。CBT-P及ACT均對慢性疼痛有效。漸進式復健運動可減少25–40%疼痛強度，記錄疼痛日記有助醫師精準調整治療方向。",
+  sleepEducation: "失眠認知行為治療（CBT-I）為2024年指南一線治療，優於藥物且無依賴性。核心技術：睡眠限制療法、刺激控制、放鬆訓練、認知重構。建議固定起床時間、睡前1小時避免藍光、臥室保持18–20°C。輪班者建議使用遮光窗簾與白噪音輔助生理時鐘調節。",
+  dietaryAdvice: "地中海飲食持續顯示對三高、慢性疼痛及睡眠有正向效益。增加Omega-3（深海魚）降炎症；鎂（南瓜子）助眠；色胺酸（香蕉）促褪黑激素合成。高血壓者採DASH飲食；糖尿病者注意升糖指數；避免睡前2小時大量進食。",
+  physicalTherapy: "多模式物理治療可改善慢性疼痛（30–40%）及睡眠品質（PSQI改善3–4分）。每週3–5次有氧運動；辦公室每小時起身3分鐘；水中運動適合關節疼痛者；瑜伽太極對疼痛與睡眠均有實證效益。",
+  reibiProducts: "REIBI舒曼波療法（7.83Hz）調節自律神經、降低皮質醇、提升深度睡眠δ波，建議每晚睡前30–45分鐘，持續4–6週。REIBI LA200雷射（LLLT，650–808nm）促進細胞ATP合成、抑制炎性介質，建議每週2–3次、每次10–15分鐘，配合物理治療效果倍增。"
+};
 
 // ══ PDF 報表產生器 (完整版 from sleepplatform.txt) ═══════════════════════════════════════════════
 const buildPDF = (report: any, session: any) => {
@@ -246,10 +255,9 @@ export default function ReportPage() {
             sLevel: { key: dbData.sleep_level, label: "" },
             pLevel: { key: dbData.pain_level, label: "" },
             profile: dbData.profile || {},
-            // 由於後端目前尚未儲存 sAns, pAns 與 recs，這裡先給予空值避免畫面崩潰
-            sAns: {},
-            pAns: {},
-            recs: {} 
+            sAns: dbData.sleep_scores || {},
+            pAns: dbData.pain_scores || {},
+            recs: (dbData.recs && Object.keys(dbData.recs).length > 0) ? dbData.recs : FR
           });
         } else {
           setError(true);

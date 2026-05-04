@@ -109,7 +109,7 @@ export default function LoginPage() {
           platform: 'sleep',
           accessToken: access_token
         };
-        await DB.saveSession(s);
+
         login(s);
         return;
       } else {

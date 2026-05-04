@@ -25,6 +25,8 @@ import tempfile
 import os
 from fastapi import File, UploadFile, Form
 from passlib.context import CryptContext
+from google import genai
+from google.genai import types
 from auth import create_access_token, get_current_user, require_admin, require_org_manager, require_member_or_above
 
 # ==========================================
@@ -780,6 +782,41 @@ async def submit_sleep_assessment(
     pain_score = sum(request.pain_scores.model_dump().values())
     work_score = sum(request.work_scores.model_dump().values())
     
+    client = genai.Client(api_key=settings.gemini_api_key)
+    
+    prompt = f"""
+    請根據此使用者的健康與背景資料，提供客製化的衛教建議：
+    - 基本資料：{request.profile.age}歲，性別：{request.profile.gender}
+    - 職場狀況：{request.profile.industry}，輪班：{request.profile.shiftWork}
+    - 慢病史：高血壓({request.profile.hypertension})、糖尿病({request.profile.diabetes})
+    - 睡眠品質(ISI)：{sleep_score}/28 (越高代表失眠越嚴重)
+    - 疼痛影響(BPI)：{pain_score}/50 (越高代表疼痛越嚴重)
+    - 疼痛部位：{", ".join(request.profile.painLocations) if request.profile.painLocations else "無"}
+
+    請嚴格回傳包含以下 key 的 JSON 格式。文字請保持溫暖、專業，並具體針對他的「痛點部位」、「慢病」與「輪班情況」給予對應的建議：
+    {{
+        "generalHealth": "綜合健康方針...",
+        "sleepEducation": "睡眠衛教建議...",
+        "painEducation": "疼痛衛教建議...",
+        "dietaryAdvice": "飲食衛教建議...",
+        "physicalTherapy": "物理治療建議...",
+        "reibiProducts": "REIBI舒曼波與雷射介入建議..."
+    }}
+    """
+    
+    try:
+        ai_res = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+        custom_recs = json.loads(ai_res.text)
+    except Exception as e:
+        print(f"AI 生成衛教建議失敗: {e}")
+        custom_recs = None
+    
     report_id = str(uuid.uuid4())
     
     report = {
@@ -790,11 +827,15 @@ async def submit_sleep_assessment(
         "created_at": datetime.now().isoformat(),
         "profile": request.profile.model_dump(),
         "sleep_score": sleep_score,
+        "sleep_scores": request.sleep_scores.model_dump(),
         "sleep_level": "green" if sleep_score <= 7 else "yellow" if sleep_score <= 14 else "orange" if sleep_score <= 21 else "red",
         "pain_score": pain_score,
+        "pain_scores": request.pain_scores.model_dump(),
         "pain_level": "green" if pain_score <= 12 else "yellow" if pain_score <= 25 else "orange" if pain_score <= 38 else "red",
         "work_score": work_score,
-        "status": "completed"
+        "work_scores": request.work_scores.model_dump(),
+        "status": "completed",
+        "recs": custom_recs
     }
     
     supabase.table("sleep_reports").insert(report).execute()

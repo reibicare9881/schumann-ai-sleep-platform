@@ -1,4 +1,5 @@
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import json
 from pydantic import BaseModel, Field
 from config import settings
@@ -79,15 +80,7 @@ class AIReportResponse(BaseModel):
 # ==========================================
 def generate_ai_explanation(data, language="🇹🇼 繁體中文"):
     
-    genai.configure(api_key=settings.gemini_api_key)
-    
-    generation_config = genai.GenerationConfig(
-        response_mime_type="application/json",
-        response_schema=AIReportResponse,
-        temperature=0.3 # 降溫確保資料精準萃取
-    )
-    
-    model = genai.GenerativeModel('gemini-2.5-flash', generation_config=generation_config) 
+    client = genai.Client(api_key=settings.gemini_api_key)
     
     # === 變數安全對接 ===
     try:
@@ -261,7 +254,15 @@ def generate_ai_explanation(data, language="🇹🇼 繁體中文"):
     """
 
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=AIReportResponse,
+                temperature=0.3
+            )
+        )
         res = json.loads(response.text)
         
         # ==========================================
