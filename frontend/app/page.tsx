@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { 
   Upload, FileText, Loader2, AlertCircle, 
-  History, LogOut, ChevronDown, ChevronUp, RefreshCw, Globe
+  LogOut, ChevronDown, ChevronUp, RefreshCw, Globe,
+  Sparkles, Activity, TrendingUp, PieChart, Info, ClipboardList 
 } from "lucide-react";
 // 如果你的 Logo 放在 public/reibi_logo.png，可以使用 img 標籤或 next/image
 
 export default function SchumannHomePage() {
   const router = useRouter();
   const { session, logout, switchPlatform } = useAuth();
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
   
   const [file, setFile] = useState<File | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -67,7 +69,7 @@ export default function SchumannHomePage() {
       const data = await res.json();
 
       if (res.ok && data.status === "success") {
-        router.push(`/result?id=${data.record_id}`);
+        setAnalysisResult(data.ai_summary);
       } else {
         throw new Error(data.detail || "分析失敗，請檢查後端狀態");
       }
@@ -78,6 +80,20 @@ export default function SchumannHomePage() {
     }
   };
 
+  const RenderSection = ({ title, content, icon: Icon }: any) => {
+    if (!content) return null;
+    return (
+      <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <h3 className="text-lg font-bold text-[#2A5A3B] mb-3 flex items-center gap-2 border-b border-emerald-50 pb-2">
+          <Icon className="w-5 h-5" /> {title}
+        </h3>
+        <div className="text-slate-600 leading-relaxed whitespace-pre-wrap pl-7">
+          {content}
+        </div>
+      </div>
+    );
+  };
+  
   const handleSwitchPlatform = async () => {
     const success = await switchPlatform('sleep');
     if (success) {
@@ -281,8 +297,51 @@ export default function SchumannHomePage() {
                 )}
               </div>
             )}
+
+            {/* 🟢 核心新增：AI 深度分析結果顯示區 */}
+            {analysisResult && (
+              <div className="mt-10 p-8 md:p-10 bg-[#F8FAF9] border border-emerald-100 rounded-[2rem] shadow-sm">
+                <div className="flex items-center gap-3 mb-10">
+                  <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600">
+                    <Sparkles className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-800">AI 深度解析報告</h2>
+                    <p className="text-sm text-slate-500">基於您上傳的數據實時生成</p>
+                  </div>
+                </div>
+
+                {/* 根據 section 順序渲染 */}
+                <RenderSection title="心率變化分析" content={analysisResult.section_1} icon={Activity} />
+                <RenderSection title="心律變異 (SDNN) 分析" content={analysisResult.section_2} icon={TrendingUp} />
+                <RenderSection title="自律神經平衡狀態" icon={PieChart} content={analysisResult.section_3} />
+                <RenderSection title="天人合一指數與靈性分析" icon={Info} content={analysisResult.section_6} />
+                
+                {/* 生命之花區塊 (處理 Markdown 表格) */}
+                <div className="mb-8">
+                   <h3 className="text-lg font-bold text-[#2A5A3B] mb-3 flex items-center gap-2 border-b border-emerald-50 pb-2">
+                      <Sparkles className="w-5 h-5" /> 生命之花圖譜解析
+                   </h3>
+                   <div className="prose prose-sm max-w-none text-slate-600 pl-7 overflow-x-auto">
+                      {/* 這裡簡單處理，如果你有安裝 react-markdown 會更完美 */}
+                      <div className="whitespace-pre-wrap">{analysisResult.section_7}</div>
+                   </div>
+                </div>
+
+                <RenderSection title="整體修復建議" icon={ClipboardList} content={analysisResult.section_8} />
+                
+                <div className="mt-10 pt-6 border-t border-emerald-100 text-center">
+                   <p className="text-xs text-slate-400">報告已同步儲存至歷史紀錄中</p>
+                </div>
+              </div>
+            )}
+
+            {!pdfUrl && (
+              <div className="bg-[#F0F5FA] rounded-xl p-5 border border-transparent">
+                <p className="text-[#5174A8] font-medium text-[15px]">請從左側上傳您的分析報告開始。</p>
+              </div>
+            )}
           </div>
-          
         </div>
       </div>
     </div>

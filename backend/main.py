@@ -691,7 +691,8 @@ async def analyze_schumann_report(
         return {
             "status": "success", 
             "record_id": record_id, 
-            "report_url": f"/report/{record_id}" # 回傳一個假定的 URL 供前端跳轉
+            "report_url": f"/report/{record_id}",
+            "ai_summary": ai_summary_dict # 回傳一個假定的 URL 供前端跳轉
         }
 
     except Exception as e:
