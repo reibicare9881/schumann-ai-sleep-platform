@@ -968,21 +968,21 @@ async def http_exception_handler(request, exc):
 # 啟動應用
 # ==========================================
 
-if __name__ == "__main__":
-    import uvicorn
+# if __name__ == "__main__":
+#     import uvicorn
     
-    # 把它們全部換成 settings.xxx 的寫法
-    print("========================================")
-    print(f"🚀 伺服器啟動中...")
-    print(f"🌐 API 地址: http://{settings.api_host}:{settings.api_port}")
-    print(f"📖 Swagger 測試文件: http://{settings.api_host}:{settings.api_port}/docs")
-    print(f"🔒 CORS 允許前端: {settings.frontend_url}")
-    print("========================================")
+#     # 把它們全部換成 settings.xxx 的寫法
+#     print("========================================")
+#     print(f"🚀 伺服器啟動中...")
+#     print(f"🌐 API 地址: http://{settings.api_host}:{settings.api_port}")
+#     print(f"📖 Swagger 測試文件: http://{settings.api_host}:{settings.api_port}/docs")
+#     print(f"🔒 CORS 允許前端: {settings.frontend_url}")
+#     print("========================================")
     
-    # 注意這裡的 host, port 和 reload 也要改！
-    uvicorn.run(
-        "main:app", 
-        host=settings.api_host, 
-        port=settings.api_port, 
-        reload=settings.debug
-    )
+#     # 注意這裡的 host, port 和 reload 也要改！
+#     uvicorn.run(
+#         "main:app", 
+#         host=settings.api_host, 
+#         port=settings.api_port, 
+#         reload=settings.debug
+#     )
