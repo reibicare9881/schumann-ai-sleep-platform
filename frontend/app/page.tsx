@@ -11,6 +11,8 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { PDFDocument } from 'pdf-lib';
+import { toPng } from 'html-to-image'; 
+import { jsPDF } from 'jspdf';
 // 如果你的 Logo 放在 public/reibi_logo.png，可以使用 img 標籤或 next/image
 
 export default function SchumannHomePage() {
@@ -98,73 +100,100 @@ export default function SchumannHomePage() {
   };
 
   const handleDownloadPdf = async () => {
+    // 確保只在客戶端瀏覽器執行
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
     try {
         const element = document.getElementById('report-content');
         if (!element) return;
 
-        const html2pdfModule = (await import('html2pdf.js')) as any;
-        const html2pdf = html2pdfModule.default || html2pdfModule;
-        // 🟢 修正一：加上 as [number, number, number, number] 滿足 TypeScript 對 Tuple 的嚴格要求
-        // 或是直接寫 margin: 10 (如果四邊邊距一樣)
-        const opt = {
-            margin: [10, 10, 10, 10] as [number, number, number, number],
-            filename: 'text_report.pdf',
-            image: { type: 'jpeg' as const, quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true },
-            jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
-        };
-        
-        // 將畫面上的內容轉成 PDF (獲得 ArrayBuffer)
-        const textPdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
-        const textPdfArrayBuffer = await textPdfBlob.arrayBuffer();
+        // 🟢 1. 使用現代引擎 html-to-image 捕捉 DOM (完美支援 oklch 等所有最新 CSS)
+        // 將畫面轉成高畫質的去背圖片
+        const dataUrl = await toPng(element, { 
+            quality: 1, 
+            pixelRatio: 2, 
+            backgroundColor: '#ffffff' // 確保背景是純白，以免 PDF 變透明
+        });
 
-        // 建立一個全新的空白 PDF 來準備合併
+        // 🟢 2. 使用 jsPDF 製作「自動分頁」的 A4 文字報告
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        
+        // 讀取剛剛拍下的圖片，來計算它的實際高度比例
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise((resolve) => { img.onload = resolve; });
+
+        const imgRatio = img.height / img.width;
+        const imgHeightInMm = pdfWidth * imgRatio; // 計算在 A4 紙上的總長度
+
+        let heightLeft = imgHeightInMm;
+        let position = 0; // Y 軸繪製起點
+
+        // 繪製第一頁
+        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, imgHeightInMm);
+        heightLeft -= pdfHeight;
+
+        // 如果圖片比一張 A4 還長，自動新增下一頁並裁切繪製
+        while (heightLeft > 0) {
+            position = position - pdfHeight; // 將畫面向上位移一整頁
+            pdf.addPage();
+            pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, imgHeightInMm);
+            heightLeft -= pdfHeight;
+        }
+
+        // 將排版好的多頁 PDF 轉成二進制資料
+        const textPdfArrayBuffer = pdf.output('arraybuffer');
+
+        // 🟢 3. 使用 pdf-lib 將「原始儀器 PDF」與「文字報告 PDF」完美縫合
         const mergedPdf = await PDFDocument.create();
 
-        // 處理「第一頁：上傳的原檔 PDF」
-        let originalPdfBuffer = null;
-        if (file && file.name.toLowerCase().endsWith('.pdf')) {
-            originalPdfBuffer = await file.arrayBuffer();
-        } else if (analysisResult?.report_url) {
-            const res = await fetch(analysisResult.report_url);
-            originalPdfBuffer = await res.arrayBuffer();
+        // 處理原始 PDF (加上防護罩，即便原檔壞了也不會當機)
+        try {
+            let originalPdfBuffer = null;
+            if (file && file.name.toLowerCase().endsWith('.pdf')) {
+                originalPdfBuffer = await file.arrayBuffer();
+            } else if (analysisResult?.report_url && analysisResult.report_url.startsWith('http')) {
+                const res = await fetch(analysisResult.report_url);
+                if (res.ok) originalPdfBuffer = await res.arrayBuffer();
+            }
+
+            if (originalPdfBuffer) {
+                const originalPdf = await PDFDocument.load(originalPdfBuffer);
+                const copiedPages = await mergedPdf.copyPages(originalPdf, originalPdf.getPageIndices());
+                copiedPages.forEach((page) => mergedPdf.addPage(page));
+            }
+        } catch (origErr) {
+            console.warn("⚠️ 原始 PDF 處理失敗，將略過並僅輸出 AI 報告:", origErr);
         }
 
-        if (originalPdfBuffer) {
-            const originalPdf = await PDFDocument.load(originalPdfBuffer);
-            const copiedPages = await mergedPdf.copyPages(originalPdf, originalPdf.getPageIndices());
-            copiedPages.forEach((page) => mergedPdf.addPage(page));
-        }
-
-        // 處理「接下來的頁面：文字報告與生命之花表格」
+        // 處理剛剛產生的文字報告 PDF
         const textPdf = await PDFDocument.load(textPdfArrayBuffer);
         const textPages = await mergedPdf.copyPages(textPdf, textPdf.getPageIndices());
         textPages.forEach((page) => mergedPdf.addPage(page));
 
-        // 存檔並觸發下載
+        // 🟢 4. 存檔並自動下載
         const mergedPdfBytes = await mergedPdf.save();
-        
-        // 🟢 修正二：加上 as BlobPart，強制告訴 TypeScript 這個 Uint8Array 是可以作為 Blob 內容的
         const finalBlob = new Blob([mergedPdfBytes as BlobPart], { type: 'application/pdf' });
         
         const url = window.URL.createObjectURL(finalBlob);
         const link = document.createElement('a');
         link.href = url;
         
-        // 設定檔名格式
+        // 設定精美的專屬檔名
         const dateString = new Date().toISOString().split('T')[0].replace(/-/g, '');
-        link.download = `舒曼共振報告_${session?.name}_${dateString}.pdf`;
+        const userName = personalInfo?.name || "未知";
+        link.download = `舒曼共振報告_${userName}_${dateString}.pdf`;
         
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
 
-    } catch (error) {
-        console.error("PDF 下載錯誤:", error);
-        alert("PDF 產生失敗，請稍後再試。");
+    } catch (error: any) {
+        console.error("PDF 下載發生核心錯誤:", error);
+        alert(`PDF 產生失敗，請稍後再試。\n錯誤訊息: ${error.message || error}`);
     }
   };
   
