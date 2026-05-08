@@ -11,7 +11,6 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { PDFDocument } from 'pdf-lib';
-import html2pdf from 'html2pdf.js';
 // 如果你的 Logo 放在 public/reibi_logo.png，可以使用 img 標籤或 next/image
 
 export default function SchumannHomePage() {
@@ -99,10 +98,14 @@ export default function SchumannHomePage() {
   };
 
   const handleDownloadPdf = async () => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
     try {
         const element = document.getElementById('report-content');
         if (!element) return;
 
+        const html2pdfModule = (await import('html2pdf.js')) as any;
+        const html2pdf = html2pdfModule.default || html2pdfModule;
         // 🟢 修正一：加上 as [number, number, number, number] 滿足 TypeScript 對 Tuple 的嚴格要求
         // 或是直接寫 margin: 10 (如果四邊邊距一樣)
         const opt = {
