@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { PDFDocument } from 'pdf-lib';
+import html2pdf from 'html2pdf.js';
 // 如果你的 Logo 放在 public/reibi_logo.png，可以使用 img 標籤或 next/image
 
 export default function SchumannHomePage() {
@@ -98,32 +100,68 @@ export default function SchumannHomePage() {
 
   const handleDownloadPdf = async () => {
     try {
-      // 取得今天的日期格式 YYYYMMDD
-      const date = new Date();
-      const dateString = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}`;
-      const fileName = `舒曼共振報告_${personalInfo.name}_${dateString}.pdf`;
+        const element = document.getElementById('report-content');
+        if (!element) return;
 
-      // 呼叫後端產生/取得 PDF 的 API (請確認此 API 路徑與你的後端相符)
-      // 若後端回傳的是 PDF 檔案本身：
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await fetch(`${API_URL}/api/pdf/${analysisResult.record_id}`, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${session?.access_token}` }
-      });
+        // 🟢 修正一：加上 as [number, number, number, number] 滿足 TypeScript 對 Tuple 的嚴格要求
+        // 或是直接寫 margin: 10 (如果四邊邊距一樣)
+        const opt = {
+            margin: [10, 10, 10, 10] as [number, number, number, number],
+            filename: 'text_report.pdf',
+            image: { type: 'jpeg' as const, quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
+        };
+        
+        // 將畫面上的內容轉成 PDF (獲得 ArrayBuffer)
+        const textPdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
+        const textPdfArrayBuffer = await textPdfBlob.arrayBuffer();
 
-      if (!response.ok) throw new Error("下載失敗");
+        // 建立一個全新的空白 PDF 來準備合併
+        const mergedPdf = await PDFDocument.create();
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', fileName);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode?.removeChild(link);
+        // 處理「第一頁：上傳的原檔 PDF」
+        let originalPdfBuffer = null;
+        if (file && file.name.toLowerCase().endsWith('.pdf')) {
+            originalPdfBuffer = await file.arrayBuffer();
+        } else if (analysisResult?.report_url) {
+            const res = await fetch(analysisResult.report_url);
+            originalPdfBuffer = await res.arrayBuffer();
+        }
+
+        if (originalPdfBuffer) {
+            const originalPdf = await PDFDocument.load(originalPdfBuffer);
+            const copiedPages = await mergedPdf.copyPages(originalPdf, originalPdf.getPageIndices());
+            copiedPages.forEach((page) => mergedPdf.addPage(page));
+        }
+
+        // 處理「接下來的頁面：文字報告與生命之花表格」
+        const textPdf = await PDFDocument.load(textPdfArrayBuffer);
+        const textPages = await mergedPdf.copyPages(textPdf, textPdf.getPageIndices());
+        textPages.forEach((page) => mergedPdf.addPage(page));
+
+        // 存檔並觸發下載
+        const mergedPdfBytes = await mergedPdf.save();
+        
+        // 🟢 修正二：加上 as BlobPart，強制告訴 TypeScript 這個 Uint8Array 是可以作為 Blob 內容的
+        const finalBlob = new Blob([mergedPdfBytes as BlobPart], { type: 'application/pdf' });
+        
+        const url = window.URL.createObjectURL(finalBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        
+        // 設定檔名格式
+        const dateString = new Date().toISOString().split('T')[0].replace(/-/g, '');
+        link.download = `舒曼共振報告_${session?.name}_${dateString}.pdf`;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
     } catch (error) {
-      console.error("PDF 下載錯誤:", error);
-      alert("PDF 下載失敗，請稍後再試。");
+        console.error("PDF 下載錯誤:", error);
+        alert("PDF 產生失敗，請稍後再試。");
     }
   };
   
@@ -324,7 +362,7 @@ export default function SchumannHomePage() {
 
             {/* 🟢 核心修改：打造圖二的儀表板與 Markdown 渲染 */}
             {analysisResult && personalInfo && (
-              <div className="mt-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div id="report-content" className="mt-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 
                 {/* 1. 體驗者能量看板 (上方卡片區) */}
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-4">

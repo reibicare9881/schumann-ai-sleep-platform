@@ -23,6 +23,7 @@ import uuid
 import shutil
 import tempfile
 import os
+import time
 from fastapi import File, UploadFile, Form
 from passlib.context import CryptContext
 from google import genai
@@ -616,7 +617,22 @@ async def analyze_schumann_report(
         
         if extracted_name:
             parsed_data["Name"] = extracted_name
-
+        public_url = ""
+        try:
+            file_ext = file.filename.split('.')[-1].lower()
+            safe_name = f"report_{user_id}_{int(time.time())}.{file_ext}"
+            
+            with open(tmp_path, 'rb') as f:
+                file_bytes = f.read()
+                
+            supabase.storage.from_("reports").upload(
+                file=file_bytes,
+                path=safe_name,
+                file_options={"content-type": file.content_type}
+            )
+            public_url = supabase.storage.from_("reports").get_public_url(safe_name)
+        except Exception as e:
+            print(f"上傳至 Storage 失敗: {e}")
         # ... (下方保留你原本的「4. 呼叫 AI 撰寫深度解說報告」邏輯) ...
         try:
             ai_summary_dict = generate_ai_explanation(parsed_data, language=language)
@@ -679,7 +695,7 @@ async def analyze_schumann_report(
             
             # 其他
             "ai_summary": ai_summary_text, # 若有產生 AI 建議可寫入
-            "report_url": "" # 可後續擴充 PDF 儲存空間網址
+            "report_url": public_url
         }
 
         # 6. 寫入 Supabase 資料庫
