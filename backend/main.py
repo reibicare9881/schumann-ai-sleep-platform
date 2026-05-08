@@ -19,6 +19,11 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 from auth import create_access_token, get_current_user, require_admin
 from config import settings
+import fitz      # PyMuPDF
+import requests
+import tempfile
+import os
+from fastapi import Response
 import uuid
 import shutil
 import tempfile
@@ -28,29 +33,8 @@ from fastapi import File, UploadFile, Form
 from passlib.context import CryptContext
 from google import genai
 from google.genai import types
+from modules.pdf_generator_module import create_full_report_pdf
 from auth import create_access_token, get_current_user, require_admin, require_org_manager, require_member_or_above
-
-# ==========================================
-# 加載環境變數
-# ==========================================
-# load_dotenv()
-
-# API_HOST = os.getenv("API_HOST", "0.0.0.0")
-# API_PORT = int(os.getenv("API_PORT", 8000))
-# DEBUG = os.getenv("DEBUG", "True") == "True"
-# FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-
-# # 1. Supabase 連線設定
-# SUPABASE_URL = os.getenv("SUPABASE_URL")
-# SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-# # 2. JWT 簽章密鑰 (用於 auth.py 核發 Token)
-# JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-
-# # 3. Gemini AI 金鑰 (用於 analyzer 和 parser，取代原本當作參數傳遞的寫法)
-# GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-# backend/main.py
 
 app = FastAPI(
     title="統一多平台 API",
@@ -750,6 +734,68 @@ async def list_schumann_reports(
         "count": len(res.data) if res.data else 0,
         "reports": res.data if res.data else []
     }
+
+@app.get("/api/pdf/{record_id}")
+async def get_merged_pdf(record_id: str, current_user: dict = Depends(get_current_user)):
+    """
+    1. 從 Supabase 抓取分析紀錄
+    2. 產生 AI 文字/表格報告 PDF
+    3. 下載儲存在 Storage 的原始 PDF
+    4. 使用 PyMuPDF 縫合兩者並回傳
+    """
+    try:
+        # 1. 抓取資料庫紀錄
+        res = supabase.table("analysis_records").select("*").eq("id", record_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="找不到分析紀錄")
+        
+        record_data = res.data[0]
+        # 解析 AI 摘要內容 (原本存的是字串)
+        ai_summary_dict = json.loads(record_data.get("ai_summary", "{}"))
+        report_url = record_data.get("report_url")
+
+        # 2. 呼叫 generator 產生原生向量 PDF (報告部分)
+        # 注意：這裡我們暫時不傳入 uploaded_file，因為等一下要用 fitz 合併
+        pdf_report, success = create_full_report_pdf(ai_summary_dict, language="🇹🇼 繁體中文")
+        if not success:
+            raise HTTPException(status_code=500, detail="產生報告 PDF 失敗")
+
+        # 將 FPDF 產生的報告轉為 bytes
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            pdf_report.output(tmp.name)
+            with open(tmp.name, "rb") as f:
+                report_pdf_bytes = f.read()
+        os.remove(tmp.name)
+
+        # 3. 建立終極合併文件
+        final_pdf = fitz.open()
+
+        # 4. 核心縫合邏輯：先放「原始 PDF」
+        if report_url and report_url.startswith("http"):
+            try:
+                response = requests.get(report_url, timeout=10)
+                if response.status_code == 200:
+                    orig_doc = fitz.open(stream=response.content, filetype="pdf")
+                    final_pdf.insert_pdf(orig_doc)
+            except Exception as e:
+                print(f"⚠️ 下載或合併原始 PDF 失敗: {e}")
+
+        # 5. 再接上「AI 分析報告」
+        report_doc = fitz.open(stream=report_pdf_bytes, filetype="pdf")
+        final_pdf.insert_pdf(report_doc)
+
+        # 6. 回傳合併後的二進制檔案
+        return Response(
+            content=final_pdf.write(),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=Schumann_Report_{record_id}.pdf"
+            }
+        )
+
+    except Exception as e:
+        print(f"❌ PDF 處理發生錯誤: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"PDF 處理失敗: {str(e)}")
 
 @app.get("/api/schumann/reports/{report_id}")
 async def get_schumann_report(

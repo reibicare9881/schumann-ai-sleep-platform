@@ -100,88 +100,21 @@ export default function SchumannHomePage() {
   };
 
   const handleDownloadPdf = async () => {
-    // 確保只在客戶端瀏覽器執行
-    if (typeof window === 'undefined' || typeof document === 'undefined') return;
-
     try {
-        const element = document.getElementById('report-content');
-        if (!element) return;
-
-        // 🟢 1. 使用現代引擎 html-to-image 捕捉 DOM (完美支援 oklch 等所有最新 CSS)
-        // 將畫面轉成高畫質的去背圖片
-        const dataUrl = await toPng(element, { 
-            quality: 1, 
-            pixelRatio: 2, 
-            backgroundColor: '#ffffff' // 確保背景是純白，以免 PDF 變透明
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        // 直接呼叫後端產生完整 PDF 的 API
+        const response = await fetch(`${API_URL}/api/pdf/${analysisResult.record_id}`, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${session?.access_token}` }
         });
 
-        // 🟢 2. 使用 jsPDF 製作「自動分頁」的 A4 文字報告
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
-        
-        // 讀取剛剛拍下的圖片，來計算它的實際高度比例
-        const img = new Image();
-        img.src = dataUrl;
-        await new Promise((resolve) => { img.onload = resolve; });
+        if (!response.ok) throw new Error("下載失敗");
 
-        const imgRatio = img.height / img.width;
-        const imgHeightInMm = pdfWidth * imgRatio; // 計算在 A4 紙上的總長度
-
-        let heightLeft = imgHeightInMm;
-        let position = 0; // Y 軸繪製起點
-
-        // 繪製第一頁
-        pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, imgHeightInMm);
-        heightLeft -= pdfHeight;
-
-        // 如果圖片比一張 A4 還長，自動新增下一頁並裁切繪製
-        while (heightLeft > 0) {
-            position = position - pdfHeight; // 將畫面向上位移一整頁
-            pdf.addPage();
-            pdf.addImage(dataUrl, 'PNG', 0, position, pdfWidth, imgHeightInMm);
-            heightLeft -= pdfHeight;
-        }
-
-        // 將排版好的多頁 PDF 轉成二進制資料
-        const textPdfArrayBuffer = pdf.output('arraybuffer');
-
-        // 🟢 3. 使用 pdf-lib 將「原始儀器 PDF」與「文字報告 PDF」完美縫合
-        const mergedPdf = await PDFDocument.create();
-
-        // 處理原始 PDF (加上防護罩，即便原檔壞了也不會當機)
-        try {
-            let originalPdfBuffer = null;
-            if (file && file.name.toLowerCase().endsWith('.pdf')) {
-                originalPdfBuffer = await file.arrayBuffer();
-            } else if (analysisResult?.report_url && analysisResult.report_url.startsWith('http')) {
-                const res = await fetch(analysisResult.report_url);
-                if (res.ok) originalPdfBuffer = await res.arrayBuffer();
-            }
-
-            if (originalPdfBuffer) {
-                const originalPdf = await PDFDocument.load(originalPdfBuffer);
-                const copiedPages = await mergedPdf.copyPages(originalPdf, originalPdf.getPageIndices());
-                copiedPages.forEach((page) => mergedPdf.addPage(page));
-            }
-        } catch (origErr) {
-            console.warn("⚠️ 原始 PDF 處理失敗，將略過並僅輸出 AI 報告:", origErr);
-        }
-
-        // 處理剛剛產生的文字報告 PDF
-        const textPdf = await PDFDocument.load(textPdfArrayBuffer);
-        const textPages = await mergedPdf.copyPages(textPdf, textPdf.getPageIndices());
-        textPages.forEach((page) => mergedPdf.addPage(page));
-
-        // 🟢 4. 存檔並自動下載
-        const mergedPdfBytes = await mergedPdf.save();
-        const finalBlob = new Blob([mergedPdfBytes as BlobPart], { type: 'application/pdf' });
-        
-        const url = window.URL.createObjectURL(finalBlob);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
         
-        // 設定精美的專屬檔名
         const dateString = new Date().toISOString().split('T')[0].replace(/-/g, '');
         const userName = personalInfo?.name || "未知";
         link.download = `舒曼共振報告_${userName}_${dateString}.pdf`;
@@ -190,10 +123,9 @@ export default function SchumannHomePage() {
         link.click();
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-
-    } catch (error: any) {
-        console.error("PDF 下載發生核心錯誤:", error);
-        alert(`PDF 產生失敗，請稍後再試。\n錯誤訊息: ${error.message || error}`);
+    } catch (error) {
+        console.error("PDF 下載錯誤:", error);
+        alert("PDF 下載失敗，請稍後再試。");
     }
   };
   

@@ -121,9 +121,8 @@ def create_full_report_pdf(sections, uploaded_file=None, language="🇹🇼 繁�
         "section_8": "整體修復建議"
     }
 
-    # 🟢 修改：改用 .items() 遍歷字典，並自動抓取對應標題
+    # 改用 .items() 遍歷字典，並自動抓取對應標題
     for key, content in sections.items():
-        # 如果找不到對應標題，就預設叫 "分析報告"
         title = section_titles.get(key, "分析報告")
         
         pdf.set_font(font_name, '', 14)
@@ -132,7 +131,8 @@ def create_full_report_pdf(sections, uploaded_file=None, language="🇹🇼 繁�
         pdf.cell(0, 10, txt=f"  {title} ", align='L', fill=True, ln=True)
         pdf.ln(3)
         
-        clean_content = content.replace("**", "").replace("* ", "• ")
+        # 🟢 清除 Markdown 符號 (包含前一步驟加上的 ###)，確保排版邏輯正常
+        clean_content = content.replace("**", "").replace("* ", "• ").replace("### ", "")
         
         lines = clean_content.split('\n')
         for line in lines:
@@ -141,51 +141,81 @@ def create_full_report_pdf(sections, uploaded_file=None, language="🇹🇼 繁�
                 pdf.ln(2)
                 continue
                 
+            # 🟢 全新邏輯：原生繪製 Markdown 表格
             if line.startswith("|") and line.endswith("|"):
                 if "---" in line:
                     continue 
                     
                 cells = [c.strip() for c in line.strip("|").split("|")]
                 
-                # 同時檢查中文與英文的表頭關鍵字，日文的「色」也防禦到了
-                if len(cells) >= 2 and ("顏色" in cells[0] or "颜色" in cells[0] or "Color" in cells[0] or "色" in cells[0]):
-                    continue 
-                    
                 if len(cells) >= 5:
-                    color, wuxing, chakra, meaning, status = cells[:5]
+                    is_header = ("顏色" in cells[0] or "颜色" in cells[0] or "Color" in cells[0] or "色" in cells[0])
                     
-                    pdf.set_font( font_name, '', 12)
-                    pdf.set_text_color(42, 90, 59) 
-                    write_cjk_text(pdf, f"✦ {color} ({lbl_element}: {wuxing} / {lbl_chakra}: {chakra})", line_height=8)
+                    # 設定 5 個欄位的寬度 (總和 180，留左右邊距)
+                    widths = [20, 25, 20, 50, 65] 
+                    line_height = 6
                     
-                    pdf.set_font( font_name, '', 11)
-                    pdf.set_text_color(60, 60, 60)
-                    write_cjk_text(pdf, f"  ▸ {lbl_meaning}: {meaning}", line_height=6)
-                    write_cjk_text(pdf, f"  ▸ {lbl_status}: {status}", line_height=6)
-                    pdf.ln(2)
+                    # 防呆：如果快到底部了就自動換頁，避免表格被切斷
+                    if pdf.get_y() > 255:
+                        pdf.add_page()
+                        
+                    start_y = pdf.get_y()
+                    margin_x = pdf.get_x()
+                    max_y = start_y
+                    
+                    # 第一階段：印出文字，並偵測最高的那一格需要多高
+                    curr_x = margin_x
+                    for i, text in enumerate(cells[:5]):
+                        pdf.set_xy(curr_x, start_y)
+                        if is_header:
+                            pdf.set_font(font_name, '', 11)
+                            pdf.set_text_color(42, 90, 59) # 表頭綠色
+                        else:
+                            pdf.set_font(font_name, '', 10)
+                            pdf.set_text_color(0, 0, 0)    # 內文黑色
+                            
+                        # multi_cell 會自動處理文字太長換行的問題
+                        pdf.multi_cell(widths[i], line_height, text, border=0, align='L')
+                        if pdf.get_y() > max_y:
+                            max_y = pdf.get_y()
+                        curr_x += widths[i]
+                    
+                    # 第二階段：畫出對齊的格子框線
+                    curr_x = margin_x
+                    for i in range(5):
+                        pdf.rect(curr_x, start_y, widths[i], max_y - start_y)
+                        curr_x += widths[i]
+                        
+                    # 將指標移到這列最下方，準備畫下一列
+                    pdf.set_y(max_y)
                 else:
-                    pdf.set_font( font_name, '', 11)
+                    # 如果不是剛好五欄的表格，就用普通文字印出
+                    pdf.set_font(font_name, '', 11)
                     pdf.set_text_color(0, 0, 0)
                     write_cjk_text(pdf, " | ".join(cells), line_height=6)
                 continue
             
+            # 原有的綠色小標題邏輯
             if line.startswith("【") and "】" in line:
                 end_idx = line.find("】") + 1
                 title_part = line[:end_idx]
                 rest_part = line[end_idx:].strip()
                 
-                pdf.set_font( font_name, '', 13)
+                pdf.set_font(font_name, '', 13)
                 pdf.set_text_color(42, 90, 59) 
                 write_cjk_text(pdf, title_part, line_height=8)
                 
                 if rest_part:
-                    pdf.set_font( font_name, '', 12)
+                    pdf.set_font(font_name, '', 12)
                     pdf.set_text_color(0, 0, 0)
                     write_cjk_text(pdf, rest_part, line_height=7)
             
+            # 一般內文
             else:
-                pdf.set_font( font_name, '', 12)
+                pdf.set_font(font_name, '', 12)
                 pdf.set_text_color(0, 0, 0)
                 write_cjk_text(pdf, line, line_height=7)
 
         pdf.ln(5)
+        
+    return pdf, True
