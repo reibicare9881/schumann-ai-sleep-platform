@@ -6,8 +6,10 @@ import { useAuth } from "@/components/AuthProvider";
 import { 
   Upload, FileText, Loader2, AlertCircle, 
   LogOut, ChevronDown, ChevronUp, RefreshCw, Globe,
-  Sparkles, Activity, TrendingUp, PieChart, Info, ClipboardList 
+  Sparkles, Activity, TrendingUp, User
 } from "lucide-react";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 // 如果你的 Logo 放在 public/reibi_logo.png，可以使用 img 標籤或 next/image
 
 export default function SchumannHomePage() {
@@ -15,6 +17,9 @@ export default function SchumannHomePage() {
   const { session, logout, switchPlatform } = useAuth();
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   
+  const [personalInfo, setPersonalInfo] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState("section_1");
+
   const [file, setFile] = useState<File | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -70,6 +75,8 @@ export default function SchumannHomePage() {
 
       if (res.ok && data.status === "success") {
         setAnalysisResult(data.ai_summary);
+        setPersonalInfo(data.personal_info);
+        setActiveTab("section_1");
       } else {
         throw new Error(data.detail || "分析失敗，請檢查後端狀態");
       }
@@ -78,20 +85,6 @@ export default function SchumannHomePage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const RenderSection = ({ title, content, icon: Icon }: any) => {
-    if (!content) return null;
-    return (
-      <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <h3 className="text-lg font-bold text-[#2A5A3B] mb-3 flex items-center gap-2 border-b border-emerald-50 pb-2">
-          <Icon className="w-5 h-5" /> {title}
-        </h3>
-        <div className="text-slate-600 leading-relaxed whitespace-pre-wrap pl-7">
-          {content}
-        </div>
-      </div>
-    );
   };
   
   const handleSwitchPlatform = async () => {
@@ -298,39 +291,92 @@ export default function SchumannHomePage() {
               </div>
             )}
 
-            {/* 🟢 核心新增：AI 深度分析結果顯示區 */}
-            {analysisResult && (
-              <div className="mt-10 p-8 md:p-10 bg-[#F8FAF9] border border-emerald-100 rounded-[2rem] shadow-sm">
-                <div className="flex items-center gap-3 mb-10">
-                  <div className="w-12 h-12 bg-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600">
-                    <Sparkles className="w-6 h-6 animate-pulse" />
+            {/* 🟢 核心修改：打造圖二的儀表板與 Markdown 渲染 */}
+            {analysisResult && personalInfo && (
+              <div className="mt-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                
+                {/* 1. 體驗者能量看板 (上方卡片區) */}
+                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-4">
+                  <User className="w-6 h-6 text-indigo-700" /> 體驗者能量看板
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+                  <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                    <div className="text-xs font-bold text-slate-500 mb-1">姓名</div>
+                    <div className="text-2xl font-black text-slate-800 truncate">{personalInfo.name}</div>
                   </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-slate-800">AI 深度解析報告</h2>
-                    <p className="text-sm text-slate-500">基於您上傳的數據實時生成</p>
+                  <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                    <div className="text-xs font-bold text-slate-500 mb-1">性別</div>
+                    <div className="text-2xl font-black text-slate-800">{personalInfo.gender}</div>
+                  </div>
+                  <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                    <div className="text-xs font-bold text-slate-500 mb-1">年齡</div>
+                    <div className="text-2xl font-black text-slate-800">{personalInfo.age} <span className="text-sm">歲</span></div>
+                  </div>
+                  <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+                    <div className="text-xs font-bold text-slate-500 mb-1">體驗日期</div>
+                    <div className="text-lg font-black text-slate-800 mt-1">{personalInfo.date}</div>
                   </div>
                 </div>
 
-                {/* 根據 section 順序渲染 */}
-                <RenderSection title="心率變化分析" content={analysisResult.section_1} icon={Activity} />
-                <RenderSection title="心律變異 (SDNN) 分析" content={analysisResult.section_2} icon={TrendingUp} />
-                <RenderSection title="自律神經平衡狀態" icon={PieChart} content={analysisResult.section_3} />
-                <RenderSection title="天人合一指數與靈性分析" icon={Info} content={analysisResult.section_6} />
+                {/* 2. 深度 AI 能量解讀 (頁籤與內容區) */}
+                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-4">
+                  <TrendingUp className="w-6 h-6 text-emerald-600" /> 深度 AI 能量解讀
+                </h3>
                 
-                {/* 生命之花區塊 (處理 Markdown 表格) */}
-                <div className="mb-8">
-                   <h3 className="text-lg font-bold text-[#2A5A3B] mb-3 flex items-center gap-2 border-b border-emerald-50 pb-2">
-                      <Sparkles className="w-5 h-5" /> 生命之花圖譜解析
-                   </h3>
-                   <div className="prose prose-sm max-w-none text-slate-600 pl-7 overflow-x-auto">
-                      {/* 這裡簡單處理，如果你有安裝 react-markdown 會更完美 */}
-                      <div className="whitespace-pre-wrap">{analysisResult.section_7}</div>
-                   </div>
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                  {/* 頁籤列 */}
+                  <div className="flex overflow-x-auto border-b border-slate-200 bg-slate-50 hide-scrollbar">
+                    {[
+                      { id: "section_1", label: "心率變化分析" },
+                      { id: "section_2", label: "心律變異 (SDNN)" },
+                      { id: "section_3", label: "自律神經平衡" },
+                      { id: "section_4", label: "動態象限解析" },
+                      { id: "section_5", label: "陰陽能量比例" },
+                      { id: "section_6", label: "天人合一指數" },
+                      { id: "section_7", label: "生命之花圖譜" },
+                      { id: "section_8", label: "整體修復建議" },
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`whitespace-nowrap px-6 py-4 text-sm font-bold transition-colors border-b-2 ${
+                          activeTab === tab.id 
+                            ? 'border-emerald-600 text-emerald-700 bg-white' 
+                            : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-100/50'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Markdown 內容渲染區 */}
+                  <div className="p-6 md:p-8 bg-white min-h-[300px]">
+                    <div className="prose max-w-none text-slate-700 leading-relaxed">
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          // 客製化表格樣式，讓它超級專業
+                          table: ({node, ...props}) => <div className="overflow-x-auto my-6"><table className="w-full border-collapse border border-slate-200 text-sm" {...props} /></div>,
+                          thead: ({node, ...props}) => <thead className="bg-emerald-50 text-emerald-800" {...props} />,
+                          th: ({node, ...props}) => <th className="border border-slate-200 px-4 py-3 font-bold text-left whitespace-nowrap" {...props} />,
+                          td: ({node, ...props}) => <td className="border border-slate-200 px-4 py-3 align-top" {...props} />,
+                          // 美化段落與標題
+                          p: ({node, ...props}) => <p className="mb-4 text-slate-600" {...props} />,
+                          h1: ({node, ...props}) => <h1 className="text-xl font-bold text-emerald-800 mb-4 mt-6" {...props} />,
+                          h2: ({node, ...props}) => <h2 className="text-lg font-bold text-emerald-800 mb-3 mt-5" {...props} />,
+                          h3: ({node, ...props}) => <h3 className="text-base font-bold text-emerald-700 mb-2 mt-4" {...props} />,
+                          ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-4 space-y-1 text-slate-600" {...props} />,
+                          strong: ({node, ...props}) => <strong className="font-bold text-slate-800" {...props} />
+                        }}
+                      >
+                        {analysisResult[activeTab]}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
                 </div>
 
-                <RenderSection title="整體修復建議" icon={ClipboardList} content={analysisResult.section_8} />
-                
-                <div className="mt-10 pt-6 border-t border-emerald-100 text-center">
+                <div className="mt-6 text-center">
                    <p className="text-xs text-slate-400">報告已同步儲存至歷史紀錄中</p>
                 </div>
               </div>

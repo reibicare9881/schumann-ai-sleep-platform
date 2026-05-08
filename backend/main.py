@@ -694,7 +694,13 @@ async def analyze_schumann_report(
             "status": "success", 
             "record_id": record_id, 
             "report_url": f"/report/{record_id}",
-            "ai_summary": ai_summary_dict # 回傳一個假定的 URL 供前端跳轉
+            "ai_summary": ai_summary_dict,
+            "personal_info": {
+                "name": str(parsed_data.get("Name", "未知")),
+                "gender": str(parsed_data.get("Gender", "未知")),
+                "age": str(parsed_data.get("Age", "未知")),
+                "date": str(parsed_data.get("Experience_Date", "未知"))
+            }
         }
 
     except Exception as e:
