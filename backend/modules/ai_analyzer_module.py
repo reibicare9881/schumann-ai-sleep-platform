@@ -153,7 +153,7 @@ def generate_ai_explanation(data, language="🇹🇼 繁體中文"):
     1. 絕對誠實客觀：解讀數據時，必須完全遵照括號內的「系統判定」為主，不可自行美化警告訊息，若遇到任何數據缺失、空白或顯示 None，請溫和地說明「該項目可能未被成功記錄，我們將從其他數據為您分析」，絕對禁止捏造數據。
     2. 動態數據變化解讀指南 ：
        - 必須具體寫出「體驗前」與「體驗後」的數值變化。
-       - 心率變化：下降代表體驗過程中獲得放鬆；若有最低心率也可帶入，強調深度休息。
+       - 心率變化：下降代表體驗過程中獲得放鬆；若有最低心率也可帶入，強調深度休息，並說明在體驗過程中SDNN數值有沒有接近或低於20。
        - SDNN 變化：必須讀取體驗者的「年齡」，並根據以下【SDNN 年齡常模表】找出其對應的健康標準區間：
          * 0-10歲：60~80ms
          * 11-20歲：50~60ms
@@ -167,7 +167,7 @@ def generate_ai_explanation(data, language="🇹🇼 繁體中文"):
        - 寫作邏輯：請先寫出體驗前後的 SDNN 數值變化。接著，明確告訴體驗者「以您的年齡來說，正常的標準區間大約落在 X~Y 之間」，並說明在體驗過程中SDNN數值有沒有接近或低於20。
        - 評估與結合：將體驗者的數值與該年齡標準進行比對。如果低於標準，請結合系統判定的警告，溫和提醒其心臟抗壓彈性較弱、可能承受較大壓力；若在標準內或高於標準，請給予肯定。
     3. 自律神經 (LF/HF圖表) 解讀指南：
-       - 說明自律神經佔神經系統九成，受外在環境與情緒影響，人體無法自主控制。
+       - 以簡短精煉文字說明自律神經佔神經系統九成，受外在環境與情緒影響，人體無法自主控制。
        - 紅線(交感)：代表活動力、行動力、樂觀度。
        - 藍線(副交感)：代表修復能力。若過於旺盛代表身體「偏累」。
        - 綠線：代表天人合一指數的即時波動，可輔助觀察靈性與免疫能量的穩定度。
@@ -272,50 +272,51 @@ def generate_ai_explanation(data, language="🇹🇼 繁體中文"):
         
         # 適用於第 1、3 段
         def build_std_sec(data: dict) -> str:
-            return f"【指標意義】\n:{data.get('indicator_meaning', '')}\n\n【您的數據】\n:{data.get('your_data', '')}\n\n【綜合解析】\n:{data.get('comprehensive_analysis', '')}"
+            return f"### 【指標意義】\n\n{data.get('indicator_meaning', '')}\n\n### 【您的數據】\n\n{data.get('your_data', '')}\n\n### 【綜合解析】\n\n{data.get('comprehensive_analysis', '')}"
 
         # 🟢 適用於第 2 段 (加入【年齡標準】)
         def build_sdnn_sec(data: dict) -> str:
-            return f"【指標意義】\n:{data.get('indicator_meaning', '')}\n\n【您的數據】\n:{data.get('your_data', '')}\n\n【年齡標準】\n:{data.get('age_standard', '')}\n\n【綜合解析】\n:{data.get('comprehensive_analysis', '')}"
+            return f"### 【指標意義】\n\n{data.get('indicator_meaning', '')}\n\n### 【您的數據】\n\n{data.get('your_data', '')}\n\n### 【年齡標準】\n\n{data.get('age_standard', '')}\n\n### 【綜合解析】\n\n{data.get('comprehensive_analysis', '')}"
 
         # 🟢 適用於第 4 段 (將數據替換為【您的軌跡】)
         def build_quadrant_sec(data: dict) -> str:
-            return f"【指標意義】\n:{data.get('indicator_meaning', '')}\n\n【您的軌跡】\n:{data.get('your_trajectory', '')}\n\n【綜合解析】\n:{data.get('comprehensive_analysis', '')}"
+            return f"### 【指標意義】\n\n{data.get('indicator_meaning', '')}\n\n### 【您的軌跡】\n\n{data.get('your_trajectory', '')}\n\n### 【綜合解析】\n\n{data.get('comprehensive_analysis', '')}"
 
         # 🟢 適用於第 5 段 (加入【性別標準】)
         def build_yinyang_sec(data: dict) -> str:
-            return f"【指標意義】\n:{data.get('indicator_meaning', '')}\n\n【您的數據】\n:{data.get('your_data', '')}\n\n【性別標準】\n:{data.get('gender_standard', '')}\n\n【綜合解析】\n:{data.get('comprehensive_analysis', '')}"
+            return f"### 【指標意義】\n\n{data.get('indicator_meaning', '')}\n\n### 【您的數據】\n\n{data.get('your_data', '')}\n\n### 【性別標準】\n\n{data.get('gender_standard', '')}\n\n### 【綜合解析】\n\n{data.get('comprehensive_analysis', '')}"
 
         # 第 6 段：靈性分析
         s6 = res.get('sec_6', {})
-        sec_6_str = f"【指標意義】\n:{s6.get('indicator_meaning', '')}\n\n【您的數據】\n:{s6.get('your_data', '')}\n\n【內隱階段說明】\n:{s6.get('implicit_desc', '')}\n\n【心境解析】\n:{s6.get('mind_analysis', '')}\n\n【外顯特徵】\n:{s6.get('explicit_traits', '')}"
+        sec_6_str = f"### 【指標意義】\n\n{s6.get('indicator_meaning', '')}\n\n### 【您的數據】\n\n{s6.get('your_data', '')}\n\n### 【內隱階段說明】\n\n{s6.get('implicit_desc', '')}\n\n### 【心境解析】\n\n{s6.get('mind_analysis', '')}\n\n### 【外顯特徵】\n\n{s6.get('explicit_traits', '')}"
 
-        # 第 7 段：生命之花
+        # 第 7 段：生命之花 (完美修復斷行與表格)
         s7 = res.get('sec_7', {})
-        sec_7_parts = [
-            f"【圖譜意義與視覺特徵】\n:{s7.get('visual_features', '')}",
-            f"【空間與結構解析】\n:{s7.get('space_structure', '')}",
-            "\n【五行與脈輪分析】\n| 顏色 | 對應五行 | 脈輪 | 含意 | 狀態說明 |",
-            "|---|---|---|---|---|"
-        ]
+        sec_7_str = (
+            f"### 【圖譜意義與視覺特徵】\n\n{s7.get('visual_features', '')}\n\n"
+            f"### 【空間與結構解析】\n\n{s7.get('space_structure', '')}\n\n"
+            f"### 【五行與脈輪分析】\n\n"
+            f"| 顏色 | 對應五行 | 脈輪 | 含意 | 狀態說明 |\n"
+            f"|---|---|---|---|---|\n"
+        )
         
+        table_rows = []
         for item in s7.get('chakra_analysis', []):
             color = item.get('color_name', '').replace('|', '｜')
             wuxing = item.get('wuxing', '').replace('|', '｜')
             chakra = item.get('chakra', '').replace('|', '｜')
             meaning = item.get('meaning', '').replace('|', '｜')
             status = item.get('status', '').replace('|', '｜')
+            table_rows.append(f"| {color} | {wuxing} | {chakra} | {meaning} | {status} |")
             
-            sec_7_parts.append(f"| {color} | {wuxing} | {chakra} | {meaning} | {status} |")
-            
-        sec_7_str = "\n".join(sec_7_parts) # 生命之花表格內距不用兩次換行
+        sec_7_str += "\n".join(table_rows)
         
         # 第 8 段：整體修復建議
         s8 = res.get('sec_8', {})
         sec_8_parts = []
         for item in s8.get('items', []):
-            sec_8_parts.append(f"【{item.get('title', '')}】:{item.get('content', '')}")
-        sec_8_parts.append(f"\n{s8.get('blessing', '')}")
+            sec_8_parts.append(f"### 【{item.get('title', '')}】\n\n{item.get('content', '')}")
+        sec_8_parts.append(f"\n\n**{s8.get('blessing', '')}**")
         sec_8_str = "\n\n".join(sec_8_parts)
 
         # 輸出最終字典，精準綁定對應的組裝函式

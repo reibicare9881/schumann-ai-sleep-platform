@@ -6,7 +6,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { 
   Upload, FileText, Loader2, AlertCircle, 
   LogOut, ChevronDown, ChevronUp, RefreshCw, Globe,
-  Sparkles, Activity, TrendingUp, User
+  Download, TrendingUp, User
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -96,6 +96,37 @@ export default function SchumannHomePage() {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    try {
+      // 取得今天的日期格式 YYYYMMDD
+      const date = new Date();
+      const dateString = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}`;
+      const fileName = `舒曼共振報告_${personalInfo.name}_${dateString}.pdf`;
+
+      // 呼叫後端產生/取得 PDF 的 API (請確認此 API 路徑與你的後端相符)
+      // 若後端回傳的是 PDF 檔案本身：
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await fetch(`${API_URL}/api/pdf/${analysisResult.record_id}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${session?.access_token}` }
+      });
+
+      if (!response.ok) throw new Error("下載失敗");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    } catch (error) {
+      console.error("PDF 下載錯誤:", error);
+      alert("PDF 下載失敗，請稍後再試。");
+    }
+  };
+  
   if (!session) return null;
 
   return (
@@ -322,6 +353,12 @@ export default function SchumannHomePage() {
                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-4">
                   <TrendingUp className="w-6 h-6 text-emerald-600" /> 深度 AI 能量解讀
                 </h3>
+                <button 
+                    onClick={handleDownloadPdf}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm shadow-sm"
+                  >
+                    <Download className="w-4 h-4" /> 下載 PDF 報告
+                  </button>
                 
                 <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
                   {/* 頁籤列 */}
@@ -361,13 +398,21 @@ export default function SchumannHomePage() {
                           thead: ({node, ...props}) => <thead className="bg-emerald-50 text-emerald-800" {...props} />,
                           th: ({node, ...props}) => <th className="border border-slate-200 px-4 py-3 font-bold text-left whitespace-nowrap" {...props} />,
                           td: ({node, ...props}) => <td className="border border-slate-200 px-4 py-3 align-top" {...props} />,
-                          // 美化段落與標題
-                          p: ({node, ...props}) => <p className="mb-4 text-slate-600" {...props} />,
+                          
+                          // 🟢 內文設定為純黑色 (text-black)，並稍微增加行距讓閱讀更舒適
+                          p: ({node, ...props}) => <p className="mb-4 text-black leading-relaxed" {...props} />,
+                          
                           h1: ({node, ...props}) => <h1 className="text-xl font-bold text-emerald-800 mb-4 mt-6" {...props} />,
                           h2: ({node, ...props}) => <h2 className="text-lg font-bold text-emerald-800 mb-3 mt-5" {...props} />,
-                          h3: ({node, ...props}) => <h3 className="text-base font-bold text-emerald-700 mb-2 mt-4" {...props} />,
-                          ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-4 space-y-1 text-slate-600" {...props} />,
-                          strong: ({node, ...props}) => <strong className="font-bold text-slate-800" {...props} />
+                          
+                          // 🟢 h3 標題設定為稍大的綠色粗體 (text-lg, text-emerald-700)
+                          h3: ({node, ...props}) => <h3 className="text-lg font-bold text-emerald-700 mb-2 mt-6" {...props} />,
+                          
+                          // 🟢 列表項目也同步設定為黑色
+                          ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-4 space-y-1 text-black" {...props} />,
+                          
+                          // 🟢 強調字體設定為純黑粗體
+                          strong: ({node, ...props}) => <strong className="font-bold text-black" {...props} />
                         }}
                       >
                         {analysisResult[activeTab]}
