@@ -381,12 +381,6 @@ export default function SchumannHomePage() {
                 </div>
               </div>
             )}
-
-            {!pdfUrl && (
-              <div className="bg-[#F0F5FA] rounded-xl p-5 border border-transparent">
-                <p className="text-[#5174A8] font-medium text-[15px]">請從左側上傳您的分析報告開始。</p>
-              </div>
-            )}
           </div>
         </div>
       </div>
