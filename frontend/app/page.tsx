@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import API from "@/lib/api";
+import html2pdf from "html2pdf.js";
 import { PDFDocument } from 'pdf-lib';
 import { toPng } from 'html-to-image'; 
 import { jsPDF } from 'jspdf';
@@ -65,23 +67,19 @@ export default function SchumannHomePage() {
     formData.append("language", language); 
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const res = await fetch(`${API_URL}/api/analyze`, {
+      // 1. 使用 API.request<any> 避開型別檢查，並利用 responseData 避開命名衝突
+      const responseData = (await API.request<any>('/api/analyze', {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`
-        },
         body: formData,
-      });
+      })) as any;
 
-      const data = await res.json();
-
-      if (res.ok && data.status === "success") {
-        setAnalysisResult(data.ai_summary);
-        setPersonalInfo(data.personal_info);
+      // 2. API.request 內部已處理 JSON 解析與報錯，直接判斷 status
+      if (responseData.status === "success") {
+        setAnalysisResult(responseData.ai_summary);
+        setPersonalInfo(responseData.personal_info);
         setActiveTab("section_1");
       } else {
-        throw new Error(data.detail || "分析失敗，請檢查後端狀態");
+        throw new Error(responseData.detail || "分析失敗，請檢查後端狀態");
       }
     } catch (err: any) {
       setError(err.message);

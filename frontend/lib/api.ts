@@ -226,10 +226,6 @@ export const API = {
     return response;
   },
   
-  async getUserPlatforms(userId: string) {
-    return this.request(`/api/auth/user-platforms/${userId}`);
-  },
-  
   // ==========================================
   // 睡眠平台 API
   // ==========================================
@@ -263,11 +259,6 @@ export const API = {
   // 獲取睡眠分析
   async getSleepAnalysis(userId: string) {
     return this.request(`/api/sleep/analysis/${userId}`);
-  },
-  
-  // 獲取 KPI
-  async getOrgKPI(orgCode: string) {
-    return this.request(`/api/sleep/kpi/${orgCode}`);
   },
 
   async getOrgSettings(orgCode: string) {
@@ -341,21 +332,13 @@ export const API = {
     return this.request(`/api/schumann/reports/${reportId}`);
   },
   
-  // 上傳舒曼報告
-  async uploadSchumannReport(userId: string, data: Record<string, any>) {
-    return this.request('/api/schumann/upload', {
-      method: 'POST',
-      query: { user_id: userId },
-      body: JSON.stringify(data)
-    });
-  },
   
   // ==========================================
   // 通用方法
   // ==========================================
   
   async getHealth() {
-    return this.request('/api/health');
+    return this.request('/');
   },
 };
 

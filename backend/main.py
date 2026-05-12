@@ -66,15 +66,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 3. 測試一下大管家有沒有正常工作
-@app.get("/")
-async def root():
-    return {
-        "message": "API 伺服器正常運作中",
-        "debug_mode": settings.debug,
-        "frontend_allowed": settings.frontend_url
-    }
-
 # 建立密碼加密上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -183,14 +174,6 @@ def health_check():
         "timestamp": datetime.now().isoformat()
     }
 
-@app.get("/api/health")
-def api_health():
-    """API 健康檢查"""
-    return {
-        "status": "healthy",
-        "api_url": f"http://{settings.api_host}:{settings.api_port}"
-    }
-
 @app.get("/api/platforms")
 def list_platforms():
     """獲取可用平台列表"""
@@ -255,12 +238,16 @@ async def unified_login(request: LoginRequest):
                 "id": str(uuid.uuid4()),
                 "full_name": request.name, 
                 "system_role": "individual"
-                # 注意：如果你的 profiles 表的 id 是綁定 auth.users 的，
-                # 這裡可能需要先插入 auth.users，或者拔除 profiles 的 FK 限制。
-                # 簡單起見，這裡假設你的 profiles id 可以由資料庫自動產生 (gen_random_uuid)
             }
-            insert_res = supabase.table("profiles").insert(new_user).execute()
-            user_data = insert_res.data[0]
+            # 🛡️ 加入防呆攔截，避免 Foreign Key 報錯導致伺服器崩潰
+            try:
+                insert_res = supabase.table("profiles").insert(new_user).execute()
+                user_data = insert_res.data[0]
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500, 
+                    detail="無法建立使用者。請確認 Supabase 中 profiles 資料表已解除對 auth.users 的外鍵 (Foreign Key) 限制。"
+                )
         else:
             user_data = response.data[0]
 
@@ -314,8 +301,15 @@ async def unified_login(request: LoginRequest):
                 "system_role": request.role,
                 "org_code": org_code
             }
-            insert_res = supabase.table("profiles").insert(new_user).execute()
-            user_data = insert_res.data[0]
+            # 🛡️ 加入防呆攔截，避免 Foreign Key 報錯導致伺服器崩潰
+            try:
+                insert_res = supabase.table("profiles").insert(new_user).execute()
+                user_data = insert_res.data[0]
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500, 
+                    detail="無法建立單位成員。請確認 Supabase 中 profiles 資料表已解除對 auth.users 的外鍵 (Foreign Key) 限制。"
+                )
         else:
             user_data = user_res.data[0]
 
@@ -351,13 +345,6 @@ async def unified_login(request: LoginRequest):
         "access_token": access_token,
         "message": f"{platform} 平台登入成功"
     }
-
-@app.post("/api/auth/logout")
-async def logout(session_id: str, platform: str):
-    """登出 (JWT 無狀態機制)"""
-    # JWT 登出主要由前端清除 LocalStorage 來實現
-    # 後端收到通知僅回傳成功即可
-    return {"status": "success", "message": "已登出"}
 
 @app.post("/api/auth/switch-platform")
 async def switch_platform(
@@ -827,14 +814,6 @@ async def get_schumann_report(
 # 睡眠平台 API (/api/sleep/*)
 # ==========================================
 
-@app.get("/api/sleep/health")
-async def sleep_health():
-    """睡眠平台健康檢查"""
-    return {
-        "platform": "sleep",
-        "status": "healthy",
-        "features": ["睡眠評估", "疼痛管理", "工作效率", "KPI統計", "OKR管理"]
-    }
 
 @app.post("/api/sleep/assessment", status_code=201)
 async def submit_sleep_assessment(
