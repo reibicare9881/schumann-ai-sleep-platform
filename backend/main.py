@@ -699,6 +699,53 @@ async def analyze_schumann_report(
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
 
+@app.get("/api/schumann/trend/{user_id}")
+async def get_schumann_trend(user_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        # 1. 確保只能看自己的，或是管理員/主管才能看別人的 (權限防護)
+        if current_user["system_role"] == "individual" and current_user["id"] != user_id:
+            raise HTTPException(status_code=403, detail="權限不足")
+
+        # 2. 從 Supabase 撈取該使用者的所有舒曼紀錄，並按時間排序 (舊到新)
+        res = supabase.table("records") \
+            .select("created_at, ai_summary") \
+            .eq("user_id", user_id) \
+            .eq("platform", "schumann") \
+            .order("created_at") \
+            .execute()
+        
+        records = res.data
+        if not records:
+            return {"status": "success", "data": [], "message": "尚無歷史紀錄"}
+
+        # 3. 整理成前端圖表好渲染的陣列格式
+        trend_data = []
+        for record in records:
+            # 假設您的 ai_summary 裡面有這些萃取好的數值 (請依您實際的 JSON key 調整)
+            summary = record.get("ai_summary", {})
+            date_str = record["created_at"][:10] # 取 YYYY-MM-DD
+            
+            trend_data.append({
+                "date": date_str,
+                "sdnn": summary.get("sdnn", 0), # 自律神經整體活性
+                "lf_hf_ratio": summary.get("lf_hf_ratio", 0), # 交感/副交感平衡
+                "vitality_score": summary.get("vitality_score", 0) # 綜合活力指數
+            })
+
+        # 4. 計算結論 (例如：最新一次比起第一次是否進步)
+        is_improving = False
+        if len(trend_data) > 1:
+            is_improving = trend_data[-1]["sdnn"] > trend_data[0]["sdnn"]
+
+        return {
+            "status": "success", 
+            "data": trend_data,
+            "trend_summary": "improving" if is_improving else "needs_attention"
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/schumann/reports")
 async def list_schumann_reports(
     user_id: str,
@@ -995,6 +1042,28 @@ async def get_sleep_analysis(
         "analysis": analysis,
         "reports": reports
     }
+
+# ==========================================
+# 歷史紀錄整合 API
+# ==========================================
+@app.get("/api/history/{user_id}")
+async def get_user_history(user_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        # 權限防護：個人用戶只能看自己的，管理員/主管可以看轄下員工的
+        if current_user["system_role"] == "individual" and current_user["id"] != user_id:
+            raise HTTPException(status_code=403, detail="權限不足，無法存取他人歷史紀錄")
+
+        # 從 Supabase 撈取該使用者的所有紀錄，不分平台，依時間由新到舊排序
+        res = supabase.table("records") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .order("created_at", desc=True) \
+            .execute()
+        
+        return {"status": "success", "data": res.data}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
 # 錯誤處理

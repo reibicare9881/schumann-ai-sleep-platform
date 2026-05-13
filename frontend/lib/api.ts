@@ -331,8 +331,16 @@ export const API = {
   async getSchumannReport(reportId: string) {
     return this.request(`/api/schumann/reports/${reportId}`);
   },
+
+  // 獲取舒曼歷史趨勢數據
+  async getSchumannTrend(userId: string) {
+    return this.request(`/api/schumann/trend/${userId}`);
+  },
   
-  
+  // 獲取使用者所有歷史紀錄 (整合睡眠與舒曼)
+  async getUserHistory(userId: string) {
+    return this.request(`/api/history/${userId}`);
+  },
   // ==========================================
   // 通用方法
   // ==========================================
