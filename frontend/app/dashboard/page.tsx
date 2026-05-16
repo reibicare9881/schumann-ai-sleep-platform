@@ -18,32 +18,49 @@ export default function DashboardPage() {
   // 解構出 switchPlatform
   const { session, logout, switchPlatform } = useAuth();
   const router = useRouter();
+
+  const [sleepCount, setSleepCount] = useState(0);
+  const [schumannCount, setSchumannCount] = useState(0);
   const [history, setHistory] = useState<MappedSleepReport[]>([]);
 
   useEffect(() => {
-    // 確保有登入且有 uid 才發送請求
     if (session && session.uid) {
-      API.listSleepReports(session.uid).then((res: any) => {
-        if (res.status === 'success' && Array.isArray(res.reports)) {
-          const formatted: MappedSleepReport[] = res.reports.map((dbData: BackendSleepReport) => ({
+      // 🌟 使用 Promise.all 同時獲取兩種報告
+      Promise.all([
+        API.listSleepReports(session.uid),
+        API.listSchumannReports(session.uid)
+      ]).then(([sleepRes, schumannRes]: [any, any]) => {
+        
+        // 處理睡眠報告數量與最近列表
+        if (sleepRes.status === 'success' && Array.isArray(sleepRes.reports)) {
+          setSleepCount(sleepRes.reports.length);
+          const formatted: MappedSleepReport[] = sleepRes.reports.map((dbData: BackendSleepReport) => ({
             ...dbData,
             id: dbData.id,
-            uid: dbData.user_id, // 補上遺漏的 uid
+            uid: dbData.user_id,
             ts: dbData.created_at,
             sScore: dbData.sleep_score,
             pScore: dbData.pain_score,
-            wScore: dbData.work_score, // 補上遺漏的 wScore
+            wScore: dbData.work_score,
             sLevel: { key: dbData.sleep_level, label: LL[dbData.sleep_level as keyof typeof LL] || "" },
             pLevel: { key: dbData.pain_level, label: LL[dbData.pain_level as keyof typeof LL] || "" },
-            profile: dbData.profile || { name: "" } // 補上 profile
+            profile: dbData.profile || { name: "" }
           }));
           setHistory(formatted);
         } else {
+          setSleepCount(0);
           setHistory([]);
         }
+
+        // 處理舒曼報告數量
+        if (schumannRes.status === 'success' && Array.isArray(schumannRes.reports)) {
+          setSchumannCount(schumannRes.reports.length);
+        } else {
+          setSchumannCount(0);
+        }
+
       }).catch(err => {
         console.error("獲取儀表板歷史失敗:", err);
-        setHistory([]);
       });
     }
   }, [session]);
@@ -55,7 +72,7 @@ export default function DashboardPage() {
 
   const tiles = [
     { id: "assess", icon: <ClipboardEdit className="w-8 h-8 text-teal-600" />, label: "開始健康評估", sub: "填寫問卷，生成個人報告", color: "border-teal-200 hover:border-teal-500", link: "/assessment", show: can(session.systemRole, "assess") },
-    { id: "history", icon: <FileText className="w-8 h-8 text-emerald-600" />, label: "查閱個人報告", sub: `共 ${history.length} 筆記錄`, color: "border-emerald-200 hover:border-emerald-500", link: "/history", show: can(session.systemRole, "view_history") },
+    { id: "history", icon: <FileText className="w-8 h-8 text-emerald-600" />, label: "查閱個人報告", sub: `睡眠: ${sleepCount} 筆 | 舒曼: ${schumannCount} 筆`, color: "border-emerald-200 hover:border-emerald-500", link: "/history", show: can(session.systemRole, "view_history") },
     { id: "org", icon: <BarChart3 className="w-8 h-8 text-purple-600" />, label: "單位KPI報表", sub: "去識別化統計分析", color: "border-purple-200 hover:border-purple-500", link: "/kpi", show: can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr") },
     { id: "okr", icon: <Target className="w-8 h-8 text-amber-600" />, label: "OKR績效儀表板", sub: "健康成果 × 獎酬激勵", color: "border-amber-200 hover:border-amber-500", link: "/okr", show: can(session.systemRole, "view_okr") || can(session.systemRole, "view_dept_okr") },
     { id: "appt", icon: <CalendarDays className="w-8 h-8 text-sky-600" />, label: "自主健管預約排程", sub: isAdmin ? "查閱/修改/下載" : "舒曼波 / 激光物理干預", color: "border-sky-200 hover:border-sky-500", link: "/appointment", show: can(session.systemRole, "view_appt") },

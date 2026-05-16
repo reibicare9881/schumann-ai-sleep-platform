@@ -7,6 +7,8 @@ import API from "@/lib/api";
 import { SQ, PQ, ROLES, LX, LL } from "@/lib/config";
 import { ChevronLeft, TrendingUp, BookOpen, Waves, AlertTriangle, FileText, CheckCircle2, Printer } from "lucide-react";
 import html2pdf from "html2pdf.js";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // ══ 預設衛教庫 (Fallback Recommendations) ══
 const FR = {
@@ -309,9 +311,25 @@ export default function ReportPage() {
   };
 
   const RecBox = ({ title, content, colorClass, icon }: any) => (
-    <div className={`p-5 rounded-2xl border-l-4 mb-4 bg-white shadow-sm ${colorClass}`}>
-      <h4 className="font-bold flex items-center gap-2 mb-2 text-slate-800">{icon} {title}</h4>
-      <p className="text-sm text-slate-600 leading-relaxed">{content}</p>
+    <div className={`p-5 md:p-6 rounded-2xl border-l-4 mb-5 bg-white shadow-sm hover:shadow-md transition-shadow ${colorClass}`}>
+      <h4 className="font-bold flex items-center gap-2 mb-3 text-slate-800 text-lg">
+        {icon} {title}
+      </h4>
+      <div className="text-sm text-slate-700 leading-relaxed">
+        {/* 使用 ReactMarkdown 解析粗體與清單，並利用 Tailwind 的 prose 類別美化排版 */}
+        <ReactMarkdown 
+          remarkPlugins={[remarkGfm]}
+          components={{
+            p: ({node, ...props}) => <p className="mb-3 last:mb-0" {...props} />,
+            strong: ({node, ...props}) => <strong className="font-bold text-slate-900" {...props} />,
+            ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-3 space-y-1" {...props} />,
+            ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-3 space-y-1" {...props} />,
+            li: ({node, ...props}) => <li className="pl-1" {...props} />
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
     </div>
   );
 
