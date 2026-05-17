@@ -341,6 +341,14 @@ export const API = {
   async getUserHistory(userId: string) {
     return this.request(`/api/history/${userId}`);
   },
+  
+  // 獲取 AI 獨立歷史趨勢分析
+  async generateAITrend(userId: string, platform: 'sleep' | 'schumann') {
+    return this.request(`/api/ai-trend/${userId}`, {
+      method: 'POST',
+      query: { platform }
+    });
+  },
   // ==========================================
   // 通用方法
   // ==========================================

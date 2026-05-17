@@ -1081,6 +1081,84 @@ async def http_exception_handler(request, exc):
     )
 
 # ==========================================
+# AI 獨立歷史趨勢分析 API
+# ==========================================
+@app.post("/api/ai-trend/{user_id}")
+async def generate_ai_trend_analysis(
+    user_id: str, 
+    platform: str = "sleep", 
+    current_user: dict = Depends(get_current_user)
+):
+    # 1. 權限防護
+    if current_user.get("uid") != user_id and current_user.get("role") not in ["admin", "dept_head"]:
+        raise HTTPException(status_code=403, detail="越權存取")
+
+    history_text = []
+    prompt = ""
+
+    # ================= 睡眠分析模式 =================
+    if platform == "sleep":
+        res = supabase.table("sleep_reports").select("created_at, sleep_score, pain_score").eq("user_id", user_id).order("created_at").execute()
+        for r in res.data:
+            date = r["created_at"][:10]
+            history_text.append(f"[{date}] 睡眠ISI: {r['sleep_score']}/28, 疼痛BPI: {r['pain_score']}/50")
+        
+        if len(history_text) < 2:
+            raise HTTPException(status_code=400, detail="至少需要 2 筆睡眠歷史資料才能進行趨勢分析")
+            
+        prompt = f"""
+        你是一位專業的「睡眠與疼痛健康顧問」。請根據以下使用者過去一段時間的評估紀錄，為他撰寫一份「睡眠與疼痛改善分析報告」。
+        
+        【歷史紀錄 (分數越低越好)】：
+        {chr(10).join(history_text)}
+        
+        請用繁體中文撰寫，並使用 Markdown 排版：
+        1. **📈 趨勢洞察**：分析睡眠與疼痛是進步或退步。
+        2. **🔍 關鍵發現**：點出數據中特別的變化或停滯期。
+        3. **💡 改善建議**：給予具體的生活作息建議。
+        """
+
+    # ================= 舒曼分析模式 =================
+    elif platform == "schumann":
+        res = supabase.table("analysis_records").select("created_at, ai_summary").eq("user_id", user_id).order("created_at").execute()
+        for r in res.data:
+            date = r["created_at"][:10]
+            try:
+                summary = json.loads(r["ai_summary"]) if isinstance(r["ai_summary"], str) else r.get("ai_summary", {})
+                sdnn = summary.get("SDNN_Post", "未知")
+                lf_hf = summary.get("LF_HF_Value", "未知")
+                history_text.append(f"[{date}] SDNN(自律神經): {sdnn} ms, 交感/副交感比例: {lf_hf}")
+            except:
+                continue
+
+        if len(history_text) < 2:
+            raise HTTPException(status_code=400, detail="至少需要 2 筆舒曼歷史資料才能進行趨勢分析")
+            
+        prompt = f"""
+        你是一位專業的「自律神經與能量健康顧問」。請根據以下使用者過去一段時間的舒曼共振檢測紀錄，撰寫一份「自律神經趨勢分析報告」。
+        
+        【歷史紀錄】：
+        {chr(10).join(history_text)}
+        
+        請用繁體中文撰寫，並使用 Markdown 排版：
+        1. **📈 趨勢洞察**：分析 SDNN (總活性/抗壓性) 與交感/副交感平衡的長期變化趨勢。
+        2. **🔍 關鍵發現**：點出數據中特別的變化。
+        3. **💡 改善建議**：給予對應的身心放鬆或理療建議。
+        """
+    else:
+        raise HTTPException(status_code=400, detail="未知的平台參數")
+
+    # 呼叫 Gemini AI
+    try:
+        client = genai.Client(api_key=settings.gemini_api_key)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
+        return {"status": "success", "ai_analysis": response.text, "platform": platform}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI 分析失敗: {str(e)}")
+# ==========================================
 # 啟動應用
 # ==========================================
 

@@ -6,9 +6,11 @@ import { useAuth } from "@/components/AuthProvider";
 import API from "@/lib/api";
 import { MappedSleepReport, BackendSleepReport } from "@/types";
 import { C, LX, LL } from "@/lib/config";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { 
   ChevronLeft, TrendingUp, AlertCircle, Calendar, 
-  ArrowDownCircle, ArrowUpCircle, Info, Zap, Waves 
+  ArrowDownCircle, ArrowUpCircle, Info, Zap, Waves, Sparkles, Loader2, Moon, Activity
 } from "lucide-react";
 
 // ══ 內部元件：趨勢圖表 (100% 移植自原始 SVG 繪圖邏輯) ══
@@ -22,12 +24,10 @@ const TrendChart = ({ data, color, label, maxVal, showPred = false }: any) => {
   const mx = maxVal || Math.max(...data.map((d: any) => d.v)) * 1.15 || 1;
   
   const n = data.length;
-  // 讓 X 軸動態縮放，如果有預測點，就多留一格的寬度
   const steps = showPred ? n : Math.max(1, n - 1);
   const xs = data.map((_: any, i: number) => pad.l + (i / steps) * cW);
   const ys = data.map((d: any) => pad.t + cH * (1 - d.v / mx));
 
-  // 線性回歸計算 (線性推測)
   const xm = (n - 1) / 2, ym = data.reduce((a: any, d: any) => a + d.v, 0) / n;
   const sxy = data.reduce((a: any, d: any, i: number) => a + (i - xm) * (d.v - ym), 0);
   const sxx = data.reduce((a: any, _: any, i: number) => a + (i - xm) ** 2, 0);
@@ -44,7 +44,6 @@ const TrendChart = ({ data, color, label, maxVal, showPred = false }: any) => {
   return (
     <div className="w-full">
       <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="overflow-visible">
-        {/* 背景格線 */}
         {[0, 0.25, 0.5, 0.75, 1].map(pct => {
           const gy = pad.t + cH * pct;
           return (
@@ -54,11 +53,8 @@ const TrendChart = ({ data, color, label, maxVal, showPred = false }: any) => {
             </g>
           );
         })}
-        {/* 漸層填充 */}
         <polygon points={aStr} fill={color} opacity="0.1" />
-        {/* 實際趨勢線 */}
         <polyline points={ptStr} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-        {/* 預測點 */}
         {showPred && predY > 0 && predY < H && (
           <g>
             <line x1={xs[xs.length-1]} y1={ys[ys.length-1]} x2={predX} y2={predY} stroke={color} strokeWidth="2" strokeDasharray="4,3" opacity="0.5" />
@@ -66,7 +62,6 @@ const TrendChart = ({ data, color, label, maxVal, showPred = false }: any) => {
             <text x={predX} y={predY - 10} fontSize="10" fill={color} textAnchor="middle" fontWeight="bold">預測</text>
           </g>
         )}
-        {/* 數據點點 */}
         {xs.map((x: number, i: number) => (
           <g key={i}>
             <circle cx={x} cy={ys[i]} r="4" fill={color} stroke="white" strokeWidth="2" />
@@ -86,6 +81,26 @@ export default function AnalysisPage() {
   const { session, loading } = useAuth();
   const router = useRouter();
   const [reports, setReports] = useState<MappedSleepReport[]>([]);
+
+  // ================= AI 狀態與功能 =================
+  const [aiReport, setAiReport] = useState<{ text: string, platform: string } | null>(null);
+  const [isGeneratingAI, setIsGeneratingAI] = useState<string | null>(null); 
+
+  const handleGenerateAITrend = async (platform: 'sleep' | 'schumann') => {
+    if (!session?.uid) return;
+    setIsGeneratingAI(platform);
+    try {
+      const res = await API.generateAITrend(session.uid, platform);
+      if (res.status === 'success') {
+        setAiReport({ text: res.ai_analysis, platform });
+      }
+    } catch (err: any) {
+      alert(err.message || "AI 分析產生失敗，請確認是否有足夠的歷史資料。");
+    } finally {
+      setIsGeneratingAI(null);
+    }
+  };
+  // =================================================
 
   useEffect(() => {
     if (session && session.uid) {
@@ -146,7 +161,7 @@ export default function AnalysisPage() {
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-8 flex gap-3">
         <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
         <div className="text-xs text-amber-800 leading-relaxed">
-          <strong>重要聲明：</strong> 以下趨勢圖與預測線僅為基於歷史數據之推算，不構成醫療診斷或治療建議。如有健康疑慮，請務必諮詢專業醫療人員 [cite: 160]。
+          <strong>重要聲明：</strong> 以下趨勢圖與預測線僅為基於歷史數據之推算，不構成醫療診斷或治療建議。如有健康疑慮，請務必諮詢專業醫療人員。
         </div>
       </div>
 
@@ -176,6 +191,67 @@ export default function AnalysisPage() {
         </div>
       </div>
 
+      {/* ================= AI 獨立歷史分析區塊 ================= */}
+      <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 rounded-3xl p-8 shadow-sm mb-12 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-6 opacity-10"><Sparkles className="w-32 h-32 text-indigo-600" /></div>
+        
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div>
+            <h3 className="text-xl font-bold text-indigo-900 flex items-center gap-2">
+              <Sparkles className="w-6 h-6 text-indigo-600" /> AI 專屬歷史趨勢解析
+            </h3>
+            <p className="text-sm text-indigo-700 mt-1">請選擇您想要分析的項目，AI 將為您解讀長期的健康變化趨勢。</p>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+            {/* 睡眠分析按鈕 */}
+            <button 
+              onClick={() => handleGenerateAITrend('sleep')}
+              disabled={isGeneratingAI !== null}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isGeneratingAI === 'sleep' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Moon className="w-4 h-4" />} 
+              睡眠疼痛分析
+            </button>
+            
+            {/* 舒曼分析按鈕 */}
+            <button 
+              onClick={() => handleGenerateAITrend('schumann')}
+              disabled={isGeneratingAI !== null}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isGeneratingAI === 'schumann' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />} 
+              自律神經分析
+            </button>
+          </div>
+        </div>
+
+        {/* AI Markdown 渲染結果 */}
+        {aiReport && (
+          <div className="bg-white/80 backdrop-blur-sm border border-white rounded-2xl p-6 md:p-8 shadow-sm animate-in fade-in slide-in-from-bottom-4">
+            <div className={`text-xs font-bold mb-4 px-3 py-1 inline-block rounded-full ${aiReport.platform === 'sleep' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'}`}>
+              {aiReport.platform === 'sleep' ? '🌙 睡眠與疼痛分析報告' : '🧠 舒曼自律神經分析報告'}
+            </div>
+            
+            <div className="prose prose-indigo max-w-none text-slate-700 text-sm leading-relaxed">
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  h3: ({node, ...props}) => <h3 className="text-lg font-bold text-indigo-800 mb-3 mt-6 flex items-center gap-2" {...props} />,
+                  p: ({node, ...props}) => <p className="mb-4 text-slate-700 leading-loose" {...props} />,
+                  ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-4 space-y-2" {...props} />,
+                  li: ({node, ...props}) => <li className="pl-1" {...props} />,
+                  strong: ({node, ...props}) => <strong className="font-bold text-indigo-900 bg-indigo-100/50 px-1 rounded" {...props} />
+                }}
+              >
+                {aiReport.text}
+              </ReactMarkdown>
+            </div>
+          </div>
+        )}
+      </div>
+      {/* ========================================================= */}
+
       {/* 療程建議區塊 */}
       {suggestions.length > 0 && (
         <div className="bg-slate-900 text-white rounded-3xl p-8 shadow-xl relative overflow-hidden">
@@ -186,7 +262,7 @@ export default function AnalysisPage() {
             <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
               <Info className="w-6 h-6 text-emerald-400" /> 系統介入建議療程
             </h2>
-            <p className="text-slate-400 text-xs mb-8">基於您的最新評估數據，自動生成的非處方參考建議 [cite: 166-167]。</p>
+            <p className="text-slate-400 text-xs mb-8">基於您的最新評估數據，自動生成的非處方參考建議。</p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {suggestions.map((s, i) => (
@@ -209,7 +285,8 @@ export default function AnalysisPage() {
           </div>
         </div>
       )}
-    {/* 補回：定期評估提醒設定 */}
+
+      {/* 定期評估提醒設定 */}
       <div className="bg-[#fdf8f3] border border-[#e8ddd4] rounded-3xl p-6 md:p-8 mt-12 shadow-sm">
         <h3 className="text-lg font-bold text-amber-700 mb-4 flex items-center gap-2">
           <Calendar className="w-5 h-5" /> 定期評估提醒設定
