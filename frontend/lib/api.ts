@@ -349,6 +349,13 @@ export const API = {
       query: { platform }
     });
   },
+
+  // 獲取最近一次的個人生理基本資料
+  async getLatestProfile(userId: string) {
+    return this.request(`/api/sleep/latest-profile/${userId}`, {
+      method: 'GET'
+    });
+  },
   // ==========================================
   // 通用方法
   // ==========================================

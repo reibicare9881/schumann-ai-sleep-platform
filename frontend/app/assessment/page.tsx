@@ -48,6 +48,51 @@ export default function AssessmentPage() {
     if (!loading && !session) router.push("/login");
   }, [session, loading, router]);
 
+  useEffect(() => {
+    if (session?.uid) {
+      // 呼叫您在 api.ts 中新增的 getLatestProfile
+      API.getLatestProfile(session.uid)
+        .then((res: any) => {
+          if (res.status === "success" && res.profile) {
+            setProfile((prev: any) => ({
+              ...prev,
+              age: res.profile.age || prev.age,
+              gender: res.profile.gender || prev.gender,
+              height: res.profile.height || prev.height,
+              weight: res.profile.weight || prev.weight,
+              dept: res.profile.dept || prev.dept,
+              orgRole: res.profile.orgRole || prev.orgRole,
+              industry: res.profile.industry || prev.industry,
+              shiftWork: res.profile.shiftWork || prev.shiftWork,
+              hypertension: res.profile.hypertension || prev.hypertension,
+              diabetes: res.profile.diabetes || prev.diabetes,
+              hyperlipidemia: res.profile.hyperlipidemia || prev.hyperlipidemia,
+              heartDisease: res.profile.heartDisease || prev.heartDisease,
+              medications: res.profile.medications || prev.medications,
+              painLocations: res.profile.painLocations || prev.painLocations
+            }));
+          }
+        })
+        .catch((err) => console.error("預載歷史基本資料失敗:", err));
+    }
+  }, [session]);
+
+  if (loading || !session) return null;
+
+  const heightNum = parseFloat(profile.height);
+  const weightNum = parseFloat(profile.weight);
+  const bmiValue = (heightNum > 0 && weightNum > 0)
+    ? (weightNum / ((heightNum / 100) ** 2)).toFixed(1)
+    : null;
+
+  const getBMICategory = (bmi: number) => {
+    if (bmi < 18.5) return { label: "體重過輕", color: "text-amber-600 bg-amber-50 border-amber-200" };
+    if (bmi < 24) return { label: "健康正常", color: "text-emerald-600 bg-emerald-50 border-emerald-200" };
+    if (bmi < 27) return { label: "體重過重", color: "text-orange-600 bg-orange-50 border-orange-200" };
+    return { label: "肥胖症狀", color: "text-rose-600 bg-rose-50 border-rose-200" };
+  };
+  const bmiCategory = bmiValue ? getBMICategory(parseFloat(bmiValue)) : null;
+
   if (loading || !session) return null;
 
   // --- 處理同意聲明 ---
@@ -228,6 +273,22 @@ export default function AssessmentPage() {
                   <div><label className="block text-xs text-slate-500 mb-1">性別</label><select value={profile.gender} onChange={e => setProfile({...profile, gender: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-500"><option value="male">男性</option><option value="female">女性</option><option value="other">其他</option></select></div>
                   <div><label className="block text-xs text-slate-500 mb-1">身高 (cm)</label><input type="number" value={profile.height} onChange={e => setProfile({...profile, height: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-500" /></div>
                   <div><label className="block text-xs text-slate-500 mb-1">體重 (kg)</label><input type="number" value={profile.weight} onChange={e => setProfile({...profile, weight: e.target.value})} className="w-full px-3 py-2 rounded-lg border bg-slate-50 outline-none focus:ring-2 focus:ring-emerald-500" /></div>
+                  
+                  {/* 🌟 新增：BMI 動態顯示卡片 (佔滿兩欄) */}
+                  {bmiValue && (
+                    <div className="sm:col-span-2 mt-2 p-4 rounded-xl border bg-slate-50/80 flex items-center justify-between animate-in fade-in slide-in-from-bottom-2 duration-300">
+                      <div>
+                        <span className="text-xs text-slate-500 block font-medium">即時計算 BMI 指標</span>
+                        <div className="flex items-baseline gap-1 mt-1">
+                          <span className="text-2xl font-black text-slate-800">{bmiValue}</span>
+                          <span className="text-xs text-slate-400">kg/m²</span>
+                        </div>
+                      </div>
+                      <div className={`px-4 py-1.5 rounded-full text-xs font-bold border ${bmiCategory?.color}`}>
+                        {bmiCategory?.label}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

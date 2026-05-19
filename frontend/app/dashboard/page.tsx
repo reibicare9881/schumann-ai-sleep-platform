@@ -25,7 +25,15 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (session && session.uid) {
-      // 🌟 使用 Promise.all 同時獲取兩種報告
+      // 🌟 新增：如果身分是管理者，直接略過撈取個人報告的動作
+      if (session.systemRole === "admin") {
+        setSleepCount(0);
+        setSchumannCount(0);
+        setHistory([]);
+        return;
+      }
+
+      // 🌟 使用 Promise.all 同時獲取兩種報告 (僅限一般用戶)
       Promise.all([
         API.listSleepReports(session.uid),
         API.listSchumannReports(session.uid)
@@ -70,15 +78,16 @@ export default function DashboardPage() {
   const roleInfo = ROLES[session.systemRole] || ROLES.individual;
   const isAdmin = session.systemRole === "admin";
 
+  // 🌟 修改：利用 !isAdmin 嚴格阻擋管理者看到個人表單，並確保管理者能看到企業管理選單
   const tiles = [
-    { id: "assess", icon: <ClipboardEdit className="w-8 h-8 text-teal-600" />, label: "開始健康評估", sub: "填寫問卷，生成個人報告", color: "border-teal-200 hover:border-teal-500", link: "/assessment", show: can(session.systemRole, "assess") },
-    { id: "history", icon: <FileText className="w-8 h-8 text-emerald-600" />, label: "查閱個人報告", sub: `睡眠: ${sleepCount} 筆 | 舒曼: ${schumannCount} 筆`, color: "border-emerald-200 hover:border-emerald-500", link: "/history", show: can(session.systemRole, "view_history") },
-    { id: "org", icon: <BarChart3 className="w-8 h-8 text-purple-600" />, label: "單位KPI報表", sub: "去識別化統計分析", color: "border-purple-200 hover:border-purple-500", link: "/kpi", show: can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr") },
-    { id: "okr", icon: <Target className="w-8 h-8 text-amber-600" />, label: "OKR績效儀表板", sub: "健康成果 × 獎酬激勵", color: "border-amber-200 hover:border-amber-500", link: "/okr", show: can(session.systemRole, "view_okr") || can(session.systemRole, "view_dept_okr") },
-    { id: "appt", icon: <CalendarDays className="w-8 h-8 text-sky-600" />, label: "自主健管預約排程", sub: isAdmin ? "查閱/修改/下載" : "舒曼波 / 激光物理干預", color: "border-sky-200 hover:border-sky-500", link: "/appointment", show: can(session.systemRole, "view_appt") },
-    { id: "esg", icon: <Leaf className="w-8 h-8 text-green-600" />, label: "ESG健康效益", sub: "降本/增效/社會責任", color: "border-green-200 hover:border-green-500", link: "/esg", show: can(session.systemRole, "view_esg") },
-    { id: "analysis", icon: <TrendingUp className="w-8 h-8 text-indigo-600" />, label: "健康分析 & 趨勢", sub: "睡眠/疼痛曲線・預測", color: "border-indigo-200 hover:border-indigo-500", link: "/analysis", show: can(session.systemRole, "view_history") },
-    { id: "highrisk", icon: <AlertTriangle className="w-8 h-8 text-red-600" />, label: "高風險族群分析", sub: "健康分布・介入建議", color: "border-red-200 hover:border-red-500", link: "/highrisk", show: can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr") },
+    { id: "assess", icon: <ClipboardEdit className="w-8 h-8 text-teal-600" />, label: "開始健康評估", sub: "填寫問卷，生成個人報告", color: "border-teal-200 hover:border-teal-500", link: "/assessment", show: !isAdmin && can(session.systemRole, "assess") },
+    { id: "history", icon: <FileText className="w-8 h-8 text-emerald-600" />, label: "查閱個人報告", sub: `睡眠: ${sleepCount} 筆 | 舒曼: ${schumannCount} 筆`, color: "border-emerald-200 hover:border-emerald-500", link: "/history", show: !isAdmin && can(session.systemRole, "view_history") },
+    { id: "org", icon: <BarChart3 className="w-8 h-8 text-purple-600" />, label: "單位KPI報表", sub: "去識別化統計分析", color: "border-purple-200 hover:border-purple-500", link: "/kpi", show: isAdmin || can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr") },
+    { id: "okr", icon: <Target className="w-8 h-8 text-amber-600" />, label: "OKR績效儀表板", sub: "健康成果 × 獎酬激勵", color: "border-amber-200 hover:border-amber-500", link: "/okr", show: isAdmin || can(session.systemRole, "view_okr") || can(session.systemRole, "view_dept_okr") },
+    { id: "appt", icon: <CalendarDays className="w-8 h-8 text-sky-600" />, label: "預約排程管理", sub: isAdmin ? "查閱/修改/審核" : "舒曼波 / 激光物理干預", color: "border-sky-200 hover:border-sky-500", link: "/appointment", show: isAdmin || can(session.systemRole, "view_appt") },
+    { id: "esg", icon: <Leaf className="w-8 h-8 text-green-600" />, label: "ESG健康效益", sub: "降本/增效/社會責任", color: "border-green-200 hover:border-green-500", link: "/esg", show: isAdmin || can(session.systemRole, "view_esg") },
+    { id: "analysis", icon: <TrendingUp className="w-8 h-8 text-indigo-600" />, label: "健康分析 & 趨勢", sub: "睡眠/疼痛曲線・預測", color: "border-indigo-200 hover:border-indigo-500", link: "/analysis", show: !isAdmin && can(session.systemRole, "view_history") },
+    { id: "highrisk", icon: <AlertTriangle className="w-8 h-8 text-red-600" />, label: "高風險族群分析", sub: "健康分布・介入建議", color: "border-red-200 hover:border-red-500", link: "/highrisk", show: isAdmin || can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr") },
     { id: "privacy", icon: <ShieldCheck className="w-8 h-8 text-slate-600" />, label: "隱私 & 安全中心", sub: "加密機制・法規・稽核", color: "border-slate-200 hover:border-slate-500", link: "/privacy", show: true },
   ].filter(t => t.show);
 
@@ -108,10 +117,8 @@ export default function DashboardPage() {
                const toPlatform = session.platform === 'sleep' ? 'schumann' : 'sleep';
                const success = await switchPlatform(toPlatform);
                if (success) {
-                  // 移除 alert，讓體驗更順暢 (如果你想保留 alert 也可以)
-                  // 🌟 核心修改：根據切換的平台決定去哪裡
                   if (toPlatform === 'schumann') {
-                      router.push('/'); // 跳轉到舒曼共振首頁 (http://localhost:3000)
+                      router.push('/'); // 跳轉到舒曼共振首頁
                   } else {
                       window.location.reload(); // 切回睡眠時，重新整理留在 Dashboard
                   }
@@ -154,7 +161,8 @@ export default function DashboardPage() {
         ))}
       </div>
       
-      {history.length > 0 && (
+      {/* 🌟 修改：確保管理者不會看到個人專屬的「最近評估記錄」 */}
+      {!isAdmin && history.length > 0 && (
         <div className="mt-10 bg-amber-50/50 border border-amber-100 rounded-3xl p-6 md:p-8 shadow-sm">
           <h3 className="text-lg font-bold text-amber-800 mb-6 flex items-center gap-2">
             <TrendingUp className="w-5 h-5" /> 最近評估記錄

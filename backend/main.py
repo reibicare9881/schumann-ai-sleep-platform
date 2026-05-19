@@ -1064,6 +1064,33 @@ async def get_user_history(user_id: str, current_user: dict = Depends(get_curren
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+# ==========================================
+# 撈取最新資料
+# ==========================================
+
+@app.get("/api/sleep/latest-profile/{user_id}")
+async def get_latest_profile(user_id: str, current_user: dict = Depends(get_current_user)):
+    # 安全檢查：確保個人用戶只能存取自己的資料
+    if current_user.get("system_role") == "individual" and current_user.get("id") != user_id:
+        raise HTTPException(status_code=403, detail="權限不足")
+        
+    try:
+        # 撈取該使用者最新的一筆報告紀錄
+        res = supabase.table("sleep_reports") \
+            .select("profile") \
+            .eq("user_id", user_id) \
+            .order("created_at", desc=True) \
+            .limit(1) \
+            .execute()
+            
+        if res.data and len(res.data) > 0:
+            return {"status": "success", "profile": res.data[0]["profile"]}
+        else:
+            return {"status": "success", "profile": None, "message": "無歷史紀錄"}
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
 # 錯誤處理

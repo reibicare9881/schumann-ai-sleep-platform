@@ -136,11 +136,42 @@ export default function AnalysisPage() {
   if (latest) {
     const s = latest.sScore;
     const p = latest.pScore;
-    if (s >= 15) suggestions.push({ icon: <Waves />, name: "舒曼共振減壓", reason: `ISI ${s}分 (中度以上)`, freq: "每週 3-5 次" });
-    else if (s >= 8) suggestions.push({ icon: <Waves />, name: "舒曼共振減壓", reason: `ISI ${s}分 (輕度失眠)`, freq: "每週 1-2 次" });
     
-    if (p >= 26) suggestions.push({ icon: <Zap />, name: "激光物理干預 LA200", reason: `BPI ${p}分 (重度疼痛)`, freq: "每週 2-3 次" });
-    else if (p >= 13) suggestions.push({ icon: <Zap />, name: "激光物理干預 LA200", reason: `BPI ${p}分 (中度疼痛)`, freq: "每週 1-2 次" });
+    if (s >= 15) {
+      suggestions.push({ 
+        icon: <Waves />, 
+        name: "舒曼共振減壓", 
+        reason: `ISI ${s}分 (中度以上)`, 
+        desc: "利用 7.83Hz 低頻物理共振波，引導大腦放鬆、平衡自律神經並優化深睡品質。",
+        freq: "每週 3-5 次" 
+      });
+    } else if (s >= 8) {
+      suggestions.push({ 
+        icon: <Waves />, 
+        name: "舒曼共振減壓", 
+        reason: `ISI ${s}分 (輕度失眠)`, 
+        desc: "透過特定低頻波動同步，舒緩日間累積的緊繃腦波，助於自然入睡。",
+        freq: "每週 1-2 次" 
+      });
+    }
+    
+    if (p >= 26) {
+      suggestions.push({ 
+        icon: <Zap />, 
+        name: "激光物理干預 LA200", 
+        reason: `BPI ${p}分 (重度疼痛)`, 
+        desc: "透過特定波長低能量激光深層調理，促進組織微循環並阻斷慢性疼痛訊號。",
+        freq: "每週 2-3 次" 
+      });
+    } else if (p >= 13) {
+      suggestions.push({ 
+        icon: <Zap />, 
+        name: "激光物理干預 LA200", 
+        reason: `BPI ${p}分 (中度疼痛)`, 
+        desc: "利用光生物調節技術緩解肌肉深層緊繃，修復日常久坐造成的局部不適。",
+        freq: "每週 1-2 次" 
+      });
+    }
   }
 
   return (
@@ -272,7 +303,8 @@ export default function AnalysisPage() {
                     <span className="text-[10px] font-bold bg-emerald-500 text-white px-2 py-1 rounded-full">{s.freq}</span>
                   </div>
                   <h4 className="text-lg font-bold mb-1">{s.name}</h4>
-                  <p className="text-xs text-slate-400 mb-4">{s.reason}</p>
+                  <p className="text-xs text-slate-400 mb-2">{s.reason}</p>
+                  <p className="text-xs text-slate-300 leading-relaxed mb-4">{s.desc}</p>
                   <button 
                     onClick={() => router.push('/appointment')}
                     className="w-full py-2 bg-white text-slate-900 rounded-lg text-xs font-bold hover:bg-emerald-400 transition-colors"
