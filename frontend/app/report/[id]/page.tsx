@@ -9,6 +9,10 @@ import { ChevronLeft, TrendingUp, BookOpen, Waves, AlertTriangle, FileText, Chec
 import html2pdf from "html2pdf.js";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import remarkRehype from 'remark-rehype';
+import rehypeStringify from 'rehype-stringify';
 
 // ══ 預設衛教庫 (Fallback Recommendations) ══
 const FR = {
@@ -18,6 +22,23 @@ const FR = {
   dietaryAdvice: "地中海飲食持續顯示對三高、慢性疼痛及睡眠有正向效益。增加Omega-3（深海魚）降炎症；鎂（南瓜子）助眠；色胺酸（香蕉）促褪黑激素合成。高血壓者採DASH飲食；糖尿病者注意升糖指數；避免睡前2小時大量進食。",
   physicalTherapy: "多模式物理治療可改善慢性疼痛（30–40%）及睡眠品質（PSQI改善3–4分）。每週3–5次有氧運動；辦公室每小時起身3分鐘；水中運動適合關節疼痛者；瑜伽太極對疼痛與睡眠均有實證效益。",
   reibiProducts: "REIBI舒曼波療法（7.83Hz）調節自律神經、降低皮質醇、提升深度睡眠δ波，建議每晚睡前30–45分鐘，持續4–6週。REIBI LA200雷射（LLLT，650–808nm）促進細胞ATP合成、抑制炎性介質，建議每週2–3次、每次10–15分鐘，配合物理治療效果倍增。"
+};
+
+const markdownToHtml = (markdown: string) => {
+  if (!markdown) return "";
+  try {
+    return String(
+      unified()
+        .use(remarkParse)
+        .use(remarkGfm)
+        .use(remarkRehype)
+        .use(rehypeStringify)
+        .processSync(markdown)
+    );
+  } catch (err) {
+    console.error("Markdown 轉 HTML 失敗：", err);
+    return markdown;
+  }
 };
 
 // ══ PDF 報表產生器 (完整版 from sleepplatform.txt) ═══════════════════════════════════════════════
@@ -204,14 +225,14 @@ const buildPDF = (report: any, session: any) => {
   <!-- 04 個人化健康促進建議 -->
   <div class="sec">
     <div class="st">04 💡 個人化健康促進建議</div>
-    <div class="rec-block" style="--rec-color:#2a7d8c"> <div class="rec-title">🏃 綜合健康促進</div> <div class="rec-content">${recs.generalHealth || ""}</div> </div>
-    <div class="rec-block" style="--rec-color:#c05a28"> <div class="rec-title">💊 疼痛衛教</div> <div class="rec-content">${recs.painEducation || ""}</div> </div>
-    <div class="rec-block" style="--rec-color:#6b54a0"> <div class="rec-title">🌙 睡眠衛教</div> <div class="rec-content">${recs.sleepEducation || ""}</div> </div>
-    <div class="rec-block" style="--rec-color:#2d7a5a"> <div class="rec-title">🥗 飲食衛教</div> <div class="rec-content">${recs.dietaryAdvice || ""}</div> </div>
-    <div class="rec-block" style="--rec-color:#b07015"> <div class="rec-title">🤸 物理治療</div> <div class="rec-content">${recs.physicalTherapy || ""}</div> </div>
+    <div class="rec-block" style="--rec-color:#2a7d8c"> <div class="rec-title">🏃 綜合健康促進</div> <div class="rec-content">${markdownToHtml(recs.generalHealth || "")}</div> </div>
+    <div class="rec-block" style="--rec-color:#c05a28"> <div class="rec-title">💊 疼痛衛教</div> <div class="rec-content">${markdownToHtml(recs.painEducation || "")}</div> </div>
+    <div class="rec-block" style="--rec-color:#6b54a0"> <div class="rec-title">🌙 睡眠衛教</div> <div class="rec-content">${markdownToHtml(recs.sleepEducation || "")}</div> </div>
+    <div class="rec-block" style="--rec-color:#2d7a5a"> <div class="rec-title">🥗 飲食衛教</div> <div class="rec-content">${markdownToHtml(recs.dietaryAdvice || "")}</div> </div>
+    <div class="rec-block" style="--rec-color:#b07015"> <div class="rec-title">🤸 物理治療</div> <div class="rec-content">${markdownToHtml(recs.physicalTherapy || "")}</div> </div>
     <div style="background:linear-gradient(135deg,#ebf6f8,#eef0fb);border:1.5px solid #b8dfe5;border-radius:10px;padding:10px 12px;margin-top:6px;box-shadow:0 1px 4px #0001;page-break-inside:avoid">
       <div style="font-size:11px;font-weight:700;color:#1a6074;margin-bottom:2px">🔬 麗媚生化科技 REIBI · 舒曼波 &amp; LA200 雷射治療</div>
-      <p style="font-size:11px;color:#2c4a52;line-height:1.65;margin:0">${recs.reibiProducts || ""}</p>
+      <div style="font-size:11px;color:#2c4a52;line-height:1.65;margin:0">${markdownToHtml(recs.reibiProducts || "")}</div>
     </div>
   </div>
   <div class="divider"></div>
@@ -411,7 +432,20 @@ export default function ReportPage() {
         
         <div className="bg-slate-900 rounded-2xl p-6 text-white mt-8 shadow-xl">
           <h4 className="font-bold flex items-center gap-2 mb-3 text-emerald-400"><Waves className="w-5 h-5" /> 系統介入：舒曼波與雷射療程</h4>
-          <p className="text-sm text-slate-300 leading-relaxed mb-4">{recs.reibiProducts}</p>
+          <div className="text-sm text-slate-300 leading-relaxed mb-4">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                p: ({node, ...props}) => <p className="mb-3 last:mb-0" {...props} />,
+                strong: ({node, ...props}) => <strong className="font-bold text-slate-100" {...props} />,
+                ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-3 space-y-1" {...props} />,
+                ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-3 space-y-1" {...props} />,
+                li: ({node, ...props}) => <li className="pl-1" {...props} />
+              }}
+            >
+              {recs.reibiProducts}
+            </ReactMarkdown>
+          </div>
           <button onClick={() => router.push("/appointment")} className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors">
             前往預約排程 →
           </button>
