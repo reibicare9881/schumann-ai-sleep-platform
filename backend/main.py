@@ -865,8 +865,8 @@ async def get_schumann_report(
 @app.post("/api/sleep/assessment", status_code=201)
 async def submit_sleep_assessment(
     request: AssessmentData,
-    # 🛡️ 守門員 3 號：擋掉個人帳號，因為此報告會計算 KPI，需要有 org_code
-    current_user: dict = Depends(require_member_or_above)
+    # 允許個人模式也能提交睡眠評估，只要是本人即可
+    current_user: dict = Depends(get_current_user)
 ):
     """提交睡眠評估"""
     if current_user.get("uid") != request.user_id:
@@ -916,7 +916,7 @@ async def submit_sleep_assessment(
     report = {
         "id": report_id,
         "user_id": request.user_id,
-        "org_code": current_user.get("org_code"), 
+        "org_code": current_user.get("org_code"),
         "platform": "sleep",
         "created_at": datetime.now().isoformat(),
         "profile": request.profile.model_dump(),
