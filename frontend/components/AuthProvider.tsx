@@ -2,7 +2,7 @@
 "use client";
 import React, { createContext, useContext, useEffect, useState, useRef } from "react";
 import { ZeroTrust, AuditLog, clearCryptoKey } from "@/lib/store"; // 移除了未使用的 DB
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import API from "@/lib/api";
 
 const AuthContext = createContext<any>(null);
@@ -12,8 +12,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [useBackend, setUseBackend] = useState(false); // 是否使用后端
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
+    // 定義免登入白名單
+    const publicPaths = ['/login', '/pain-education', '/sleep-management'];
+    const isPublicPath = publicPaths.includes(pathname);
+
     // 嚴格使用後端 API Session，不允許退回 LocalStorage
     const backendSession = API.getSession();
     if (backendSession) {
@@ -31,11 +36,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUseBackend(true);
       setLoading(false);
     } else {
-      // 找不到合法 Session 就直接踢回登入頁
-      router.push("/login");
-      setLoading(false);
+      if (isPublicPath) {
+        setLoading(false);
+      } else {
+        // 找不到合法 Session 就直接踢回登入頁
+        router.push("/login");
+        setLoading(false);
+      }
     }
-  }, [router]);
+  }, [router, pathname]);
 
   useEffect(() => {
     const check = setInterval(() => {

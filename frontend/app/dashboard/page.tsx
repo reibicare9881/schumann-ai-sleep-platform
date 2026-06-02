@@ -11,7 +11,7 @@ import { MappedSleepReport, BackendSleepReport } from "@/types";
 import { useRouter } from "next/navigation";
 import { 
   ClipboardEdit, FileText, BarChart3, Target, 
-  CalendarDays, Leaf, TrendingUp, AlertTriangle, ShieldCheck, LogOut, ChevronRight, RefreshCw
+  CalendarDays, Leaf, TrendingUp, AlertTriangle, ShieldCheck, LogOut, ChevronRight, RefreshCw, ChevronDown, Activity, Moon, HeartPulse
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -22,6 +22,7 @@ export default function DashboardPage() {
   const [sleepCount, setSleepCount] = useState(0);
   const [schumannCount, setSchumannCount] = useState(0);
   const [history, setHistory] = useState<MappedSleepReport[]>([]);
+  const [platformMenuOpen, setPlatformMenuOpen] = useState(false);
 
   useEffect(() => {
     if (session && session.uid) {
@@ -82,6 +83,8 @@ export default function DashboardPage() {
   const tiles = [
     { id: "assess", icon: <ClipboardEdit className="w-8 h-8 text-teal-600" />, label: "開始健康評估", sub: "填寫問卷，生成個人報告", color: "border-teal-200 hover:border-teal-500", link: "/assessment", show: !isAdmin && can(session.systemRole, "assess") },
     { id: "history", icon: <FileText className="w-8 h-8 text-emerald-600" />, label: "查閱個人報告", sub: `睡眠: ${sleepCount} 筆 | 舒曼: ${schumannCount} 筆`, color: "border-emerald-200 hover:border-emerald-500", link: "/history", show: !isAdmin && can(session.systemRole, "view_history") },
+    { id: "pain-edu", icon: <HeartPulse className="w-8 h-8 text-rose-600" />, label: "疼痛衛教系統", sub: "50項疼痛部位保健導引", color: "border-rose-200 hover:border-rose-500", link: "/pain-education", show: true },
+    { id: "sleep-edu", icon: <Moon className="w-8 h-8 text-indigo-600" />, label: "睡眠專家系統", sub: "50項睡眠困擾保健導引", color: "border-indigo-200 hover:border-indigo-500", link: "/sleep-management", show: true },
     { id: "org", icon: <BarChart3 className="w-8 h-8 text-purple-600" />, label: "單位KPI報表", sub: "去識別化統計分析", color: "border-purple-200 hover:border-purple-500", link: "/kpi", show: isAdmin || can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr") },
     { id: "okr", icon: <Target className="w-8 h-8 text-amber-600" />, label: "OKR績效儀表板", sub: "健康成果 × 獎酬激勵", color: "border-amber-200 hover:border-amber-500", link: "/okr", show: isAdmin || can(session.systemRole, "view_okr") || can(session.systemRole, "view_dept_okr") },
     { id: "appt", icon: <CalendarDays className="w-8 h-8 text-sky-600" />, label: "預約排程管理", sub: isAdmin ? "查閱/修改/審核" : "舒曼波 / 激光物理干預", color: "border-sky-200 hover:border-sky-500", link: "/appointment", show: isAdmin || can(session.systemRole, "view_appt") },
@@ -111,25 +114,48 @@ export default function DashboardPage() {
         </div>
         
         <div className="flex items-center gap-2">
-          {/* 切換平台按鈕 */}
-          <button 
-            onClick={async () => {
-               const toPlatform = session.platform === 'sleep' ? 'schumann' : 'sleep';
-               const success = await switchPlatform(toPlatform);
-               if (success) {
-                  if (toPlatform === 'schumann') {
-                      router.push('/'); // 跳轉到舒曼共振首頁
-                  } else {
-                      window.location.reload(); // 切回睡眠時，重新整理留在 Dashboard
-                  }
-               } else {
-                  alert("切換平台失敗");
-               }
-            }}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-indigo-600 bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-700 rounded-lg transition-colors border border-transparent font-bold"
-          >
-            <RefreshCw className="w-4 h-4" /> 切換至 {session.platform === 'sleep' ? '舒曼' : '睡眠'}
-          </button>
+          {/* 跨平台下拉選單 */}
+          <div className="relative">
+            <button 
+              onClick={() => setPlatformMenuOpen(!platformMenuOpen)}
+              className="flex items-center gap-2 px-4 py-2 text-sm text-indigo-600 bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-700 rounded-lg transition-colors border border-transparent font-bold"
+            >
+              <RefreshCw className="w-4 h-4" /> 切換平台 <ChevronDown className="w-4 h-4" />
+            </button>
+            {platformMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50">
+                <div className="py-1">
+                  <button 
+                    onClick={async () => {
+                      await switchPlatform('sleep');
+                      setPlatformMenuOpen(false);
+                      window.location.reload();
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 font-medium"
+                  >
+                    <Moon className="w-4 h-4 text-indigo-500" /> 睡眠評估平台
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      await switchPlatform('schumann');
+                      setPlatformMenuOpen(false);
+                      router.push('/');
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 font-medium"
+                  >
+                    <Activity className="w-4 h-4 text-emerald-500" /> 舒曼共振平台
+                  </button>
+                  <div className="border-t border-slate-100 my-1"></div>
+                  <Link href="/pain-education" className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-rose-50 hover:text-rose-700 flex items-center gap-3 font-medium">
+                    <HeartPulse className="w-4 h-4 text-rose-500" /> 疼痛衛教專家系統
+                  </Link>
+                  <Link href="/sleep-management" className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 flex items-center gap-3 font-medium">
+                    <Moon className="w-4 h-4 text-indigo-600" /> 睡眠專家系統
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
 
           <button 
             onClick={logout}

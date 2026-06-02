@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { 
   User, Building2, ChevronLeft, Lock, ShieldCheck, 
-  Info, Check, XCircle, Loader2
+  Info, Check, XCircle, Loader2, HeartPulse, Moon
 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { C, ROLES, PERMS } from "@/lib/config";
@@ -215,6 +216,32 @@ export default function LoginPage() {
             <p className="text-xs text-slate-500 leading-relaxed">多層級角色分權<br/>OKR 績效管理</p>
           </button>
         </div>
+        <div className="mt-8 pt-8 border-t border-slate-200">
+          <div className="text-center mb-6">
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">探索專家系統 (免登入)</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Link href="/pain-education" className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-center gap-4 hover:bg-rose-100 transition-colors group">
+              <div className="bg-rose-100 w-12 h-12 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
+                <HeartPulse className="w-6 h-6 text-rose-600" />
+              </div>
+              <div className="text-left">
+                <div className="font-bold text-slate-800">疼痛衛教系統</div>
+                <div className="text-xs text-slate-500">50項疼痛部位保健導引</div>
+              </div>
+            </Link>
+            <Link href="/sleep-management" className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex items-center gap-4 hover:bg-indigo-100 transition-colors group">
+              <div className="bg-indigo-100 w-12 h-12 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform shrink-0">
+                <Moon className="w-6 h-6 text-indigo-600" />
+              </div>
+              <div className="text-left">
+                <div className="font-bold text-slate-800">睡眠專家系統</div>
+                <div className="text-xs text-slate-500">50項睡眠困擾保健導引</div>
+              </div>
+            </Link>
+          </div>
+        </div>
+      </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-lg overflow-hidden">
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
