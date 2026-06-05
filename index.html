@@ -6,11 +6,26 @@
     <title>疼痛衛教與健康促進專家系統 - 50項全功能版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* 術語註解樣式 */
+        .glossary-term {
+            border-bottom: 2px dashed #f59e0b;
+            cursor: help;
+            font-weight: 600;
+            color: #4f46e5;
+            padding: 0 2px;
+            background-color: #fef3c7;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .glossary-term:hover {
+            background-color: #fde68a;
+        }
+    </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
     <div class="max-w-4xl mx-auto px-4 py-8 flex-grow">
-        <!-- 標題區 -->
         <header class="text-center mb-8">
             <h1 class="text-3xl font-bold text-indigo-700 mb-2">
                 <i class="fa-solid fa-heart-pulse mr-2"></i>疼痛衛教與健康促進專家系統
@@ -18,14 +33,11 @@
             <p class="text-slate-500">已擴充至 50 項常見疼痛部位。請切換專家角色觀點獲取導引。</p>
         </header>
 
-        <!-- 控制面板 -->
         <div class="bg-white rounded-xl shadow-md p-6 mb-6">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- 1. 選擇部位 (50項分類選單) -->
                 <div>
                     <label class="block text-sm font-semibold text-slate-700 mb-2">1. 選擇疼痛部位 (共50項)</label>
                     <select id="partSelect" onchange="updateContent()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
-                        <!-- 頭頸面部 (7) -->
                         <optgroup label="-- 頭頸面部 --">
                             <option value="tension_headache">01. 緊張性頭痛</option>
                             <option value="migraine">02. 偏頭痛</option>
@@ -35,7 +47,6 @@
                             <option value="cervical_radiculopathy">06. 頸椎壓迫麻痛 (頸椎病)</option>
                             <option value="eyestrain_headache">07. 眼壓高伴隨頭痛</option>
                         </optgroup>
-                        <!-- 肩胸背部 (9) -->
                         <optgroup label="-- 肩胸背部 --">
                             <option value="shoulder_impingement">08. 肩膀夾擠症候群</option>
                             <option value="frozen_shoulder">09. 五十肩 (肩關節粘連)</option>
@@ -47,7 +58,6 @@
                             <option value="thoracic_stiffness">15. 胸椎僵硬緊繃</option>
                             <option value="pectoralis_major_tightness">16. 胸大肌緊繃 (含胸駝背)</option>
                         </optgroup>
-                        <!-- 腰薦尾椎 (7) -->
                         <optgroup label="-- 腰薦尾椎 --">
                             <option value="acute_lumbago">17. 急性腰扭傷 (閃到腰)</option>
                             <option value="lumbar_disc_herniation">18. 腰椎間盤突出</option>
@@ -57,10 +67,9 @@
                             <option value="psoas_muscle_tightness">22. 腰大肌緊繃 (挺不直腰)</option>
                             <option value="coccydynia">23. 尾骨疼痛</option>
                         </optgroup>
-                        <!-- 上肢手部 (9) -->
                         <optgroup label="-- 上肢手部 --">
                             <option value="tennis_elbow" selected>24. 網球肘 (手肘外側痛)</option>
-                            <option value="golfers_elbow">25. 高爾夫球肘 (手肘內側痛</option>
+                            <option value="golfers_elbow">25. 高爾夫球肘 (手肘內側痛)</option>
                             <option value="olecranon_bursitis">26. 鷹嘴突滑囊炎 (肘尖腫痛)</option>
                             <option value="carpal_tunnel">27. 腕隧道症候群 (滑鼠手)</option>
                             <option value="de_quervain_tenosynovitis">28. 媽媽手 (大拇指側腕痛)</option>
@@ -69,12 +78,11 @@
                             <option value="tfcc_injury">31. 三角纖維軟骨複合體損傷</option>
                             <option value="finger_oa">32. 手指退化性關節炎</option>
                         </optgroup>
-                        <!-- 下肢臀腿膝足 (18) -->
                         <optgroup label="-- 下肢臀腿膝足 --">
                             <option value="hip_oa">33. 髖關節退化性關節炎</option>
                             <option value="trochanteric_bursitis">34. 大轉子滑囊炎 (大腿外側側臥痛)</option>
                             <option value="it_band_syndrome">35. 髂脛束症候群 (跑步膝)</option>
-                            <option value="patellofemoral_pain">36. 髕骨股骨 pain (前膝痛)</option>
+                            <option value="patellofemoral_pain">36. 髕骨股骨痛 (前膝痛)</option>
                             <option value="knee_oa">37. 膝關節退化性磨損</option>
                             <option value="patellar_tendinitis">38. 髕骨腱炎 (跳躍膝)</option>
                             <option value="meniscus_tear">39. 半月板損傷 (卡頓鎖死)</option>
@@ -93,7 +101,6 @@
                     </select>
                 </div>
 
-                <!-- 2. 選擇角色 -->
                 <div>
                     <label class="block text-sm font-semibold text-slate-700 mb-2">2. 切換專家角色觀點</label>
                     <div class="grid grid-cols-3 gap-2">
@@ -111,7 +118,6 @@
             </div>
         </div>
 
-        <!-- 顯示結果面板 -->
         <div class="bg-white rounded-xl shadow-md overflow-hidden mb-8">
             <div id="resultHeader" class="bg-indigo-600 text-white px-6 py-4 flex items-center justify-between">
                 <span id="displayRoleName" class="text-lg font-bold">物理治療師觀點</span>
@@ -145,7 +151,6 @@
             </div>
         </div>
 
-        <!-- 參考文獻與出處區 -->
         <section class="bg-slate-100 rounded-xl p-6 mb-6 text-xs text-slate-500 space-y-2">
             <h5 class="font-bold text-slate-700 text-sm mb-2"><i class="fa-solid fa-book mr-1"></i>學術參考與資料出處：</h5>
             <ul class="list-disc list-inside space-y-1">
@@ -156,7 +161,6 @@
         </section>
     </div>
 
-    <!-- 頁腳免責聲明 -->
     <footer class="bg-slate-900 text-slate-400 text-xs py-4 text-center border-t border-slate-800">
         <div class="max-w-4xl mx-auto px-4">
             <p class="font-semibold text-amber-500 mb-1"><i class="fa-solid fa-triangle-exclamation mr-1"></i>【重要免責聲明】</p>
@@ -164,8 +168,30 @@
         </div>
     </footer>
 
-    <!-- 核心資料庫 (50項疼痛完整封裝) -->
     <script>
+        // 專業術語大白話字典
+        const glossaryData = {
+            "HRV": "心率變異度 (Heart Rate Variability)。副交感神經越活潑，HRV越高，身體越放鬆、抗壓性越好。",
+            "松果體": "大腦中負責分泌「褪黑激素」的生理鐘核心腺體，感知黑暗時會開始分泌，引導人體進入睡眠。",
+            "陽不入陰": "中醫睡眠的核心理論。白天的「陽氣」代表活動與亢進，夜晚必須收斂進入代表安靜的「陰分」，若陽氣持續在外飄浮（如腦袋開機停不下來），就會引發失眠。",
+            "子午流注": "中醫的時間生物學。認為人體十二條經絡在一天 24 小時中，各自有氣血最旺盛的 2 小時（如夜間 11-1 點走膽經、1-3 點走肝經）。",
+            "枕下肌群": "位於後腦勺正下方的小肌肉群。長時間低頭看手機會使其極度緊繃，壓迫神經並引發張力性頭痛。",
+            "網球肘": "手肘外側肌腱因反覆手腕出力導致的慢性發炎退化，醫學上稱為「肱骨外上髁炎」。",
+            "胃不和則臥不安": "中醫經典理論。如果胃腸道有積食、脹氣、胃食道逆流等不適，會直接干擾心神，導致夜間輾轉難眠、容易驚醒。"
+        };
+
+        // 智慧術語替換引擎
+        function injectGlossaryTooltips(text) {
+            if (!text) return "";
+            let processedText = text;
+            Object.keys(glossaryData).forEach(term => {
+                const regex = new RegExp(term, 'g');
+                const tooltipHtml = `<span class="glossary-term" title="${glossaryData[term]}">${term}</span>`;
+                processedText = processedText.replace(regex, tooltipHtml);
+            });
+            return processedText;
+        }
+
         const database = {
             // == 01-07 頭頸面部 ==
             tension_headache: {
@@ -336,7 +362,392 @@
                     action: "【點穴開導】用雙手食指、中指指腹，由眼頭（睛明）順著眉毛（攢竹、魚腰、絲竹空）輕柔點壓至眼尾。"
                 }
             },
-
+            shoulder_impingement: {
+                name: "08. 肩膀夾擠症候群",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "肩峰下空間狹窄，導致旋轉肌袖（尤其是棘上肌肌腱）或肩峰下滑囊在肩部外展高舉時受到夾擠，產生局部微小撕裂與發炎。",
+                    education: "日常生活中應避免手部頻繁高舉過頭的動作（如擦高處窗戶）。工作時需有意識地將肩胛骨微收，改善圓肩姿勢。",
+                    targetPoint: "肩胛骨內側緣穩定肌群（中下斜方肌、菱形肌）",
+                    action: "【肩胛穩定控制訓練】背靠牆站立，雙手手肘彎曲呈「W」字型，將肩胛骨向後向下收緊貼牆，維持 5-10 秒，重複 10 次，以擴大肩峰下空間。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬中醫「肩痺」、「漏肩風」範疇，多因體質氣血漸虛，營衛不固，導致風寒濕邪乘虛侵襲肩部經絡，氣血凝滯不通。",
+                    education: "肩部需嚴格注意防寒保暖，流汗後應立即擦乾，避免冷氣直吹肩頸。忌食生冷寒涼，以免加重寒濕痺阻。",
+                    targetPoint: "手陽明大腸經（肩髃穴）、手少陽三焦經（肩髎穴）",
+                    action: "【溫經散寒導引】使用溫熱敷袋或艾灸針對肩髃穴與肩髎穴進行熱促進，每次 10-15 分鐘，以局部微紅發熱為度，促進局部微循環。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "手三陽經（大腸經、三焦經、小腸經）之氣血在肩關節周圍產生嚴重結節，能量流動受阻，導致關節局部失去經氣濡養。",
+                    education: "每日早晚可進行雙臂前後緩慢大迴轉，或以手扶牆做肩部畫圈，活絡肩部經脈氣血，舒緩局部氣結。",
+                    targetPoint: "肩井穴、曲池穴",
+                    action: "【循經推按疏通】以對側手掌輕柔揉按患側肩頸交界的肩井穴，並順著手臂外側三陽經循行線，由上往下推抹至肘部曲池穴，每次 3 分鐘。"
+                }
+            },
+            frozen_shoulder: {
+                name: "09. 五十肩 (肩關節粘連)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "肩關節囊發生廣泛性的無菌性發炎與纖維化粘連，導致肩關節在各個方向的活動度（特別是外轉與外展）受到物理性嚴重限制。",
+                    education: "在不引發劇烈刺痛的安全範圍內，必須盡可能維持肩關節的日常活動。急性發炎期應減少拉扯，慢性期則需以溫和熱敷搭配關節囊伸展為主。",
+                    targetPoint: "肩關節囊下緣及周邊緊繃之腋下軟組織",
+                    action: "【鐘擺運動牽拉】身體微彎手扶桌面，患側手臂自然下垂，利用身體重心的搖晃帶動患側手臂像鐘擺般輕柔畫圈，藉由地心引力放鬆關節囊。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "又稱「肩凝症」，多發於五十歲左右，此時肝腎漸衰、氣血不足，復感風寒濕邪，導致肩部經脈拘急，氣血瘀滯不通而「凝」。",
+                    education: "日常可多食用具備補益肝腎、溫經通絡之食材（如杜仲、桑寄生）。肩部睡覺時切勿露出被外。",
+                    targetPoint: "手太陰肺經、手陽明大腸經之交會與遠端穴",
+                    action: "【活血化瘀透穴】在發作間歇期，可按壓小腿遠端的「條口穴」並試著微動患肩（條口透承山），以遠端經絡牽引達到舒筋活絡之效。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "肺經與大腸經之經氣在肩前與肩側部嚴重淤滯，導致能量無法正常開闔，關節宛如被冰封，氣血無法流注至手臂末端。",
+                    education: "可經常以空掌拍打另一側肩膀，或面向牆壁進行手指「爬牆運動」，循序漸進解開肩關節周圍的氣結與粘連。",
+                    targetPoint: "中府穴、雲門穴（鎖骨下方胸大肌處）",
+                    action: "【撥筋開穴】以指腹尋找肩前中府穴與雲門穴附近的痛性結節，進行深層但緩慢的橫向撥動，每次 3-5 分鐘，以解開胸前筋膜張力。"
+                }
+            },
+            rotator_cuff_tendinitis: {
+                name: "10. 旋轉肌袖發炎",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "過度使用或退化導致旋轉肌群（多為棘上肌）肌腱產生微小撕裂。常伴隨肩關節動態穩定度下降，在手臂上舉特定角度時會引發疼痛弧（Painful Arc）。",
+                    education: "急性發炎期應避免手臂高舉過頭或向後伸手拿東西（如在車前座拿後座物品）。日常應保持肩胛骨貼合肋骨的良好姿勢。",
+                    targetPoint: "棘上肌肌腱附著點（肩峰正下方）",
+                    action: "【等長收縮穩定訓練】手肘彎曲 90 度緊貼身體側邊，用另一手給予向內或向外的阻力，患側手出力對抗但不產生實際關節活動，每次維持 5-10 秒，促進肌腱修復。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "此屬「傷筋」範疇，多因年老氣血漸虧，或勞作過度耗傷經脈，導致局部經筋失去濡養，外邪乘虛而入，氣血瘀滯於肩部。",
+                    education: "忌提重物與過度勞累。日常可多食用富含膠質食物以滋養筋骨，並嚴格做好肩部夜間保暖，防範寒濕侵襲。",
+                    targetPoint: "手太陽小腸經、手少陽三焦經",
+                    action: "【溫經化瘀外敷】可選用具備活血化瘀、舒筋活絡之漢方草本藥膏，精準敷貼於肩前與肩外側，促進局部氣血微循環。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "肩部經脈交會處（特別是小腸經與三焦經）發生能量淤阻，氣結卡在肩峰下方，導致手部上舉時經絡氣機無法順利通過。",
+                    education: "每日可進行溫和的手臂內外旋轉伸展，配合深呼吸，意念引導氣血灌注至肩部，鬆解局部緊繃的生物能量場。",
+                    targetPoint: "天宗穴（肩胛骨中央凹陷處）、肩髎穴",
+                    action: "【點按疏通肩背】使用網球或按摩球，靠牆按壓背部肩胛骨中央的「天宗穴」，進行定點深層揉按 1-2 分鐘，能有效釋放肩關節前側的張力。"
+                }
+            },
+            levator_scapulae_pain: {
+                name: "11. 肩胛提肌酸痛 (膏盲痛)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "長期處於「頭部前傾」與「圓肩」姿勢，導致連接頸椎與肩胛骨上角的提肩胛肌長期處於被拉長的離心緊繃狀態，引發肌筋膜疼痛症候群。",
+                    education: "必須根本性地調整電腦螢幕與座椅高度，避免不自覺的聳肩。每工作一小時應起身做擴胸與收下巴動作。",
+                    targetPoint: "肩胛骨內上角（提肩胛肌附著點）",
+                    action: "【提肩胛肌伸展】坐姿，右手抓住椅子邊緣穩定右肩，將頭部轉向左側腋下，左手放在後腦勺輕輕往左下方牽引，感覺右頸後側緊繃，維持 15 秒。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "俗稱的「膏肓痛」。多因久坐伏案，氣血運行不暢，導致足太陽膀胱經氣機受阻；或因風寒之邪客於背部，寒凝血滯，筋脈拘急。",
+                    education: "背部最忌受寒，冷氣房內建議穿著薄外套或披肩覆蓋頸背交界處。可多飲用溫熱水，促進背部微微發汗散寒。",
+                    targetPoint: "足太陽膀胱經（背部腧穴）",
+                    action: "【熱敷與拔罐導引】建議針對頸背交界處至肩胛骨內側進行溫熱敷；在專業人員操作下，於膏肓穴周邊進行滑罐，可有效拔除深層寒濕與瘀血。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "太陽膀胱經的能量在後背上焦處嚴重卡頓，氣血無法順暢下行，形成局部堅硬的條索狀氣結，導致沉重與牽扯痛。",
+                    education: "經常執行「雙手托天理三焦」的動作，將雙手交叉上舉過頭，伸展整個背部與胸廓，暢通上焦經氣。",
+                    targetPoint: "膏肓穴（第四胸椎棘突下，旁開三寸）、肩外俞穴",
+                    action: "【鬆解膏肓氣結】雙手抱胸使肩胛骨向兩側展開，請他人協助或使用按摩棒，在肩胛骨內側緣進行由上往下的深度撥筋推抹，每次 3 分鐘。"
+                }
+            },
+            rhomboid_strain: {
+                name: "12. 菱形肌拉傷 (上背痛)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "多因瞬間用力拉扯（如啟動割草機、拉重物），或長期含胸駝背導致背部菱形肌無力且過度伸展，引發急性拉傷或慢性勞損發炎。",
+                    education: "急性拉傷期需休息並冰敷。慢性期重點在於強化背部肌群，避免胸前胸大肌過緊造成的力學失衡，需同時伸展胸肌與強化背肌。",
+                    targetPoint: "兩側肩胛骨之間的菱形肌群",
+                    action: "【肩胛後收肌力訓練】站立或坐姿，將雙手手肘彎曲 90 度，想像兩片肩胛骨中間夾著一顆檸檬，用力將肩胛骨向後收攏擠壓，維持 5 秒後放鬆，重複 10 次。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬「背痛」範疇。急性多為閃挫岔氣，氣血瘀阻於背；慢性則為勞損傷氣，督脈與膀胱經脈氣虛不攝，不榮則痛。",
+                    education: "發作期間避免提重物與劇烈扭轉軀幹。日常可配合呼吸吐納，緩解背部緊繃感。飲食可適度加入行氣活血之食材如薑、蒜。",
+                    targetPoint: "督脈、足太陽膀胱經",
+                    action: "【理氣活血推拿】在背部脊椎兩側的膀胱經循行線上，使用具備活血行氣功效的漢方本草精油，進行由下往上、由內向外的推揉放鬆。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "背部為陽，胸為陰。長期不良姿勢導致陽氣在背部鬱結，膀胱經背俞穴的能量無法與前胸任脈正常交接，形成陰陽失衡。",
+                    education: "多做「擴胸展臂」的動作，配合深長吸氣，將陽氣重新引導回背部，鬆開脊椎兩側的經絡束縛。",
+                    targetPoint: "厥陰俞、心俞穴（肩胛骨內側緣線上）",
+                    action: "【背俞穴點按】使用兩顆網球放入襪子中打結，平躺並將網球墊在背部脊椎兩側（肩胛骨中間），利用身體重量進行靜態壓迫與微小滾動，鬆解穴位。"
+                }
+            },
+            thoracic_outlet: {
+                name: "13. 胸廓出口症候群 (手麻)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "臂神經叢與鎖骨下動靜脈在穿過頸部斜角肌間隙、鎖骨與第一肋骨之間，或胸小肌下方時受到物理性壓迫，導致整個手臂產生麻木、刺痛與無力感。",
+                    education: "嚴禁背負沉重且肩帶過細的背包，避免長時間高舉雙手工作。需特別注意睡眠時手不要壓在頭部下方。",
+                    targetPoint: "前中斜角肌、鎖骨下區域、胸小肌",
+                    action: "【胸小肌與斜角肌伸展】找一門框，患側手肘彎曲 90 度靠在門框上，身體微向前傾並向對側轉，感覺胸前與肩胛前方有拉扯感，維持 15 秒。同時練習深層腹式呼吸，減少頸部輔助呼吸肌代償。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "此症狀屬於「痺證」，多由氣虛血瘀、絡脈不通所致。上焦氣血運行不暢，無法順利循經濡養上肢末梢，導致麻木不仁。",
+                    education: "氣血虛弱者不宜過度勞累，應注意頸胸部位的保暖。日常可飲用黃耆、桂枝、當歸煮水，以達到溫經通絡、益氣活血之效。",
+                    targetPoint: "手三陰經起始處、缺盆穴（鎖骨上窩）",
+                    action: "【溫經散寒局部理療】使用溫熱毛巾敷於頸部與鎖骨周邊，並配合中醫師指導的溫和推拿，舒緩鎖骨上窩（缺盆穴）周邊緊繃的筋膜。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "連接頸部與手臂的重要經絡樞紐（如胃經、大腸經、肺經）在鎖骨周邊發生嚴重的交通阻塞，氣機卡頓導致能量無法流向手臂。",
+                    education: "平時多執行頭頸部向側後方的緩慢伸展，並輕柔撫摩鎖骨下方，引導經氣順利通過胸廓出口。",
+                    targetPoint: "缺盆穴（鎖骨上窩凹陷處）、極泉穴（腋窩頂點）",
+                    action: "【經絡樞紐疏通】用對側食指與中指指腹，極度輕柔地在「缺盆穴」進行微小圈狀撥動（切勿用力重壓）；隨後輕揉腋下的「極泉穴」，暢通手臂經脈起點。"
+                }
+            },
+            intercostal_neuralgia: {
+                name: "14. 肋間神經痛",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "沿著肋間神經走向（通常為單側）的劇烈刺痛或燒灼痛。常因胸椎關節活動度受限、肋間肌痙攣、或曾受帶狀皰疹病毒感染後遺症引發。",
+                    education: "避免軀幹大幅度扭轉與過度彎腰。若是因咳嗽或深呼吸引發疼痛，可嘗試在咳嗽時用枕頭抱緊胸廓以提供物理性穩定支撐。",
+                    targetPoint: "受限之胸椎小關節與肋間肌間隙",
+                    action: "【胸廓擴張呼吸運動】正坐，雙手交叉抱住下肋骨外側，吸氣時感受肋骨向外推開雙手，吐氣時雙手微用力將肋骨向內壓，增加胸廓活動度並放鬆肋間肌。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬「脅痛」範疇。多因肝氣鬱結、氣滯血瘀，或跌打閃挫導致經脈受損，使得循行於脅肋的肝膽經脈氣血不通。",
+                    education: "保持情緒舒暢至關重要，因「怒傷肝」會加重肝氣鬱結。飲食上宜清淡，可多食白蘿蔔、陳皮等理氣寬胸之食材。",
+                    targetPoint: "足厥陰肝經、足少陽膽經",
+                    action: "【疏肝理氣外治】選用含有柴胡、香附、川芎等理氣活血成分之漢方貼布，敷貼於側胸脅肋疼痛處，或沿著肋骨間隙進行輕柔順推。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "側胸部為肝經與膽經的領地。壓力或外傷導致少陽與厥陰經氣在脅肋部發生氣結，形成局部刺痛如針扎的能量阻塞。",
+                    education: "每日進行側腰與側胸的伸展，單手上舉過頭，身體向對側彎曲，深呼吸將新鮮能量引入側胸，舒展鬱結的經氣。",
+                    targetPoint: "期門穴（第六肋間隙）、日月穴（第七肋間隙）",
+                    action: "【脅肋經脈分推】使用雙手四指指腹，沿著肋骨之間的縫隙（期門穴、日月穴等部位），由胸前正中線往身體兩側進行溫和的梳理與分推，每次 3 分鐘。"
+                }
+            },
+            // == 15-16 肩胸背部 (接續) ==
+            thoracic_stiffness: {
+                name: "15. 胸椎僵硬緊繃",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "長期伏案工作或滑手機，導致胸椎處於持續的屈曲狀態，周邊韌帶與關節囊變厚僵硬，失去正常的伸展與旋轉活動度，常迫使頸椎與腰椎產生過度代償而酸痛。",
+                    education: "使用電腦時胸骨應微微上提。工作每 45 分鐘，應雙手抱頭向後伸展，避免胸椎卡在單一屈曲角度。",
+                    targetPoint: "胸椎小面關節與背部豎脊肌群",
+                    action: "【胸椎活動度伸展】坐在有椅背的椅子上，雙手十指交扣抱住後腦勺，將背部中段貼緊椅背上緣，吸氣時將上半身向後仰，吐氣放鬆，重複 8 次，增加胸椎後伸角度。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "背部為陽，胸椎僵硬多屬督脈與足太陽膀胱經氣血不通。陽氣無法順利舒展，導致背部常有沉重如石壓之感，且影響胸陽之氣的宣發。",
+                    education: "避免背部受寒風直吹，冷氣房內建議穿著背心保暖。可適度曬太陽背部（曬背），以天然的陽氣溫煦督脈。",
+                    targetPoint: "督脈、膀胱經背俞穴",
+                    action: "【熱敷理氣散寒】使用熱敷袋沿著脊椎中段兩側進行大面積熱敷；或在洗澡時用蓮蓬頭溫熱水沖背部 3 分鐘，促進背部微血管擴張，活血化瘀。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "背部膀胱經上分布著對應五臟六腑的「背俞穴」。胸椎僵硬代表體內能量在此淤積，影響了心、肺等內臟與體表經絡的氣機交換。",
+                    education: "早晨起床可做「雙手托天理三焦」的動作，向上伸展拉開脊椎間隙，啟動背部休眠的經氣。",
+                    targetPoint: "神道穴、身柱穴（胸椎脊椎骨上）",
+                    action: "【脊柱滾動鬆結】平躺於瑜珈墊上，雙膝彎曲抱胸，像不倒翁一樣前後滾動背部 15 次，利用自身重量按摩並鬆解胸椎兩側的經絡氣結。"
+                }
+            },
+            pectoralis_major_tightness: {
+                name: "16. 胸大肌緊繃 (含胸駝背)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "圓肩與駝背姿勢導致胸大肌與胸小肌長期處於短縮狀態，肌肉筋膜失去彈性，進而拉扯肩胛骨向前，不僅限制胸廓擴張影響呼吸，還可能壓迫神經血管。",
+                    education: "時刻提醒自己「挺胸收下巴」。女性若穿著支撐力不足的內衣，也容易加重胸前肌肉的代償緊繃，應選擇合適的貼身衣物。",
+                    targetPoint: "胸大肌肌腹與胸小肌附著點（喙突）",
+                    action: "【角落擴胸伸展】找一個牆角，雙手手肘彎曲 90 度分別貼在兩側牆面上，身體呈弓箭步緩慢向角落前方傾斜，直到感覺胸前有明顯拉扯感，維持 20 秒，重複 3 次。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "此症狀常伴隨中醫所謂的「胸悶」、「氣滯」。胸部為宗氣之所聚，胸肌緊繃會阻礙心肺氣機，導致呼吸短促、氣行不暢，久之容易產生情緒鬱悶。",
+                    education: "保持心情開朗，避免生悶氣導致「肝氣犯肺」。日常可多飲用玫瑰花茶或陳皮茶，有助於理氣寬胸、疏肝解鬱。",
+                    targetPoint: "任脈（膻中穴）、手太陰肺經",
+                    action: "【寬胸理氣按摩】用掌心對準兩乳頭連線中點的「膻中穴」，進行順時針與逆時針的輕柔摩揉各 50 次，以寬胸利膈，化解胸前鬱滯之氣。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "胸前為陰脈之海，肺經、心包經、心經皆由此起始。胸肌緊繃意味著三條重要陰經的源頭被壓迫，陰經氣結卡在胸前，無法流向手臂。",
+                    education: "經常深呼吸，並用空掌輕輕拍打兩側胸大肌（鎖骨下方至腋下前方），震動並鬆開此區淤滯的生物能量。",
+                    targetPoint: "雲門穴、中府穴（鎖骨下方外側）",
+                    action: "【開通肺經源頭】用大拇指指腹，在鎖骨外側下方的「中府穴」與「雲門穴」尋找酸痛點，進行深層但緩慢的橫向撥動 2 分鐘，釋放胸前筋膜張力。"
+                }
+            },
+            // == 17-23 腰薦尾椎 ==
+            acute_lumbago: {
+                name: "17. 急性腰扭傷 (閃到腰)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "搬重物姿勢不當或突然轉身，造成腰部肌肉、韌帶或小面關節的急性微小撕裂傷。身體為了防止進一步受傷，會引發強烈的保護性肌肉痙攣（肌肉僵直）。",
+                    education: "急性期（前48小時）嚴禁推拿、熱敷與拉筋，應採取冰敷並平躺休息，膝蓋下方可墊枕頭以減輕腰椎壓力。起床時必須採用「圓木滾動法」側身起床。",
+                    targetPoint: "腰部豎脊肌群與腰方肌",
+                    action: "【無痛範圍微動】在不引發疼痛的前提下，平躺雙膝彎曲，做極小幅度的骨盆前後傾斜運動（骨盆時鐘運動），促進局部發炎物質代謝，避免肌肉完全沾黏。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬「傷筋」、「閃挫」範疇。氣血因突發的外力而瞬間瘀滯於腰府，經絡不通，痛如錐刺，轉側困難。若素體腎虛，則更容易受傷。",
+                    education: "急性期必須臥床靜養，飲食忌食生冷、香蕉、糯米等不易消化或性寒之物，以免寒邪滯留加重瘀血。",
+                    targetPoint: "足太陽膀胱經、督脈",
+                    action: "【遠端動氣療法】急性期不碰腰部痛點。改按壓手背的「腰痛點」或小腿的「委中穴」，同時請患者緩慢微小地活動腰部，利用遠端經絡牽引化解腰部氣滯。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "督脈、膀胱經與橫向的帶脈，其氣機瞬間因為不當外力而錯亂斷裂。腰部周邊的生物能量場呈現極度混亂與急性阻滯的狀態。",
+                    education: "受傷初期切勿強行拉伸或找人用力踩背。應保持安靜，用意念深呼吸，將氣息緩慢導引至下腹丹田，穩定全身氣場。",
+                    targetPoint: "後溪穴（手小指側）、委中穴",
+                    action: "【循經引氣解痙】用大拇指強力按壓手側邊的「後溪穴」（通督脈），每次持續壓 1 分鐘，配合深長吐氣，引導腰部急性糾結的經氣散開。"
+                }
+            },
+            lumbar_disc_herniation: {
+                name: "18. 腰椎間盤突出",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "腰椎長期承受不當壓力（如彎腰搬重物、久坐駝背），導致椎間盤外層纖維環破裂，內部的髓核向後擠出，壓迫到神經根，引發腰痛及下肢放射痛。",
+                    education: "絕對禁止彎腰摸腳趾或仰臥起坐。日常物品應蹲下屈膝拿取，保持脊椎直立。若出現大小便失禁或馬鞍部麻木，需立即就醫手術。",
+                    targetPoint: "腰椎椎間盤與受壓神經根",
+                    action: "【麥肯錫伸展運動 (McKenzie)】俯臥於硬床上，雙手撐起上半身（如人面獅身姿勢），骨盆平貼床面，感覺腰部微酸但不痛，維持 10-15 秒，利用後仰壓力將突出的髓核向前推回。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "腰為腎之府。此病多因本虛標實——「腎氣虧虛」為本，「風寒濕邪」與「勞損瘀血」為標，導致腰部督脈失養，氣血瘀阻於脊骨之間。",
+                    education: "需重視補腎強骨，可請醫師開立獨活寄生湯等方劑調護。日常極度防寒，勿坐冰冷地板，避免風寒濕邪乘虛而入。",
+                    targetPoint: "督脈、足少陰腎經",
+                    action: "【溫陽化瘀導引】在腰骶部（八髎穴）與腎俞穴進行熱敷或溫灸，促進局部氣血循環，加速突出周圍發炎物質的吸收與消腫。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "膀胱經與督脈在腰骶部的通道受到實質性的結構壓迫，能量無法順利下達下肢，造成腿部的麻木與經氣斷層，形成「上實下虛」的格局。",
+                    education: "平時可多練習「倒退走路」，這個動作能自然矯正骨盆位置，並反向激活腰背部的督脈經氣。",
+                    targetPoint: "大腸俞、關元俞（腰部脊椎兩側）",
+                    action: "【活絡下肢經脈】雖然痛點在腰，但應重點疏通大腿外側（膽經）與後側（膀胱經），用空掌拍打大腿兩側，以「下病上治、上病下治」的原理引導能量迴流。"
+                }
+            },
+            sciatica: {
+                name: "19. 坐骨神經痛",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "主要因腰椎間盤突出壓迫神經根，或梨狀肌緊繃夾擠坐骨神經，導致疼痛沿著臀部、大腿後側一路放射至小腿或足部，常伴隨麻木與無力感。",
+                    education: "絕對避免彎腰搬重物及長時間維持同一坐姿。沙發太軟會使腰椎失去支撐，應改坐具備良好腰部支撐的硬底椅。",
+                    targetPoint: "腰椎周邊多裂肌與受壓迫神經之滑動軌跡",
+                    action: "【神經滑動與伸展】仰臥，雙手抱住患側大腿後側使髖關節彎曲 90 度，緩慢將小腿向上伸直至微感緊繃，然後將腳踝上下勾動 10 次，促進神經滑動。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "多因腎氣虧虛，督脈與膀胱經脈空虛，風寒濕邪乘虛侵襲腰府，或跌仆閃挫導致氣滯血瘀，經絡阻滯，不通則痛。",
+                    education: "急性期應臥床休息。飲食忌生冷，可適度攝取胡桃、黑芝麻、牛膝等益腎強骨之品。注意腰腿部防寒保暖。",
+                    targetPoint: "足太陽膀胱經循行線、足少陽膽經",
+                    action: "【溫經通絡散寒】使用艾灸或溫熱敷袋，沿著腰側、臀部（環跳穴）至大腿後側（委中穴）進行溫導引，驅散經絡寒濕。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "體內最長的膀胱經與膽經在腰臀部發生嚴重的能量樞紐卡頓，導致氣血無法順利向下注流，引發強烈的牽扯痛。",
+                    education: "平時可平躺床上，雙膝彎曲抱胸，輕輕左右搖晃骨盆，鬆開腰臀交界處的經脈氣結。",
+                    targetPoint: "環跳穴（臀部側面凹陷處）、委中穴（膝窩正中）",
+                    action: "【循經點按解結】以手肘或按摩球，尋找臀部環跳穴的深層痠痛點，進行定點按壓 1-2 分鐘；隨後以拇指輕揉膝窩的委中穴，疏通整條下肢經氣。"
+                }
+            },
+            piriformis_syndrome: {
+                name: "20. 梨狀肌症候群 (臀部深處痛)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "梨狀肌因過度使用（如跑步、爬山）或不良坐姿（如皮夾放在臀部口袋久坐）而發炎腫脹、緊繃，進而直接夾擠到從其下方穿過的坐骨神經。",
+                    education: "停止把皮夾或手機放在褲子後口袋坐著。避免長時間盤腿或翹二郎腿，這些動作會過度牽扯梨狀肌。",
+                    targetPoint: "臀部深層梨狀肌肌腹",
+                    action: "【梨狀肌深層拉伸 (數字4伸展)】仰臥，將患側腳踝跨在健康側膝蓋上（呈現數字4），雙手抱住健康側的大腿後側往胸口拉，感覺患側臀部深處有緊繃感，維持 20 秒，重複 3 次。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬於「臀痺」。久坐傷肉，導致臀部氣血凝滯；或因貪涼坐臥濕地，寒濕之邪客於局部，導致經筋拘急，牽引下肢而痛。",
+                    education: "注意臀部與下肢的防潮保暖，切勿坐在冰冷的大理石或濕草地上。日常可熱敷臀部，促進氣血化瘀。",
+                    targetPoint: "足少陽膽經（環跳穴周邊）",
+                    action: "【活血散結推拿】使用具備溫經活血成分之藥酒或藥膏，以掌根在臀部痛點（環跳穴）進行由輕到重的圈狀揉按，散開深層的寒凝瘀血。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "膽經與膀胱經在臀部的氣機交會處嚴重打結，導致能量流動在此形成深層的死角。由於氣結過深，一般表層按摩難以疏通。",
+                    education: "經常站立並雙手叉腰，進行大範圍的骨盆畫圈旋轉，像搖呼拉圈一樣，以動態方式活絡骨盆腔與臀部深層的氣機。",
+                    targetPoint: "環跳穴、秩邊穴（臀部深處凹陷）",
+                    action: "【網球深層定點壓】仰臥，將一顆網球放在臀部最酸痛的深處，利用身體重量緩慢壓上去，進行微小的深呼吸，每個痛點停留 30-60 秒，讓能量穿透深層氣結。"
+                }
+            },
+            si_joint_dysfunction: {
+                name: "21. 薦髂關節失能 (骨盆歪斜痛)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "骨盆周邊韌帶過度鬆弛或僵硬，導致薦骨與髂骨之間的微小關節錯位或卡頓。常發生於孕產婦、習慣單腳站立或翹二郎腿者，疼痛集中在臀部上方骨盆後側隆起處（PSIS）。",
+                    education: "嚴禁翹腳、盤腿與站立時將重心放在單一腳上。平躺時可在膝蓋下方墊枕頭以減輕骨盆前方肌肉對薦髂關節的張力牽扯。",
+                    targetPoint: "骨盆後側薦髂關節線與周邊臀中肌",
+                    action: "【骨盆穩定肌群強化】仰臥屈膝，在雙膝之間夾一顆抱枕，臀部微抬（橋式），同時雙膝用力向內擠壓抱枕，維持 10 秒，重複 10 次，誘發骨盆底肌與內收肌群穩定關節。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "此處為督脈與足太陽膀胱經的分支所在，臨近胞宮。多因氣血虛弱、骨縫未閉合（如產後），復感寒濕之邪，導致氣血瘀滯於腰骶部，筋骨失養。",
+                    education: "注重腰骶部及下腹部的保暖，避免坐冷板凳或潮濕地面。日常可多食溫補肝腎之品，如黑豆、栗子、核桃。",
+                    targetPoint: "八髎穴（薦骨背面的四個孔洞區）、督脈",
+                    action: "【溫陽散寒理療】使用艾灸或高溫熱敷袋，大面積熱敷腰骶部的「八髎穴」區域，持續 15-20 分鐘，將溫熱之氣透入骨盆深腔以化解寒瘀。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "腰骶部是膀胱經、膽經與腎經氣血交匯與轉換的超級樞紐。此處能量卡頓會造成下半身經氣不通，長期下來容易形成「上熱下寒」的能量分布不均。",
+                    education: "每日雙手握空拳，輕輕敲擊後腰部與臀部交界處，震動深層經脈，喚醒並疏通骨盆腔淤滯的氣機。",
+                    targetPoint: "次髎穴、秩邊穴",
+                    action: "【定點深壓鬆結】趴臥，請他人協助用手肘或大拇指，對準臀部上方、脊椎兩側凹陷處的「次髎穴」進行深度按壓，停留 10 秒後緩慢鬆開，反覆 5 次。"
+                }
+            },
+            psoas_muscle_tightness: {
+                name: "22. 腰大肌緊繃 (挺不直腰)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "長期久坐導致連接腰椎與大腿骨的「腰大肌」處於適應性縮短狀態。站立時，緊繃的腰大肌會將腰椎強行向前拉扯，造成骨盆前傾與腰椎過度前凸，引發腰部深層酸痛且難以挺直。",
+                    education: "每坐 1 小時必須起身伸展髖關節前側。睡覺時若感覺腰部懸空酸痛，可於小腿及膝蓋下方墊一個高枕頭，讓腰大肌呈現微屈放鬆狀態。",
+                    targetPoint: "腹部深處（鼠蹊部上方）的腰大肌肌腹",
+                    action: "【高跪姿髖屈肌伸展】採單膝高跪姿（患側膝蓋著地），骨盆保持後傾（微微縮小腹、夾緊臀部），身體重心緩慢平行向前平移，感覺大腿前側與鼠蹊部深處有緊繃拉扯感，維持 20 秒。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬「筋結」範疇。久坐暗耗脾胃氣血，脾主肌肉，脾虛則肌肉筋膜失去彈性；加之寒濕之邪容易滯留於腹部與腹股溝，導致局部經筋拘急縮短。",
+                    education: "避免飲用冰水，以免寒氣直接凝滯腹部經脈。可順時針輕柔按摩下腹部，促進腹部氣血運行與脾胃運化。",
+                    targetPoint: "足陽明胃經（腹部）、帶脈",
+                    action: "【溫通帶脈與腹部】使用溫熱敷袋敷於下腹部與鼠蹊部交界處，並配合含有生薑、桂枝成分之按摩油，沿著腹股溝輕輕推揉理氣。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "腰大肌緊繃代表胃經、脾經與腎經在腹股溝這個「陰陽交界處」發生嚴重的能量阻滯，氣血無法順利跨越骨盆下達雙腿。",
+                    education: "平時多練習「金雞獨立」（單腳站立），有意識地將注意力放在鼠蹊部，訓練並平衡該處的經絡能量與肌肉張力。",
+                    targetPoint: "氣衝穴、急脈穴（鼠蹊部周邊）",
+                    action: "【鼠蹊經脈撥動】仰臥，用四指指腹在腹股溝韌帶中點（氣衝穴附近）尋找深層的條索狀緊繃處，進行輕柔但深沉的左右橫向撥動，每次 2 分鐘。"
+                }
+            },
+            coccydynia: {
+                name: "23. 尾骨疼痛",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "多因直接跌坐撞擊尾骨，或長時間坐在過硬、缺乏支撐的椅子上，導致尾骨周邊的韌帶發炎，或引發骨盆底肌群的保護性痙攣，在坐下或起身瞬間疼痛加劇。",
+                    education: "坐姿時務必使用「中空甜甜圈坐墊」，避免尾骨直接接觸椅面受壓。坐下與起身時，應雙手扶住扶手，身體前傾，利用大腿力量站起，減少尾骨受力牽扯。",
+                    targetPoint: "尾骨周邊韌帶與骨盆底肌後束",
+                    action: "【骨盆底肌放鬆與臀大肌伸展】仰臥，雙膝彎曲抱向胸前，將雙膝盡量向外側腋下打開（嬰兒快樂式），深呼吸並將氣息導向骨盆底，感覺會陰與尾骨周邊肌肉放鬆，維持 30 秒。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "尾骨為督脈之起點（長強穴所在）。跌仆損傷導致瘀血阻滯督脈之根，氣血不通則痛；若為久坐引起，則屬氣虛下陷、血脈瘀滯於下。",
+                    education: "忌食辛辣燥熱食物，保持排便通暢，避免因過度用力排便而過度牽扯尾骨周邊經筋。",
+                    targetPoint: "督脈（長強穴）",
+                    action: "【中藥坐浴理療】建議使用具備活血化瘀、消腫止痛功效之中藥材（如紅花、延胡索）煮水後，待水溫適中時進行臀部坐浴，每次 15 分鐘，直接促進局部微循環。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "尾骨是人體生物能量的根基所在（海底輪），督脈與任脈在此交接。此處受傷會導致全身陽氣升發受阻，產生疲倦、沉重與氣機下墜感。",
+                    education: "避免久坐。每日可進行「提肛運動」，配合吸氣時提肛，吐氣時放鬆，激活尾骨周邊的經氣，引導能量向上循行。",
+                    targetPoint: "長強穴（尾骨尖端與肛門連線中點）",
+                    action: "【尾椎能量喚醒】使用手掌根部，在尾骨及其兩側區域進行大面積的快速上下摩擦，直到產生明顯的溫熱感透入皮膚深層，以疏散該處凝結的氣血。"
+                }
+            },
             // == 24. 網球肘 (為確保向下相容，保留原核心編碼) ==
             tennis_elbow: {
                 name: "24. 網球肘 (手肘外側痛)",
@@ -361,56 +772,636 @@
                     targetPoint: "曲池穴、手三里穴",
                     action: "【點穴與經絡拍打】定位「曲池穴」與「手三里穴」，用大拇指指腹以螺旋揉按方式按壓，產生酸脹感為佳。"
                 }
-            }
-        };
-
-        // 為節省篇幅並確保代碼能完美在前端運行，其餘42項疼痛數據將透過此動態工廠進行自動補全
-        // 這能確保下拉選單中的所有 50 項部位都能被點選且不會報錯
-        const restParts = [
-            "golfers_elbow", "olecranon_bursitis", "carpal_tunnel", "de_quervain_tenosynovitis", "trigger_finger",
-            "wrist_sprain", "tfcc_injury", "finger_oa", "shoulder_impingement", "frozen_shoulder", "rotator_cuff_tendinitis",
-            "levator_scapulae_pain", "rhomboid_strain", "thoracic_outlet", "intercostal_neuralgia", "thoracic_stiffness",
-            "pectoralis_major_tightness", "acute_lumbago", "lumbar_disc_herniation", "sciatica", "piriformis_syndrome",
-            "si_joint_dysfunction", "psoas_muscle_tightness", "coccydynia", "hip_oa", "trochanteric_bursitis",
-            "it_band_syndrome", "patellofemoral_pain", "knee_oa", "patellar_tendinitis", "meniscus_tear", "bakers_cyst",
-            "shin_splints", "calf_strain", "achilles_tendinitis", "ankle_inversion_sprain", "high_ankle_sprain",
-            "plantar_fasciitis", "tarsal_tunnel", "achilles_bursitis", "bunion_pain", "fibromyalgia"
-        ];
-
-        restParts.forEach((key, index) => {
-            const selectElem = document.getElementById('partSelect');
-            let displayName = "未命名疼痛";
-            for (let group of selectElem.getElementsByTagName('optgroup')) {
-                for (let opt of group.getElementsByTagName('option')) {
-                    if (opt.value === key) displayName = opt.innerText;
-                }
-            }
-            
-            database[key] = {
-                name: displayName,
+            },
+            golfers_elbow: {
+                name: "25. 高爾夫球肘 (手肘內側痛)",
                 pt: {
                     roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
-                    reason: `對應於${displayName}的運動解剖學因素。多因區域關節力學失衡、周邊肌肉過度勞損、或結締組織慢性微小創傷所引起。`,
-                    education: "急性期應遵循PRICE/PEACE原則進行動態休息，避免執行引發明顯刺痛的動作，慢性期應逐步進行循序漸進的阻力與穩定度功能重建。",
-                    targetPoint: "患部周邊功能受限之軟組織與肌腹位置",
-                    action: "【物理徒手促進】針對該部位周邊的緊繃肌腹，引導執行低強度的等長收縮訓練（維持5-10秒），配合周邊筋膜輕柔分推放鬆。"
+                    reason: "前臂屈腕肌群與旋前肌因反覆過度用力（如揮桿、提重物、重度使用滑鼠），導致其在肱骨內上髁的附著點產生退化性微小撕裂與慢性發炎。",
+                    education: "在提拿重物時，手掌應盡量朝下（旋前）以減少屈肌負擔。發炎期可於手肘內側痛點下方兩指寬處佩戴專用護臂加壓帶，改變肌力作用點。",
+                    targetPoint: "前臂屈肌群總肌腱附著處（手肘內側凸起處下方）",
+                    action: "【屈肌離心收縮訓練】手握裝水的寶特瓶，手腕垂出桌面邊緣。用另一手幫忙將寶特瓶向上抬起（手腕彎曲），然後放開，僅靠患側手腕的力量「非常緩慢」地下放抵抗重量，重複 10 次。"
                 },
                 tcm: {
                     roleName: "中醫師觀點", colorClass: "bg-teal-700",
-                    reason: `此症狀在經典中歸屬「痺症」或「傷筋」。主因臟腑氣血失調，局部經脈防禦力下降，導致風、寒、濕、熱之邪乘虛侵襲，留滯關節。`,
-                    education: "調養期間應特別注意飲食清淡，嚴禁生冷、冰鎮與大寒之物，以免寒邪凝滯血脈。重視睡眠與局部患處的溫熱保暖。",
-                    targetPoint: "患側經絡循行線路與阿是穴（痛點）",
-                    action: "【溫通辨證導引】可運用溫熱敷袋或漢方本草精油貼布外敷於局部，促進局部的經絡氣血微循環，達到活血化瘀之效益。"
+                    reason: "同屬「肘勞」。病位主要在手少陰心經與手太陽小腸經。長期勞損使局部經脈空虛，氣血澀滯，風寒濕邪留連於肘部筋骨之間。",
+                    education: "發作期應注意手肘內側的避風保暖。日常可多用溫熱水浸泡手肘與前臂，忌用冰水洗滌。",
+                    targetPoint: "手少陰心經（少海穴周邊）",
+                    action: "【溫經散結貼敷】使用具有舒筋活血、溫經止痛成分之膏藥，精準敷貼於手肘內側痛點及少海穴，透過藥力滲透化解深層寒瘀。"
                 },
                 meridian: {
                     roleName: "經絡老師觀點", colorClass: "bg-amber-600",
-                    reason: `對應${displayName}，主要為該區域所通過的十二正經、奇經八脈或經筋網絡發生能量淤阻，經氣無法順暢灌注。`,
-                    education: "平時應多做大範圍的關節鬆通操（如八段錦或易筋經），配合雙手摩擦發熱後，對患側進行大面積的溫熱輕撫。",
-                    targetPoint: "該區域主理經絡之母穴、原穴或交會穴",
-                    action: "【經絡點按調理】以大拇指或圓頭按摩棒，尋找該部位對應經絡的遠端關鍵穴位，進行規律的圈狀揉壓（每次3-5分鐘），直至產生酸脹感。"
+                    reason: "手少陰心經與手厥陰心包經的氣血在手肘內側轉彎處發生嚴重淤滯，導致來自胸腔的能量無法順暢傳遞至指尖。",
+                    education: "日常可多做雙臂向兩側水平伸展，掌心朝上，頭部向後仰，深呼吸拉伸整條手臂內側的陰經脈絡。",
+                    targetPoint: "少海穴（屈肘，肘橫紋內側端與肱骨內上髁連線中點）",
+                    action: "【撥筋理氣】用另一手的大拇指指腹，尋找手肘內側少海穴附近的硬結，進行與肌肉走向垂直的橫向深層撥動，每次 2 分鐘，有助於解開肘內側的氣機阻滯。"
                 }
-            };
-        });
+            },
+            olecranon_bursitis: {
+                name: "26. 鷹嘴突滑囊炎 (肘尖腫痛)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "手肘後方的鷹嘴突滑囊因長時間受到外部壓迫（如習慣性將手肘撐在硬桌面上），或因直接撞擊，導致滑囊發炎、微血管破裂而產生明顯的積水腫脹（俗稱學生肘）。",
+                    education: "絕對避免再次將手肘撐在桌面上，讀書或工作時應使用軟墊保護。急性腫脹期切勿用力揉捏積水處，以免加重發炎與微血管出血。",
+                    targetPoint: "手肘後方鷹嘴突滑囊周邊軟組織",
+                    action: "【周邊引流與伸展】急性期採取冰敷消腫；待熱痛感消退後，可輕柔拉伸上臂後側的肱三頭肌，維持 15 秒，避免手肘因長期不敢活動而產生關節僵硬。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "此屬「肘癰」或「痰濕凝滯」。多因外傷或局部受壓，導致經絡氣血運行受阻，鬱而化熱，或脾虛生痰濕，痰瘀互結於肘部關節縫隙，形成腫塊。",
+                    education: "飲食應盡量清淡，忌食油炸、辛辣與高糖食物，以防體內痰濕加重。腫脹明顯時，手部應避免下垂過久，可適度抬高。",
+                    targetPoint: "手少陽三焦經、手太陽小腸經",
+                    action: "【清熱化濕外敷】腫痛期可選用含有黃柏、大黃等具備清熱解毒、消腫散結功效的漢方如意金黃散敷貼於肘尖，幫助滑囊積液吸收。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "手太陽小腸經與手少陽三焦經在手肘尖端交會，此處的能量通道因外力壓迫而嚴重阻塞，導致經絡中的「水液」無法順暢代謝，停滯形成水包。",
+                    education: "平時可多做手臂向上高舉、向後伸展的動作，暢通整條手臂背側的陽經氣血，引導淤積的水液回流。",
+                    targetPoint: "天井穴（肘尖直上1寸凹陷處）、小海穴",
+                    action: "【循經疏導水液】用大拇指指腹，從手肘腫脹處的「上方」（如天井穴），順著手臂後側肌肉往肩膀方向進行單向的輕柔推抹，每次 3 分鐘，協助疏導局部淤滯的能量與體液。"
+                }
+            },
+            carpal_tunnel: {
+                name: "27. 腕隧道症候群 (滑鼠手)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "手腕前側的腕隧道因覆蓋的橫腕韌帶增厚或肌腱滑液囊發炎腫脹，導致內部空間狹窄，壓迫正中神經，引發拇指、食指、中指的麻木與刺痛。",
+                    education: "打字或使用滑鼠時，手腕應維持在平直的「中立位」，可使用護腕墊支撐。夜間睡覺時可佩戴功能性護木，防止手腕過度彎曲。",
+                    targetPoint: "前臂屈肌群肌腹與正中神經走向",
+                    action: "【正中神經滑動運動】手肘伸直，手掌貼牆，手指朝下，輕微將頭轉向對側肩膀，感覺從手臂前側到手指有拉扯感，維持 5 秒，重複 5 次。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬於「腕勞」或「筋痺」。長期反覆勞作耗傷局部氣血，導致手厥陰心包經氣血運行受阻，經筋失養，寒濕留滯凝結。",
+                    education: "洗手或做家事宜使用溫水，避免手腕受寒。發作期應減少手部精細動作，讓經絡有修復喘息的空間。",
+                    targetPoint: "手厥陰心包經（腕橫紋周邊）",
+                    action: "【活血通絡外治】選用具備活血通絡功效之漢方草本藥膏，敷貼於手腕內側大陵穴與內關穴周邊，促進局部微血管循環。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "手三陰經（尤其是心包經）的經氣在通過手腕關節這個狹窄隘口時發生淤滯，能量無法抵達指尖，引發末梢麻木。",
+                    education: "每日多次執行雙手十指交叉、手心向外翻轉伸展的動作，暢通手腕與指節的經絡網絡。",
+                    targetPoint: "大陵穴（腕橫紋中央）、內關穴（腕橫紋上兩寸）",
+                    action: "【開通腕部經脈】用另一手的大拇指指腹，對準大陵穴與內關穴，進行垂直深度的點按與順時針揉動，每次 3 分鐘，釋放腕部壓力。"
+                }
+            },
+            de_quervain_tenosynovitis: {
+                name: "28. 媽媽手 (大拇指側腕痛)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "控制大拇指動作的「外展拇長肌」與「伸拇短肌」肌腱，在手腕橈側的滑車支持帶下方反覆摩擦，導致肌腱滑膜發炎增厚。常見於反覆抱嬰兒或過度使用手機打字者。",
+                    education: "改變抱小孩的姿勢，避免大拇指與食指張開呈「L」型用力，應改用前臂與手掌整體托住。急性期強烈建議配戴大拇指專用護具（Thumb Spica Splint）限制活動。",
+                    targetPoint: "前臂橈側肌腹（手腕痛點上方 3-5 公分處）",
+                    action: "【痛點轉移按摩】切勿直接用力搓揉手腕骨頭痛點。應用大拇指在手腕痛點「上方」的前臂肌肉處，進行橫向的深層撥筋按摩，放鬆連帶的肌腹張力。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬「傷筋」證。多因產後氣血本虛，百脈空虛，又因育兒過度勞作，導致手太陰肺經與手陽明大腸經氣血運行不暢，風寒乘虛客於腕部經筋。",
+                    education: "產後及發作期婦女應嚴防手部受寒，洗碗洗衣服務必使用溫熱水。可多吃紅豆、紅棗、桂圓等補益氣血之食物。",
+                    targetPoint: "手陽明大腸經（陽溪穴）、手太陰肺經（列缺穴）",
+                    action: "【溫經散寒導引】使用艾灸或溫熱敷袋，精準針對大拇指根部凹陷處的「陽溪穴」與手腕側邊的「列缺穴」進行溫熱理療，驅散局部寒凝氣滯。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "肺經與大腸經在手腕橈側交會，此處是經絡能量傳遞至大拇指與食指的咽喉要道。過度消耗使得該處能量枯竭並產生硬結。",
+                    education: "經常輕柔地旋轉手腕，並將大拇指輕握於掌心內，做微小的下壓伸展，保持此處經脈的柔韌度。",
+                    targetPoint: "手三里穴（手肘下方）、陽溪穴",
+                    action: "【遠端經絡牽引】「上病下治，下病上治」。按壓手肘下方兩寸的「手三里穴」，尋找極度酸痛點進行深層揉按，藉由大腸經的遠端牽引，解開手腕處的死結。"
+                }
+            },
+            trigger_finger: {
+                name: "29. 彈響指 (扳機指)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "手指屈肌肌腱過度摩擦，導致肌腱本身結節腫大，或包覆肌腱的 A1 滑車（環狀韌帶）發炎增厚。當手指彎曲後要伸直時，腫大的肌腱卡在滑車處，強行通過便會產生「喀」的彈響與疼痛。",
+                    education: "嚴格禁止反覆將手指彎曲並刻意使其「彈響」，這會讓發炎與結節更加惡化。可使用手指固定副木，保持手指在夜間處於伸直狀態。",
+                    targetPoint: "掌心遠端皺褶處（A1 滑車）與前臂屈肌群",
+                    action: "【肌腱滑動與前臂放鬆】用另一手的大拇指，沿著患指在手掌心的根部進行輕柔按摩；並針對前臂掌側的肌肉進行大面積的推揉，降低整體屈肌肌腱的張力。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "此為典型的「筋結」與「血瘀」。勞作過度傷及血脈，血不榮筋，導致局部經脈氣血凝滯，久之痰瘀互結，在掌心形成可以觸及的硬性結節。",
+                    education: "日常可使用生薑片煮水，待水溫微燙時浸泡雙手 10-15 分鐘，利用溫辛之性軟堅散結，促進局部微血管擴張。",
+                    targetPoint: "手掌局部阿是穴（結節處）與對應的手三陰/手三陽經",
+                    action: "【理筋散結手法】塗抹具備活血化瘀功效之藥酒，用大拇指指腹在掌心的硬結處，進行溫和且持續的「十字型」來回撥動，切忌暴力重按。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "手指為十二經脈起止交接之處，能量轉換最為密集。反覆勞損使得手部陰經（心、肺、心包經）在掌指關節處的氣機樞紐卡死，經氣無法順利貫通至指尖。",
+                    education: "每日多次執行「十指用力張開至極限」的動作，維持 5 秒後放鬆，反覆 10 次，強迫掌心的經氣向外撐開。",
+                    targetPoint: "勞宮穴（掌心正中）、八邪穴（指縫間）",
+                    action: "【指間經氣疏通】用另一手的大拇指與食指，捏住患指的兩側指縫（八邪穴區域），由掌根向指尖方向進行快速的抽拉與揉搓，引導氣血直達末梢。"
+                }
+            },
+            wrist_sprain: {
+                name: "30. 手腕韌帶扭傷",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "通常發生在跌倒時以手掌撐地（FOOSH），導致手腕過度背屈或扭轉，造成橈腕關節或腕骨間韌帶（如舟月骨韌帶）發生急性撕裂與關節不穩定。",
+                    education: "受傷初期需嚴格遵守 PRICE 原則（保護、休息、冰敷、壓迫、抬高）。痊癒前絕對禁止用患側手掌撐地起身或做伏地挺身。",
+                    targetPoint: "受損之腕關節韌帶與周邊前臂穩定肌群",
+                    action: "【等長收縮穩定訓練】在無痛範圍內，將手腕維持在中立位，用另一手分別從上下左右四個方向給予手腕推力，患側手出力抵抗但不產生移動，每次 5 秒，重建關節本體感覺。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬「閃挫傷筋」。瞬間暴力導致局部絡脈破裂，血溢脈外，氣滯血瘀，使得手腕腫脹疼痛、活動受限，氣血無法正常濡養筋骨。",
+                    education: "受傷急性期（紅腫熱痛時）忌食竹筍、花生、芒果等「發物」，以免加重局部發炎與腫脹。急性期過後可適度熱敷。",
+                    targetPoint: "腕關節周邊阿是穴、手少陽三焦經",
+                    action: "【化瘀消腫外敷】急性期使用如意金黃散等清熱涼血之藥膏冷敷；待 3-5 天紅腫消退後，改用具備溫經活血功效的貼布，促進瘀血代謝與組織修復。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "突發的外力瞬間扯斷了手腕處所有經絡的正常能量流動，手腕上的多個「原穴」（經絡原氣留止之處）受到嚴重震盪，產生能量短路。",
+                    education: "受傷後不要急著轉動手腕。應閉上眼睛深呼吸，放鬆全身緊繃的情緒，降低因受傷引起的全身交感神經亢奮。",
+                    targetPoint: "外關穴（腕背橫紋上兩寸）、陽池穴",
+                    action: "【遠端安撫氣機】避開手腕痛點。用另一手的指腹，在手腕上方兩寸的前臂處（外關穴），進行極度輕柔的撫摩，安撫並重新連結因外傷而中斷的經氣傳導。"
+                }
+            },
+            // == 31-32 上肢手部 (接續) ==
+            tfcc_injury: {
+                name: "31. 三角纖維軟骨複合體損傷",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "手腕尺側（小指側）的軟骨與韌帶結構因跌倒撐地、過度扭轉手腕（如擰毛巾、打網球）而產生撕裂傷。在手腕向尺側偏斜或旋轉時會產生劇烈刺痛與無力感。",
+                    education: "嚴格禁止擰毛巾、轉重型門把等會產生手腕扭轉張力的動作。強烈建議配戴 TFCC 專用護具（如 Wrist Widget）以穩定橈尺骨下關節，給予軟骨修復空間。",
+                    targetPoint: "手腕尺側（小指下方）關節縫隙",
+                    action: "【腕部等長穩定訓練】手腕維持正中直立，用另一手從側邊推患側手掌，患側手出力抵抗但不產生移動，每次 5 秒，重複 10 次，誘發周邊肌肉保護關節。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "此屬「腕部筋傷」。瞬間扭挫導致局部脈絡受損，氣血瘀滯於腕骨之間，血不榮筋，使得關節屈伸與旋轉不利。",
+                    education: "急性期過後需注重手腕保暖。飲食忌生冷，可多食用富含膠質食物如牛筋、黑木耳以濡養筋骨。",
+                    targetPoint: "手太陽小腸經（養老穴、陽谷穴）",
+                    action: "【活血化瘀外敷】在手腕尺側痛點周邊，使用具備活血化瘀、舒筋止痛之漢方藥膏敷貼；並輕柔按壓小指下方的「陽谷穴」，促進局部微循環。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "手腕外側為小腸經與三焦經運行的要道。軟骨受損導致經脈能量在腕部發生斷層，氣結卡在關節縫隙中，造成局部僵硬與刺痛。",
+                    education: "避免手腕大幅度轉動。可多做肩膀與手肘的伸展，保持上游經氣暢通，避免腕部能量持續淤積。",
+                    targetPoint: "養老穴（尺骨小頭橈側凹陷處）",
+                    action: "【點穴開通腕脈】用大拇指指腹，尋找手腕外側突起骨頭旁邊凹陷處的「養老穴」，進行輕柔的定點按揉 2 分鐘，有助於解開尺側的氣血阻滯。"
+                }
+            },
+            finger_oa: {
+                name: "32. 手指退化性關節炎",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "手指關節（常見於遠端指骨間關節）軟骨因長期過度使用與年齡老化而磨損，關節邊緣產生骨刺增生（希伯登氏結節），導致關節腫大、僵硬、變形與疼痛。",
+                    education: "減少需要手指用力捏握的動作（如開罐頭）。建議改用粗柄的筆或工具，以減少關節受力。早晨若手指僵硬，可將雙手泡在溫水中活動。",
+                    targetPoint: "手指各指骨間關節周邊",
+                    action: "【關節牽引與滑動】用健康側的手指，輕輕捏住患側手指的末端，順著手指生長方向給予極度輕柔的「向外拉扯牽引」，每個關節維持 5 秒，增加關節內空間與滑液循環。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬「骨痺」或「痛風」範疇（需排除尿酸偏高）。多因肝腎虧虛，精血不足以濡養骨髓，復感風寒濕邪客於指節，導致痰瘀交結，骨節變大變形。",
+                    education: "平時應多注重補益肝腎，可食枸杞、黑芝麻、桑椹等。洗手或做家事切忌觸碰冰水，以免寒邪深入骨節。",
+                    targetPoint: "手部各指節阿是穴、八邪穴",
+                    action: "【溫陽通絡浸泡】使用具有溫經散寒、活血通絡之藥材（如桂枝、紅花、伸筋草）煎水，待水溫微燙時浸泡雙手 15 分鐘，軟化僵硬的指節。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "手指是所有十二正經的起點與終點（井穴所在）。指節退化變形，意味著全身經絡的末梢能量轉換站發生了嚴重的生鏽與阻塞。",
+                    education: "每日多次進行「十指對敲」或「乾洗手」動作，大力搓揉雙手至發熱，強迫能量沖刷末梢經絡。",
+                    targetPoint: "十宣穴（十指尖端）、八邪穴（指縫間）",
+                    action: "【末梢拔伸理氣】用拇指與食指捏住患指的兩側，由指根向指尖進行快速的滑動拔伸，並在指尖的「十宣穴」稍微用力按壓，激發末梢經絡的生機。"
+                }
+            },
+            // == 33-50 下肢臀腿膝足 ==
+            hip_oa: {
+                name: "33. 髖關節退化性關節炎",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "髖關節透明軟骨長期磨損變薄，關節間隙狹窄。疼痛常發生在鼠蹊部深處，並可能向下放射至大腿前側或膝蓋。早晨起床時常有嚴重的關節僵硬感。",
+                    education: "嚴禁蹲踞、坐過低的矮凳或盤腿坐。應進行體重控制以減少關節負重。建議在無痛範圍內多進行游泳或室內腳踏車運動，維持關節潤滑。",
+                    targetPoint: "髖關節周邊包覆肌群（臀中肌、股四頭肌）",
+                    action: "【蚌殼式臀中肌強化 (Clamshell)】側臥，雙膝微彎，骨盆保持垂直不後翻，將上方膝蓋像蚌殼一樣緩慢打開，感覺臀部側面肌肉出力，重複 15 次，強化骨盆穩定度以減少髖關節壓力。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "此症為「髀樞痛」或「骨痺」。肝主筋、腎主骨，年老肝腎精血漸衰，筋骨失養；復受風寒濕邪留滯關節，導致局部氣血運行受阻，久之骨節退化。",
+                    education: "飲食可多攝取補肝腎、強筋骨之品，如骨碎補、杜仲、懷牛膝。下半身必須注重保暖，避免寒濕侵襲。",
+                    targetPoint: "足少陽膽經（環跳穴、居髎穴）",
+                    action: "【溫補肝腎導引】使用高溫熱敷袋或艾灸，針對臀部側面的「環跳穴」與「居髎穴」進行深度溫化，促進髖關節深層的氣血循環與組織修復。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "髖關節是下半身最大的能量樞紐，膽經與胃經在此交會。關節退化代表樞紐生鏽卡死，上下半身的經氣無法順利交流，導致腿部沉重無力。",
+                    education: "平躺床上時，可將雙腿像雨刷一樣左右緩慢轉動，進行髖關節內外旋的溫和鬆動，帶動局部經脈氣血。",
+                    targetPoint: "髀關穴（大腿前側根部）、環跳穴",
+                    action: "【樞紐撥筋解結】使用按摩球或掌根，在鼠蹊部外側（髀關穴附近）以及臀部側面（環跳穴），進行緩慢深沉的圈狀按壓，化解大關節周邊的氣結。"
+                }
+            },
+            trochanteric_bursitis: {
+                name: "34. 大轉子滑囊炎 (大腿外側側臥痛)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "大腿骨外側突出處（大轉子）上方的滑囊，因髂脛束（IT Band）過於緊繃或臀中肌無力，產生反覆摩擦而發炎。最典型的症狀是側睡壓到患側時會劇痛。",
+                    education: "睡覺時絕對避免直接側壓患側。若要側睡，請睡在健康側，並在雙膝之間夾一個厚枕頭，保持骨盆水平，減少上方髂脛束對患側的拉扯。",
+                    targetPoint: "闊筋膜張肌(TFL)與臀大肌、大腿外側組織",
+                    action: "【闊筋膜張肌伸展】站姿，將患側腿向後交叉放到健康腿的後方外側，骨盆向患側平移推出，感覺大腿外側根部有拉扯感，維持 20 秒，重複 3 次。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬中醫「痺證」，多因體虛衛外不固，風寒濕邪客於足少陽經脈，導致大腿外側經絡氣血凝滯，不通則痛，遇寒或受壓時症狀加劇。",
+                    education: "大腿外側屬少陽經，需注意防寒，避免穿著過短的褲子吹冷氣。可局部熱敷以溫經散寒。",
+                    targetPoint: "足少陽膽經（風市穴、環跳穴）",
+                    action: "【溫經散結理療】在股骨大轉子痛點周邊及大腿外側的「風市穴」，使用具備散寒除濕功效之漢方精油，由上往下進行溫和推拿理氣。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "大腿外側是膽經的專屬通道。大轉子處的發炎代表少陽膽經的樞紐能量在此嚴重阻塞，導致氣機無法順利下行至小腿與足部。",
+                    education: "每日進行「敲膽經」：雙手握空拳，沿著大腿外側由上往下規律敲擊，幫助疏通少陽經氣。",
+                    targetPoint: "環跳穴、風市穴（直立垂手時中指尖所指處）",
+                    action: "【定點化瘀疏通】避開最痛的大轉子滑囊中心，在其下方大腿外側的「風市穴」進行深層點按揉壓，利用經絡的遠端牽引作用，將鬱結的能量往下引導散開。"
+                }
+            },
+            it_band_syndrome: {
+                name: "35. 髂脛束症候群 (跑步膝)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "大腿外側的厚實筋膜（髂脛束）過度緊繃，在膝蓋彎曲 20-30 度時，反覆摩擦股骨外上髁（膝蓋外側骨頭突出處）而引發發炎，常見於跑者與自行車手。",
+                    education: "急性期需暫停跑步或減輕訓練量。跑步前必須進行動態熱身。不建議直接用滾筒「狂滾」膝蓋外側痛點或發炎的韌帶，這會讓發炎加劇。",
+                    targetPoint: "大腿外側上方的闊筋膜張肌(TFL)與臀大肌",
+                    action: "【源頭肌群滾筒放鬆】將滾筒放在大腿外側「最上方」（靠近骨盆與口袋處的闊筋膜張肌），利用身體重量緩慢滾動與深壓，從源頭降低整條髂脛束的張力。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬「筋痺」。長期反覆勞作導致筋脈勞損，肝血不足以濡養經筋，導致大腿外側筋膜拘急攣縮，局部氣血運行受阻。",
+                    education: "運動後應充分休息與伸展，讓經脈氣血有恢復的時間。可適度飲用芍藥甘草茶，以柔肝舒筋、緩急止痛。",
+                    targetPoint: "足少陽膽經（膝陽關穴、陽陵泉穴）",
+                    action: "【舒筋活絡外治】在膝蓋外側痛點上方（膝陽關）與下方（陽陵泉，筋會），敷貼活血舒筋之藥布，或輕柔推摩，暢通局部氣血。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "膽經的能量通道在大腿外側至膝蓋處繃得太緊，如同失去彈性的橡皮筋，導致經氣在膝關節外側交接時發生強烈摩擦與卡頓。",
+                    education: "除了敲膽經外，運動後應做大量的側腰與大腿外側伸展，將少陽經的氣機徹底拉伸放鬆。",
+                    targetPoint: "陽陵泉穴（小腿外側，腓骨小頭前下方凹陷處）",
+                    action: "【撥筋解痙】用大拇指指腹，對準八會穴中的「筋會」——陽陵泉穴，進行深度撥按。此穴能統理全身筋骨攣急，對緩解髂脛束緊繃有奇效。"
+                }
+            },
+            patellofemoral_pain: {
+                name: "36. 髕骨股骨痛 (前膝痛)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "髕骨（膝蓋骨）滑動軌跡異常，通常因為大腿前側的股四頭肌內外側肌力不平衡（如股內側肌 VMO 無力、外側過緊），導致髕骨在屈伸膝蓋時過度偏向外側摩擦軟骨，上下樓梯時劇痛。",
+                    education: "嚴格避免深蹲、長時間屈膝坐（如看電影）、下山或下樓梯。建議使用護膝或貼紮（McConnell Taping）將髕骨向內側引導穩定。",
+                    targetPoint: "大腿前側股四頭肌，特別是股內側肌 (VMO)",
+                    action: "【直腿抬高與 VMO 強化】仰臥，健康腳彎曲，患側腿伸直並將腳尖微微朝外，將患側腿整支向上抬高約 45 度，停留 5 秒後緩慢放下，重複 15 次，專注於大腿內側上方肌肉收縮。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬「膝痺」。脾主肌肉，脾胃氣虛則肌肉無力（股四頭肌萎縮）；外加風寒濕邪客於膝部，導致髕骨周邊經絡阻滯，氣血不榮，屈伸不利。",
+                    education: "注意膝部保暖，冷氣房內務必穿長褲或蓋毛毯。飲食可多食用山藥、蓮子健脾益氣，增強肌肉力量。",
+                    targetPoint: "足陽明胃經、足太陰脾經",
+                    action: "【溫養膝部氣血】使用艾灸或溫熱敷袋，針對膝蓋髕骨上方的「血海穴」與「梁丘穴」進行溫熨，以健脾生血、溫經通絡。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "膝蓋前方由胃經與脾經主理。前膝痛代表脾胃經脈的能量在膝關節樞紐處發生了動力失調，陽氣無法順利通過髕骨推動小腿。",
+                    education: "平躺時可用雙手掌心包覆住雙膝，用掌心的溫度溫煦膝蓋，並用意念引導氣血向下流動。",
+                    targetPoint: "血海穴（髕骨內上緣）、梁丘穴（髕骨外上緣）",
+                    action: "【提拉髕骨周邊經筋】雙手大拇指與食指，分別按壓髕骨上方的血海穴與梁丘穴，進行輕柔地向上提拉與揉按，放鬆髕骨上緣緊繃的經絡張力。"
+                }
+            },
+            knee_oa: {
+                name: "37. 膝關節退化性磨損",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "膝關節內的透明軟骨因年齡、過重或舊傷而逐漸磨損流失，導致關節間隙變窄（常見於內側），骨頭與骨頭直接摩擦，引發發炎、骨刺增生及關節變形（O型腿）。",
+                    education: "減重是減輕關節負擔的最有效方法。減少下樓梯、爬山或蹲踞動作；戶外活動時強烈建議使用登山杖或枴杖分擔重量。",
+                    targetPoint: "大腿前側股四頭肌與關節周邊韌帶",
+                    action: "【坐姿伸膝肌力訓練】坐在椅子上，將患側小腿緩慢向前伸直，將大腿前側肌肉繃緊到極限，維持 10 秒後緩慢放下，重複 15 次。強壯的股四頭肌能像避震器一樣吸收關節衝擊。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "中醫稱「骨痺」或「鶴膝風」。肝主筋、腎主骨，年老肝腎虧虛，精血不足以濡養膝部筋骨；再受風寒濕邪反覆侵襲，導致痰瘀互結，關節腫大變形。",
+                    education: "需注重下半身保暖，可配戴羊毛護膝。飲食應以補益肝腎為主，如黑豆、骨碎補、枸杞等，忌食生冷及過度寒涼之蔬果。",
+                    targetPoint: "膝部局部阿是穴、內外膝眼（犢鼻）",
+                    action: "【溫陽散寒化瘀】在醫師指導下，使用艾條針對髕骨下方的「內外膝眼（犢鼻穴）」進行溫和灸，或敷貼溫經通絡膏盲，將溫熱之氣透入關節腔內。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "膝蓋是下半身最重要的能量過濾器。退化性關節炎代表此處的經絡通道（胃經、脾經、肝經）嚴重老化淤塞，濁氣與濕氣堆積在關節腔內無法排除。",
+                    education: "每日早晚坐在床上，雙手搓熱後，手掌平貼在膝蓋上做大範圍的順時針與逆時針摩揉，直到膝蓋內部有溫熱感透入。",
+                    targetPoint: "陰陵泉穴（小腿內側骨頭下方凹陷處）、足三里",
+                    action: "【排濕通絡點按】用大拇指重壓小腿內側的排濕大穴「陰陵泉」，以及外側的強壯穴「足三里」，每次揉按 3 分鐘，協助排除膝關節內淤積的濕濁之氣。"
+                }
+            },
+            patellar_tendinitis: {
+                name: "38. 髕骨腱炎 (跳躍膝)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "連接髕骨下緣與脛骨的「髕骨肌腱」因反覆承受極大的瞬間拉力（如頻繁跳躍、急停、下坡跑），導致肌腱附著處產生微小撕裂傷與慢性退化性發炎。",
+                    education: "急性期必須停止跳躍與衝刺訓練，並冰敷髕骨下緣。活動時可佩戴專用的「髕骨加壓帶（Patellar Strap）」於髕骨下方，改變肌腱受力支點，減輕附著處的壓力。",
+                    targetPoint: "髕骨下緣肌腱附著處與大腿股四頭肌",
+                    action: "【離心收縮訓練 (斜板深蹲)】站在微下傾的斜板上（腳跟墊高），單腳站立，用「極度緩慢」的速度微蹲（離心收縮大腿前側），然後用雙腳的力量站起。這能有效刺激肌腱重新排列與修復。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬於中醫「傷筋」證候。運動過度或用力不當，導致膝部經筋脈絡受損，氣血運行受阻，局部血不榮筋，復感風邪而腫痛發炎。",
+                    education: "運動後應充分休息與伸展，讓受損筋脈得以復原。局部切忌受寒，可使用溫水輕柔沖洗膝蓋周邊促進循環。",
+                    targetPoint: "足陽明胃經（犢鼻穴、足三里穴）",
+                    action: "【活血化瘀敷貼】急性期過後，可選用具備活血舒筋功效之中藥膏貼敷於髕骨下方（犢鼻穴周邊），幫助清除局部發炎與微小瘀血。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "胃經的能量通道在通過膝關節前方時，因承受過大的爆發力而產生了結構性的微小撕裂與氣機中斷，經氣在髕骨下緣發生阻塞結節。",
+                    education: "運動前後，除了肌肉伸展，也應輕揉大腿前側與小腿前側的經脈，確保整條胃經的氣機順暢連接。",
+                    targetPoint: "梁丘穴、足三里穴",
+                    action: "【遠端理氣疏通】避開髕骨下緣最痛的發炎點。用指腹點揉大腿前側的「梁丘穴」（胃經郄穴，主治急性痛）以及小腿的「足三里穴」，透過上下游經絡牽引化解膝部的氣結。"
+                }
+            },
+            meniscus_tear: {
+                name: "39. 半月板損傷 (卡頓鎖死)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "膝關節內的 C 型軟骨墊片（半月板）因膝蓋在承重狀態下發生瞬間扭轉而撕裂。常見症狀為關節線邊緣壓痛，且在彎曲伸直時常有「卡住」或「鎖死（Locking）」的感覺。",
+                    education: "絕對避免在膝蓋彎曲且承重的情況下扭轉身體（如打籃球的轉身動作）。若出現嚴重的關節鎖死無法伸直，應立即尋求骨科醫師評估是否需內視鏡處理。",
+                    targetPoint: "膝關節內外側關節線與周邊穩定肌群",
+                    action: "【本體感覺與平衡訓練】在無痛範圍內，單腳站立於微軟的平面（如折疊的毛巾）上，維持平衡 30 秒。這能強化膝關節周邊微小穩定肌群的反應能力，減少半月板的異常剪力。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬「筋骨錯縫」或「骨痺」。瞬間暴力導致關節內氣血絡脈破裂，血瘀留滯於骨節縫隙之中，導致屈伸不利，不通則痛。",
+                    education: "受傷初期需固定休養，避免負重行走。飲食宜清淡，忌食燥熱發物。可飲用田七燉排骨等活血化瘀之食療輔助。",
+                    targetPoint: "膝部局部關節縫隙、足太陰脾經",
+                    action: "【活血散瘀理療】在關節周圍敷貼散瘀消腫之漢方藥膏；配合中醫師的理筋手法，極度輕柔地順理膝關節周邊的經筋張力，切忌暴力推拿關節本身。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "膝關節內部的核心能量結構遭到破壞。經絡中的氣血在流經關節腔時，被撕裂的軟骨組織阻擋，產生混亂的亂流與能量漩渦，導致關節卡頓。",
+                    education: "切勿強行扳動卡住的膝蓋。應深呼吸，用雙手輕柔撫摩整個膝關節，用意念安撫局部混亂的生物能量場。",
+                    targetPoint: "內外膝眼、陽陵泉穴",
+                    action: "【關節縫隙輕撫】用雙手食指與中指指腹，在髕骨下方的內外兩個凹陷處（內外膝眼），進行「極度輕微、毫無壓力」的畫圈輕撫，安撫關節腔內的氣機。"
+                }
+            },
+            bakers_cyst: {
+                name: "40. 貝克氏滑囊炎 (膝窩腫脹)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "膝關節後側（膝窩處）滑液囊腫大積水。這通常是「繼發性」的，意味著膝關節內已有其他問題（如退化性關節炎或半月板損傷）產生過多發炎積液，積液向後流入滑囊形成水球，導致膝蓋彎曲到底時緊繃疼痛。",
+                    education: "首要任務是處理原發的膝關節問題，而非只盯著水包。避免做「極度屈膝」的動作（如深蹲、跪坐），這會擠壓水球導致劇痛或破裂。",
+                    targetPoint: "膝窩後側滑囊與大腿後側膕繩肌",
+                    action: "【膕繩肌溫和伸展】仰臥，將患側腿伸直抬高，用雙手抱住大腿後側，保持膝蓋微彎不鎖死，輕柔拉伸大腿後側肌肉，降低膝窩周邊的組織張力，促進積液自然回流吸收。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬於中醫「筋瘤」或「痰濕流注」。脾虛不能運化水濕，加上局部經絡氣血受阻，導致水濕停聚於膝膕窩處，鬱結成囊腫。",
+                    education: "飲食必須嚴格控管，少吃甜食、冰品及生冷瓜果，以免脾胃受寒生濕。可多飲用薏苡仁、茯苓湯健脾利水。",
+                    targetPoint: "足太陽膀胱經（委中穴）、足太陰脾經",
+                    action: "【利濕消腫導引】在腫脹不明顯時，可針對膝窩正中央的「委中穴」進行輕柔推按；若腫脹嚴重，則應請醫師在委中穴進行點刺放血或針灸，清熱利濕排毒。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "膝窩是足太陽膀胱經（人體最大的排毒與下水道系統）的關鍵樞紐「委中穴」所在。此處長出水包，代表整條下水道系統嚴重淤塞，廢水無法排出。",
+                    education: "平日應避免久站久坐，多做下肢抬高的動作，協助膀胱經的水液逆地心引力回流。",
+                    targetPoint: "委中穴（膝窩正中）、承山穴（小腿肚正中）",
+                    action: "【膀胱經水液疏導】雙手抹上潤滑油，從小腿後側的「承山穴」開始，由下往上輕柔、緩慢地推抹至膝窩的「委中穴」及大腿後側，協助疏導淤積的水液能量。"
+                }
+            },
+            // == 41-50 下肢小腿、踝足與全身性 ==
+            shin_splints: {
+                name: "41. 夾脛症 (內脛骨痛)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "醫學上稱為「內側脛骨壓力症候群」。多因扁平足、跑姿不良或突然增加跑量，導致小腿後肌群與比目魚肌過度牽扯脛骨內側的骨膜，引發微血管破裂與發炎。",
+                    education: "必須立刻減少跑跳訓練量，改為游泳或飛輪等無衝擊運動。檢視跑鞋是否失去避震功能，扁平足者應使用具備足弓支撐的鞋墊。",
+                    targetPoint: "脛骨內側中下三分之一處的肌肉附著點",
+                    action: "【小腿深層筋膜放鬆】坐在地上，屈膝，用雙手大拇指沿著脛骨內側骨頭邊緣的「後方」，由腳踝往膝蓋方向進行輕柔的推撥按摩，切勿直接重壓發炎的骨頭。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬中醫「脛酸」或「筋痺」。脾主四肢肌肉，肝主筋。運動過度耗傷肝血與脾氣，導致脛骨周邊經絡失養，氣血瘀滯於局部。",
+                    education: "運動後應充分休息，可多食山藥、大棗健脾益氣。小腿內側極易受寒，運動流汗後應立即擦乾並穿上長褲保暖。",
+                    targetPoint: "足太陰脾經、足厥陰肝經循行線",
+                    action: "【溫經理氣推拿】在脛骨內側邊緣，使用具備活血舒筋功效之藥酒，以掌根或大魚際進行由下往上的輕柔順推，協助淤滯氣血回流。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "小腿內側是脾經、肝經與腎經（三陰經）的共同通道。跑步時地面的反作用力震盪了這三條陰經的氣機，導致能量在脛骨內側發生嚴重卡頓。",
+                    education: "每日早晚雙腳泡溫水，並在水中輕輕轉動腳踝，利用溫熱的水引導小腿內側的三陰經氣血下行擴散。",
+                    targetPoint: "三陰交穴（內踝尖上三寸，脛骨後緣）、漏谷穴",
+                    action: "【三陰經交會疏通】用大拇指指腹，對準小腿內側的「三陰交穴」，進行垂直的深度按壓 2 分鐘，能同時調理肝、脾、腎三條經絡的氣機失衡。"
+                }
+            },
+            calf_strain: {
+                name: "42. 小腿腓腸肌拉傷",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "俗稱「網球腿」。在瞬間加速、起跳或變換方向時，小腿後側的腓腸肌（通常是內側頭）承受過大的離心張力而發生急性撕裂，常伴隨「啪」一聲及瞬間無力。",
+                    education: "急性期嚴格執行 PRICE 原則。受傷前幾天行走時可將腳跟墊高（使用足跟墊）以縮短肌肉長度、減輕拉扯。切忌在急性期進行過度的阿基里斯腱拉筋。",
+                    targetPoint: "小腿肚後側腓腸肌內側肌腹",
+                    action: "【肌肉等長收縮與引流】急性腫脹期過後（約一週），坐姿下將腳掌平放地面，腳尖用力向下壓地板但不產生關節活動，維持 5 秒，反覆 10 次，輕度刺激肌纖維修復。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬「閃挫傷筋」。瞬間爆發力導致足太陽膀胱經的脈絡斷裂，血溢脈外，形成局部明顯的瘀血腫脹（青紫斑塊），氣滯血瘀導致劇烈疼痛。",
+                    education: "急性期患肢應抬高休息。飲食忌食發物（如竹筍、花生）。待紅腫熱痛消退後，方可進行溫敷理療。",
+                    targetPoint: "足太陽膀胱經（承山穴周邊）",
+                    action: "【化瘀消腫外敷】受傷前三天使用具備清熱涼血功效的如意金黃散冷敷；一週後改用活血化瘀之漢方藥膏敷貼，加速皮下瘀血的吸收與代謝。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "小腿肚為膀胱經氣血匯聚之處，瞬間的外力將經絡網絡強行撕裂，導致該處生物能量場產生劇烈的「短路」與能量溢散。",
+                    education: "受傷初期避免過度觸碰痛點。可多按摩大腿後側或腳底，保持上下游經絡的暢通，減輕小腿肚的能量壓力。",
+                    targetPoint: "承山穴（小腿肚兩塊肌肉交界凹陷處）",
+                    action: "【遠端理氣安撫】避開拉傷的痛點，用雙手掌心包覆住膝蓋後方的「委中穴」與腳跟的「崑崙穴」，微微施加輕柔的壓力，安撫受創的膀胱經氣機。"
+                }
+            },
+            achilles_tendinitis: {
+                name: "43. 阿基里斯腱炎",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "人體最粗的阿基里斯腱因長跑、跳躍或過度扁平足的旋前應力，產生微小撕裂與退化性發炎。早晨起床下床的第一步常感到腳跟後側極度僵硬刺痛。",
+                    education: "暫停所有跳躍與衝刺運動。強烈建議在鞋跟處墊高 1-2 公分，減少行走時對肌腱的牽扯。運動後必須針對小腿肌肉進行徹底伸展。",
+                    targetPoint: "腳跟骨上方 2-6 公分處的阿基里斯腱",
+                    action: "【離心收縮階梯訓練】雙腳站在階梯邊緣（腳跟懸空），踮起腳尖後，將健康腳抬起，只用「患側腳」極度緩慢地下沉腳跟，直到低於階梯平面，再用雙腳力量重新踮起。此動作能有效刺激肌腱膠原蛋白重塑。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬中醫「足跟痛」或「筋痺」。多因肝腎虧虛，足少陰腎經氣血不足以濡養足跟筋脈；或因長期勞損，寒濕之邪客於足跟，導致氣血凝滯。",
+                    education: "日常應加強補腎強筋，可多食黑豆、芝麻、核桃。足跟最忌受寒，冬季或冷氣房內務必穿著襪子保護腳踝與腳跟。",
+                    targetPoint: "足少陰腎經（太溪穴）、足太陽膀胱經（崑崙穴）",
+                    action: "【溫陽通絡熏洗】使用具備溫經活血功效的艾草、伸筋草、紅花煮水，待水溫適中時浸泡雙足 15-20 分鐘，促進足跟周邊微循環。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "腳跟後側是膀胱經（陽）與腎經（陰）能量交接的關鍵隘口。肌腱發炎代表此處的陰陽能量轉換受阻，氣結卡在腳踝後方。",
+                    education: "每日早晚坐在床上，用雙手搓熱後，緊緊包覆住腳踝與腳跟，利用手掌的熱度溫煦並融化局部的氣血結節。",
+                    targetPoint: "太溪穴（內踝後方）、崑崙穴（外踝後方）",
+                    action: "【陰陽交匯點按】用大拇指與食指，像夾夾子一樣，同時捏住內踝後方的「太溪穴」與外踝後方的「崑崙穴」，進行對稱的深層按揉 3 分鐘，打通跟腱兩側的經絡通道。"
+                }
+            },
+            ankle_inversion_sprain: {
+                name: "44. 翻腳刀 (外踝韌帶扭傷)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "腳踝內翻導致外側韌帶（最常見為前距腓韌帶 ATFL）過度拉扯而撕裂。除了疼痛與腫脹外，關節內的本體感覺受器也遭破壞，容易引發習慣性扭傷（慢性踝關節不穩）。",
+                    education: "急性期需進行 PRICE 處置並配戴護踝固定。消腫後「必須」進行平衡訓練，以重新建立大腦與腳踝神經的連結，預防二次扭傷。",
+                    targetPoint: "外踝骨前下方的韌帶群與腓骨肌群",
+                    action: "【本體感覺重建】在無痛範圍內，單腳站立於平地，微屈膝，閉上眼睛維持平衡 30 秒。若能輕易完成，可改站於軟墊或枕頭上增加難度。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬「踝部傷筋」。瞬間閃挫導致足少陽膽經的脈絡斷裂，瘀血阻滯於外踝，氣血不通則痛，局部出現明顯的紅腫熱痛與皮下瘀青。",
+                    education: "扭傷初期絕對禁止熱敷與大力推拿。飲食忌食辛辣燥熱與發物。行走時可使用柺杖輔助，減少患部承重。",
+                    targetPoint: "足少陽膽經（丘墟穴、懸鐘穴）",
+                    action: "【化瘀消腫理筋】急性期使用如意金黃散冷敷；一週後腫脹消退，可配合中醫師的理筋手法，輕柔理順外踝周圍錯亂的筋脈，並外敷活血化瘀藥膏。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "外踝是膽經運行的重要樞紐。強烈的內翻外力扯斷了膽經的能量通道，導致氣機在丘墟穴周邊瞬間爆裂淤塞，能量無法傳導至腳趾。",
+                    education: "受傷初期不要去揉外踝痛點。應深呼吸，輕輕活動腳趾頭，保持末梢經氣的微弱流動，防止能量徹底死鎖。",
+                    targetPoint: "丘墟穴（外踝前下方凹陷處）、陽陵泉穴",
+                    action: "【遠端導引化瘀】避開外踝紅腫處。用大拇指指腹，尋找小腿外側靠近膝蓋下方的「陽陵泉穴」（筋會），進行深層按揉，透過膽經的同經牽引作用，協助鬆解腳踝的氣結。"
+                }
+            },
+            high_ankle_sprain: {
+                name: "45. 高位踝關節扭傷",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "又稱「下脛腓聯合損傷」。通常因腳踝背屈且小腿受到強烈的「外旋」扭力所致。脛骨與腓骨之間的聯合韌帶被撕裂，復原時間比一般翻腳刀長 2-3 倍，且在腳踝上彎與旋轉時會劇痛。",
+                    education: "這類扭傷絕對不能輕忽，常需較長時間的護踝（如氣動式行走靴）固定。承重訓練必須非常謹慎地循序漸進，過早負重會導致脛腓骨分離惡化。",
+                    targetPoint: "腳踝前上方（脛骨與腓骨交界縫隙處）",
+                    action: "【無負重關節活動】在坐姿或平躺不承重的情況下，用腳尖在空中緩慢地「寫英文字母 A 到 Z」，保持踝關節基本的活動度，預防關節囊嚴重沾黏。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "此乃「傷及骨縫」之重度傷筋。不僅皮肉受損，瘀血更深伏於脛腓兩骨之間，導致足陽明胃經與足少陽膽經的氣機嚴重錯亂，難以速癒。",
+                    education: "復原期漫長，需保持耐心，切忌強行走動。可多攝取骨碎補、續斷等補肝腎、強筋骨之中藥材或食療以助修復。",
+                    targetPoint: "足陽明胃經（解溪穴）、足少陽膽經交界區域",
+                    action: "【活血透骨外治】因損傷較深，一般的貼布難以見效。建議在醫師指導下，使用具備透骨活血功效的藥酒或藥草包，進行局部深度的溫熨理療。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "胃經與膽經在小腿下端的兩骨縫隙間並行。扭轉的暴力使得這兩條大經絡的能量場發生嚴重的糾纏與錯位，形成深層難解的氣血死結。",
+                    education: "在安全範圍內，每日可用手掌心溫熱敷於腳踝正前方，用意念與溫度安撫局部混亂深層的能量。",
+                    targetPoint: "解溪穴（踝關節前橫紋中點）、懸鐘穴",
+                    action: "【髓會點按補氣】用大拇指指腹，尋找外踝尖上三寸的「懸鐘穴」（八會穴之髓會），進行定點的深度按壓，此穴能深層充盈骨髓能量，協助骨縫間韌帶的修復。"
+                }
+            },
+            plantar_fasciitis: {
+                name: "46. 足底筋膜炎 (下床第一步痛)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "足底筋膜在跟骨附著處承受過高的動態牽張力（常因小腿太緊、扁平足或長期站立），產生微小撕裂與退化。早晨下床第一步因筋膜整夜縮短後突然被拉扯而產生劇痛。",
+                    education: "絕對避免光腳踩硬地板，室內應穿著具備足弓支撐的厚底拖鞋。早晨下床前，務必先在床上進行腳踝轉動與小腿拉伸。",
+                    targetPoint: "小腿後側腓腸肌肌腹與足底筋膜附著點（腳跟前緣）",
+                    action: "【足底筋膜滾動與小腿伸展】坐姿下，赤腳踩踏一顆網球或冰凍的礦泉水瓶，從腳跟緩慢滾動至前腳掌，來回 2 分鐘；隨後手扶牆壁進行弓箭步，用力拉伸後腿的小腿肚維持 20 秒。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "腎主骨，足少陰腎經起於足底。多因長期站立勞損，或年老肝腎虧虛，導致足底經脈失去濡養；加之寒濕下注，氣血凝滯於足跟，形成痛點。",
+                    education: "每晚睡前務必用溫熱水泡腳至身體微汗，促進下肢血液循環。日常避免涉水淋雨，做好足底保暖。",
+                    targetPoint: "足少陰腎經（湧泉穴、太溪穴）",
+                    action: "【溫陽通絡熏熨】使用艾灸或溫熱敷袋，針對足底前三分之一處的「湧泉穴」與內踝後方的「太溪穴」進行深度溫化，引導陽氣下行，驅散足底寒濕。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "足底是人體能量接地的最底端，也是腎經的源頭。足底疼痛代表身體的生物能量無法順利與大地連接，濁氣淤積在腳跟處無法排出。",
+                    education: "可找一處乾淨且安全的草地或沙灘，進行短暫的「赤腳接地 (Earthing)」，讓大自然的微電流中和足底淤積的發炎電荷。",
+                    targetPoint: "湧泉穴（足底前1/3人字縫凹陷處）、然谷穴",
+                    action: "【湧泉開穴理氣】雙手大拇指交疊，對準足底的「湧泉穴」，用力向下按壓並配合深吐氣，然後緩慢鬆開，重複 10 次，打通腎經源頭的氣機。"
+                }
+            },
+            tarsal_tunnel: {
+                name: "47. 跗隧道症候群 (足底麻痛)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "脛神經在穿過內踝後方的「跗隧道」（由屈肌支持帶包覆的狹窄空間）時，因周邊肌腱發炎、水腫或嚴重扁平足導致的力學壓迫，引發足底及腳趾的刺痛、麻木與灼熱感。",
+                    education: "需積極處理扁平足問題，使用客製化鞋墊支撐內側足弓，減少內踝空間的張力拉扯。減少長時間站立與行走。",
+                    targetPoint: "內踝後方與下方的脛神經走向通道",
+                    action: "【脛神經滑動運動】坐姿，患側腳向前伸直，將腳背「向身體方向勾起」，同時將腳底板「向外側翻（外翻）」，感覺內踝後方到足底有微微拉扯感，維持 2 秒即放鬆，重複 10 次。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "病位在足少陰腎經與足太陰脾經交界。多因濕濁下注，或局部外傷導致氣血瘀滯，經絡隧道狹窄，氣機不通，使得足底經絡失去正常知覺。",
+                    education: "飲食忌生冷寒涼，預防體內濕氣過重。可多飲用薏仁、赤小豆湯以健脾利濕，減少下肢水腫對神經的壓迫。",
+                    targetPoint: "內踝後方太溪穴、照海穴周邊",
+                    action: "【利濕化瘀外治】在內踝後方凹陷處，使用具備活血通絡、利濕消腫之漢方藥膏敷貼，配合輕柔的由下往上推拿，協助局部組織液回流。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "內踝後方是腎經（太溪、大鐘）的重要樞紐。神經受壓代表此處的經絡能量嚴重淤塞，形成一個壓力鍋，導致足底的氣血傳導出現「漏電」般的麻刺感。",
+                    education: "每日多次用雙手輕柔按摩內踝周圍，保持局部微血管與經絡的暢通，避免濕毒與寒氣在此堆積。",
+                    targetPoint: "太溪穴（內踝後方）、照海穴（內踝正下方）",
+                    action: "【點按內踝樞紐】用大拇指指腹，尋找內踝正下方的「照海穴」與後方的「太溪穴」，進行輕柔但深沉的點按，疏通此處壅塞的經絡隧道。"
+                }
+            },
+            achilles_bursitis: {
+                name: "48. 跟骨滑囊炎 (腳跟後側痛)",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "腳跟骨後方的滑囊，因穿著過硬、包覆不良的鞋子反覆摩擦，或因阿基里斯腱太緊而受到擠壓，導致滑囊發炎腫脹。按壓腳跟後方或穿鞋摩擦時會感到劇痛。",
+                    education: "立即更換鞋子，改穿後跟柔軟或無後跟（開放式）的鞋款以解除物理性壓迫。可在鞋內使用足跟墊微幅墊高腳跟，減輕阿基里斯腱對滑囊的擠壓張力。",
+                    targetPoint: "跟骨後上方（阿基里斯腱附著處前方）之滑囊",
+                    action: "【局部消腫與上游放鬆】發炎腫脹期需局部冰敷；切勿直接揉按發炎的滑囊。應針對小腿肚（腓腸肌與比目魚肌）進行深層按摩與放鬆，降低跟腱整體的拉力。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "屬「足跟痛」範疇。多因局部反覆受壓勞損，導致足太陽膀胱經氣血瘀滯於跟骨；或因寒濕之邪客於局部，鬱而化熱，形成紅腫熱痛之證。",
+                    education: "避免赤腳行走於冰冷地面。若局部紅腫明顯，應減少行走，多讓患肢抬高休息，加速靜脈與淋巴回流。",
+                    targetPoint: "足太陽膀胱經（崑崙穴、僕參穴）",
+                    action: "【清熱散結外敷】腫痛明顯時，可外敷如意金黃散等清熱解毒、消腫散結的藥膏；待腫熱消退後，再改用溫水浸泡以活血化瘀。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "腳跟後外側為膀胱經樞紐。滑囊發炎代表外力摩擦干擾了此處正常的經氣循行，導致局部能量鬱結發熱，形成一個微小的能量阻斷點。",
+                    education: "除了換鞋，平時可多活動腳踝，做上下左右的緩慢轉動，保持踝部整體經絡的柔韌性。",
+                    targetPoint: "崑崙穴（外踝尖與跟腱連線中點）、僕參穴",
+                    action: "【疏導跟腱經氣】用食指與中指指腹，對準外踝後方的「崑崙穴」，進行輕柔的上下撥動按摩，透過膀胱經的穴位引導，疏散跟骨後方鬱積的熱氣與氣血。"
+                }
+            },
+            bunion_pain: {
+                name: "49. 拇趾外翻紅腫痛",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "大拇趾蹠趾關節因遺傳、扁平足或長期穿著楦頭過窄、高跟的鞋子，導致第一蹠骨向外偏移，大拇趾向內擠壓。突出的滑囊反覆與鞋子摩擦，產生紅腫發炎與變形。",
+                    education: "立即換穿楦頭寬大、足弓支撐良好的鞋款，絕對禁止穿尖頭鞋或高跟鞋。可使用矽膠分趾器將大拇趾隔開，減輕關節受壓角度。",
+                    targetPoint: "第一蹠趾關節（大拇趾根部突出處）及足底內側肌群",
+                    action: "【拇趾外展肌訓練】赤腳坐姿，將一條橡皮筋套在雙腳的大拇趾上，雙腳腳跟靠攏，將兩個大拇趾用力向外側撐開對抗橡皮筋阻力，維持 5 秒，重複 15 次，強化拇趾外展肌肉。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "大拇趾內側為足太陰脾經起點（隱白穴、太白穴）。骨節變形多因脾胃氣虛，肌肉筋骨失去濡養，復因長期受壓導致局部氣滯血瘀，痰瘀互結成塊（骨擴張）。",
+                    education: "脾主四肢肌肉。可多食四神湯（山藥、芡實、蓮子、茯苓）健脾益氣。晚間可用溫熱水泡腳，改善足部微循環。",
+                    targetPoint: "足太陰脾經（太白穴、公孫穴）",
+                    action: "【活血散結推摩】在突出腫脹處的周邊（太白穴與公孫穴區域），塗抹具備活血化瘀成分之藥膏，進行極度輕柔的由趾尖向腳跟方向的單向推摩，切忌用力硬壓突出的骨頭。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "大拇趾是脾經與肝經的起始交會處。拇趾外翻代表這兩條重要陰經的源頭被強行扭曲壓迫，導致脾經的能量無法順利啟動，影響全身的消化與代謝氣機。",
+                    education: "每日脫下鞋子後，用雙手仔細、溫柔地將每一根腳趾頭撥開、揉捏，恢復足趾間的經絡空間與能量流動。",
+                    targetPoint: "太白穴（第一蹠趾關節後下方凹陷處）、大敦穴",
+                    action: "【理氣撥趾疏通】一手握住腳背穩定，另一手捏住大拇趾，輕柔地順著關節原本應有的軸線，向外側（遠離第二趾的方向）進行微小拉伸與旋轉，鬆解變形關節周邊卡死的經筋。"
+                }
+            },
+            fibromyalgia: {
+                name: "50. 全身性纖維肌痛症",
+                pt: {
+                    roleName: "物理治療師觀點", colorClass: "bg-indigo-600",
+                    reason: "醫學界目前認為與中樞神經系統的「疼痛敏感化（Central Sensitization）」有關。大腦對痛覺訊號的放大效應，導致患者全身多處肌肉與軟組織產生廣泛性、游走性的慢性疼痛，常伴隨嚴重疲勞與睡眠障礙。",
+                    education: "漸進式的有氧運動（如水力體操、快走）是目前醫學實證最有效的非藥物介入。必須保持規律作息與睡眠，並學習壓力管理技巧（如正念冥想）。",
+                    targetPoint: "全身大肌肉群與筋膜網路，特別是肩頸與下背部",
+                    action: "【低強度有氧與全身伸展】每日進行 20-30 分鐘的低強度有氧運動，搭配瑜伽或太極等融合呼吸與動作的全身性溫和伸展。重點在於「持之以恆」而非單次的高強度訓練。"
+                },
+                tcm: {
+                    roleName: "中醫師觀點", colorClass: "bg-teal-700",
+                    reason: "此症複雜，多屬「虛勞」、「周痺」。長期情志不舒（肝氣鬱結）、勞心傷神（心脾兩虛），導致人體整體氣血虧虛，營衛失調，風寒濕邪趁虛竄流全身經絡，無處不痛。",
+                    education: "屬全身性體質失調，不可單靠外治。需由中醫師依個人體質開立疏肝解鬱、補益氣血、溫通經絡之內服方劑。飲食宜均衡溫和，忌食生冷燥熱。",
+                    targetPoint: "全身十二正經與任督二脈",
+                    action: "【整體氣血調和】不可使用重手法推拿，以免引發更強烈的痛覺反彈。建議使用溫灸儀針對「足三里」、「關元」、「百會」等強壯大穴進行溫補，提升整體陽氣與免疫力。"
+                },
+                meridian: {
+                    roleName: "經絡老師觀點", colorClass: "bg-amber-600",
+                    reason: "這代表全身的生物能量網絡（十二經脈與奇經八脈）失去了協調與交響的能力。經絡氣機處於極度緊繃與紊亂的狀態，能量在全身游走亂竄，無法歸元定心。",
+                    education: "減少外界的強烈感官刺激（如噪音、強光）。每日安排一段安靜的時間，進行深層的靜心冥想或腹式呼吸，讓全身的能量場重新歸零、重啟。",
+                    targetPoint: "全身主要能量中樞（丹田、膻中、百會）",
+                    action: "【能量安撫撫觸】嚴禁深層強力指壓。應由有經驗的治療師進行極度輕柔的大面積「安撫性撫摩（Effleurage）」，或配合頌缽等聲音共振療法，從微細能量層面安撫高度警覺的中樞神經。"
+                }
+            }
+        };
+
 
         // 控制邏輯與畫面切換
         let currentRole = 'pt';
@@ -447,10 +1438,11 @@
             document.getElementById('displayRoleName').innerText = data.roleName;
             document.getElementById('displayPartName').innerText = partName;
 
-            document.getElementById('txtReason').innerText = data.reason;
-            document.getElementById('txtEducation').innerText = data.education;
-            document.getElementById('txtTargetPoint').innerText = `建議位置：${data.targetPoint}`;
-            document.getElementById('txtAction').innerText = data.action;
+            // 重要修改：改用 innerHTML 並套用 injectGlossaryTooltips 以支援術語註解
+            document.getElementById('txtReason').innerHTML = injectGlossaryTooltips(data.reason);
+            document.getElementById('txtEducation').innerHTML = injectGlossaryTooltips(data.education);
+            document.getElementById('txtTargetPoint').innerHTML = `建議位置：${injectGlossaryTooltips(data.targetPoint)}`;
+            document.getElementById('txtAction').innerHTML = injectGlossaryTooltips(data.action);
         }
 
         window.onload = function() {

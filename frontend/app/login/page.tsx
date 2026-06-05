@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { 
   User, Building2, ChevronLeft, Lock, ShieldCheck, 
   Info, Check, XCircle, Loader2, HeartPulse, Moon
@@ -15,7 +16,9 @@ import API from "@/lib/api";
 const MissionBanner = () => (
   <div className="bg-linear-to-br from-[#1a6474] to-[#2a7d8c] text-white p-6 mb-8 rounded-2xl shadow-xl">
     <div className="flex items-center gap-4 mb-4">
-      <div className="text-3xl">🌿</div>
+      <div className="bg-white/90 backdrop-blur-sm rounded-xl p-1.5 shrink-0 flex items-center justify-center shadow-sm">
+        <Image src="/logo.png" alt="Logo" width={36} height={36} className="object-contain" />
+      </div>
       <div>
         <div className="text-base font-bold">麗媚生化科技 REIBI · 健康自主管理平台</div>
         <div className="text-[10px] opacity-75 tracking-widest uppercase">Health Self-Management Platform</div>
@@ -26,7 +29,7 @@ const MissionBanner = () => (
       養成關注健康的習慣，從「知道」到「做到」，落實身心健康自主管理。睡眠品質、疼痛管理與慢病防治，一次掌握。
     </div>
     <div className="flex flex-wrap gap-2">
-      {["🔍 健康識能提升", "💊 慢病三高管理", "🌙 睡眠品質改善", "💪 疼痛緩解", "📊 企業健康KPI"].map(t => (
+      {["🔍 健康識能提升", "💊 慢病三高管理", "🌙 睡眠品質改善", "💪 疼痛緩解", "📊 企業健康KPI", "🌿ESG社會責任"].map(t => (
         <span key={t} className="text-[10px] px-2 py-1 rounded-full bg-white/15 border border-white/30">{t}</span>
       ))}
     </div>
