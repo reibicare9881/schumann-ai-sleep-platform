@@ -668,6 +668,47 @@ export const API = {
     return this.request('/api/reibi/analytics/directory', { query: { kind, ...query } });
   },
 
+  // REIBI Batch F：設定、服務中心、公告、訊息與外部整合
+  async getReibiServiceCatalog() { return this.request('/api/reibi/service/catalog'); },
+  async preflightReibiDepartments(csvText: string) {
+    return this.request('/api/reibi/enterprise/departments/preflight', { method: 'POST', body: JSON.stringify({ csv_text: csvText }) });
+  },
+  async importReibiDepartments(csvText: string) {
+    return this.request('/api/reibi/enterprise/departments/import', { method: 'POST', body: JSON.stringify({ csv_text: csvText }) });
+  },
+  async getReibiArchitecture() { return this.request('/api/reibi/enterprise/architecture'); },
+  async listReibiServiceTickets(status?: string) { return this.request('/api/reibi/service/tickets', { query: { status } }); },
+  async createReibiServiceTicket(payload: Record<string, any>) {
+    return this.request('/api/reibi/service/tickets', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async updateReibiServiceTicket(id: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/service/tickets/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+  async listReibiAnnouncements() { return this.request('/api/reibi/announcements'); },
+  async createReibiAnnouncement(payload: Record<string, any>) {
+    return this.request('/api/reibi/announcements', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async updateReibiAnnouncement(id: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/announcements/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+  },
+  async registerReibiAnnouncement(id: number) { return this.request(`/api/reibi/announcements/${id}/register`, { method: 'POST' }); },
+  async cancelReibiAnnouncement(id: number) { return this.request(`/api/reibi/announcements/${id}/register`, { method: 'DELETE' }); },
+  async listReibiMessages() { return this.request('/api/reibi/integrations/messages'); },
+  async createReibiMessage(payload: Record<string, any>) {
+    return this.request('/api/reibi/integrations/messages', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async dispatchReibiMessage(id: number) { return this.request(`/api/reibi/integrations/messages/${id}/dispatch`, { method: 'POST' }); },
+  async createReibiAccessRequest(payload: Record<string, any>) {
+    return this.request('/api/reibi/access-requests', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async listReibiAccessRequests() { return this.request('/api/reibi/access-requests'); },
+  async reviewReibiAccessRequest(id: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/access-requests/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+  async analyzeReibiRemittance(remittanceId: number, mimeType: string, dataBase64: string) {
+    return this.request('/api/reibi/finance/remittances/ocr', { method: 'POST', body: JSON.stringify({ remittance_id: remittanceId, mime_type: mimeType, data_base64: dataBase64 }) });
+  },
+
   async validateReibiArtifact(payload: {
     source_artifact: 'main' | 'l5' | 'quote' | 'workorder';
     source_version?: string;

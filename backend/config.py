@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     api_port: int = 8000
     debug: bool = True
 
+    # --- 外部訊息整合（未設定時只允許人工複製，不會假裝已送達） ---
+    line_channel_access_token: str | None = None
+    line_api_url: str = "https://api.line.me/v2/bot/message/push"
+
     class Config:
         env_file = ".env"
         # 加上這行，即使 .env 裡有其他沒定義在 class 裡的變數，也不會報錯

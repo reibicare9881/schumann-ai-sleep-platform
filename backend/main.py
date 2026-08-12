@@ -39,6 +39,7 @@ from reibi_api import create_reibi_router
 from reibi_batch_c import create_reibi_batch_c_router
 from reibi_batch_d import create_reibi_batch_d_router
 from reibi_batch_e import create_reibi_batch_e_router
+from reibi_batch_f import create_reibi_batch_f_router
 
 app = FastAPI(
     title="統一多平台 API",
@@ -76,6 +77,7 @@ app.include_router(create_reibi_router(supabase))
 app.include_router(create_reibi_batch_c_router(supabase))
 app.include_router(create_reibi_batch_d_router(supabase))
 app.include_router(create_reibi_batch_e_router(supabase))
+app.include_router(create_reibi_batch_f_router(supabase))
 
 # 建立密碼加密上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -551,7 +553,14 @@ async def update_appointment_status(
     # 因為 Depends 已經擋掉了，這裡可以把原本的 if 判斷刪除
     # if current_user.get("role") not in ["admin", "dept_head"]: ...
         
-    res = supabase.table("appointments").update({"status": status}).eq("id", appt_id).execute()
+    if status not in {"pending", "approved", "rejected", "completed", "cancelled"}:
+        raise HTTPException(status_code=422, detail="不支援的預約狀態")
+    existing = supabase.table("appointments").select("id,org_code").eq("id", appt_id).limit(1).execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="找不到該預約單")
+    if existing.data[0].get("org_code") != current_user.get("org_code"):
+        raise HTTPException(status_code=403, detail="越權操作：不可更新其他單位的預約")
+    res = supabase.table("appointments").update({"status": status}).eq("id", appt_id).eq("org_code", current_user.get("org_code")).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="找不到該預約單")
         
@@ -571,7 +580,8 @@ async def delete_appointment(
     appt = res.data[0]
     
     # 只有本人或管理層可以刪除
-    if current_user.get("uid") != appt.get("user_id") and current_user.get("role") not in ["admin", "dept_head"]:
+    is_same_org_manager = current_user.get("role") in ["admin", "dept_head"] and current_user.get("org_code") == appt.get("org_code")
+    if current_user.get("uid") != appt.get("user_id") and not is_same_org_manager:
         raise HTTPException(status_code=403, detail="越權操作：無法刪除他人的預約")
         
     supabase.table("appointments").delete().eq("id", appt_id).execute()
