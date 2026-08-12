@@ -23,11 +23,12 @@ export const LL = { green: "🟢 綠燈", yellow: "🟡 黃燈", orange: "🟠 �
 
 // ══ RBAC 角色與權限 ══
 export const ROLES: Record<string, any> = {
-  individual: { label: "個人用戶", icon: "👤", color: C.teal, desc: "個人健康自主管理，完整存取自身報告", perms: ["assess", "view_own", "dl_own", "view_history"] },
-  member: { label: "單位成員", icon: "🏢", color: C.sage, desc: "個人評估填寫，資料提交至單位", perms: ["assess", "view_own", "dl_own", "view_history", "submit_org", "view_appt"] },
-  dept_head: { label: "部門主管", icon: "📋", color: C.amber, desc: "查閱本部門去識別化統計及OKR", perms: ["assess", "view_own", "dl_own", "view_history", "submit_org", "view_dept_okr", "dl_dept", "view_appt", "view_date_report"] },
-  admin: { label: "單位平台管理者", icon: "🔐", color: C.plum, desc: "HR人資高管／財務高管／負責人", perms: ["assess", "view_own", "dl_own", "view_history", "view_org", "dl_org", "view_okr", "manage_okr", "view_appt", "manage_appt", "dl_appt", "view_kpi", "edit_params", "view_date_report", "dl_date_report", "view_esg", "manage_reibi"] },
-  reibi_super: { label: "REIBI 內部超級管理者", icon: "🛡️", color: C.teal, desc: "跨企業營運、財務、夥伴與資料搬移", perms: ["manage_reibi"] },
+  individual: { label: "個人用戶", icon: "👤", color: C.teal, desc: "個人健康自主管理，完整存取自身報告", perms: ["assess", "view_own", "dl_own", "view_history", "health_self"] },
+  member: { label: "單位成員", icon: "🏢", color: C.sage, desc: "個人評估填寫，資料提交至單位", perms: ["assess", "view_own", "dl_own", "view_history", "submit_org", "view_appt", "health_self"] },
+  dept_head: { label: "部門主管", icon: "📋", color: C.amber, desc: "查閱本部門去識別化統計及OKR", perms: ["assess", "view_own", "dl_own", "view_history", "submit_org", "view_dept_okr", "dl_dept", "view_appt", "view_date_report", "health_self", "health_aggregate"] },
+  admin: { label: "單位平台管理者", icon: "🔐", color: C.plum, desc: "HR人資高管／財務高管／負責人", perms: ["assess", "view_own", "dl_own", "view_history", "view_org", "dl_org", "view_okr", "manage_okr", "view_appt", "manage_appt", "dl_appt", "view_kpi", "edit_params", "view_date_report", "dl_date_report", "view_esg", "manage_reibi", "health_aggregate", "manage_ohs"] },
+  occupational_health: { label: "臨場醫護人員", icon: "🩺", color: C.coral, desc: "僅存取去識別化 roster 與過負荷面談記錄", perms: ["oh_interview"] },
+  reibi_super: { label: "REIBI 內部超級管理者", icon: "🛡️", color: C.teal, desc: "跨企業營運、財務、夥伴與資料搬移", perms: ["manage_reibi", "health_aggregate", "manage_ohs"] },
 };
 
 export const PERMS = [

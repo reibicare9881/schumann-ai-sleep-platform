@@ -576,6 +576,70 @@ export const API = {
     return this.request(`/api/reibi/commissions/ledger/${ledgerId}/paid`, { method: 'POST' });
   },
 
+  // REIBI Batch D：個人健康、職安問卷、EAP 與 OHS
+  async getReibiHealthActions() { return this.request('/api/reibi/health/actions'); },
+  async checkinReibiHealthAction(actionCode: string, checkedOn?: string) {
+    return this.request('/api/reibi/health/actions', { method: 'POST', body: JSON.stringify({ action_code: actionCode, checked_on: checkedOn }) });
+  },
+  async getReibiPoints() { return this.request('/api/reibi/health/points'); },
+  async redeemReibiPoints(payload: Record<string, any>) {
+    return this.request('/api/reibi/health/points/redeem', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async getReibiDiary(kind: 'sleep' | 'pain') { return this.request(`/api/reibi/health/diaries/${kind}`); },
+  async saveReibiDiary(kind: 'sleep' | 'pain', payload: Record<string, any>) {
+    return this.request(`/api/reibi/health/diaries/${kind}`, { method: 'PUT', body: JSON.stringify(payload) });
+  },
+  async getReibiVitals() { return this.request('/api/reibi/health/vitals'); },
+  async saveReibiVitals(payload: Record<string, any>) {
+    return this.request('/api/reibi/health/vitals', { method: 'PUT', body: JSON.stringify(payload) });
+  },
+  async getReibiVitalAggregate(department?: string, orgCode?: string) {
+    return this.request('/api/reibi/health/vitals/aggregate', { query: { department, org_code: orgCode } });
+  },
+  async submitReibiHealthAssessment(payload: Record<string, any>) {
+    return this.request('/api/reibi/health/assessments', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async listReibiHealthAssessments(assessmentType?: string) {
+    return this.request('/api/reibi/health/assessments', { query: { assessment_type: assessmentType } });
+  },
+  async getReibiMentalHealthIndex() { return this.request('/api/reibi/health/assessments/mhi'); },
+  async getReibiAssessmentActivity(orgCode?: string) {
+    return this.request('/api/reibi/health/assessments/activity', { query: { org_code: orgCode } });
+  },
+  async getReibiAssessmentReminders() { return this.request('/api/reibi/health/assessments/reminders'); },
+  async getReibiHealthTimeline() { return this.request('/api/reibi/health/timeline'); },
+  async submitReibiFeedback(payload: Record<string, any>) {
+    return this.request('/api/reibi/health/feedback', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async getReibiFeedbackAggregate(periodKey: string, department?: string, orgCode?: string) {
+    return this.request('/api/reibi/health/feedback/aggregate', { query: { period_key: periodKey, department, org_code: orgCode } });
+  },
+  async listReibiEapResources() { return this.request('/api/reibi/health/eap'); },
+  async createReibiEapResource(payload: Record<string, any>) {
+    return this.request('/api/reibi/health/eap', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async updateReibiEapResource(id: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/health/eap/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+  },
+  async setReibiOccupationalAccess(pin: string, rosterVisible: boolean) {
+    return this.request('/api/reibi/health/occupational-access', { method: 'PUT', body: JSON.stringify({ pin, roster_visible: rosterVisible }) });
+  },
+  async listReibiOhs(recordType?: string, orgCode?: string) {
+    return this.request('/api/reibi/health/ohs', { query: { record_type: recordType, org_code: orgCode } });
+  },
+  async createReibiOhs(payload: Record<string, any>, orgCode?: string) {
+    return this.request('/api/reibi/health/ohs', { method: 'POST', query: { org_code: orgCode }, body: JSON.stringify(payload) });
+  },
+  async updateReibiOhs(id: number, payload: Record<string, any>, orgCode?: string) {
+    return this.request(`/api/reibi/health/ohs/${id}`, { method: 'PUT', query: { org_code: orgCode }, body: JSON.stringify(payload) });
+  },
+  async deleteReibiOhs(id: number, orgCode?: string) {
+    return this.request(`/api/reibi/health/ohs/${id}`, { method: 'DELETE', query: { org_code: orgCode } });
+  },
+  async getReibiOhsSnapshot(orgCode?: string) {
+    return this.request('/api/reibi/health/ohs/plan/snapshot', { query: { org_code: orgCode } });
+  },
+
   async validateReibiArtifact(payload: {
     source_artifact: 'main' | 'l5' | 'quote' | 'workorder';
     source_version?: string;

@@ -86,32 +86,32 @@
 
 ### MP-02 個人健康自主管理
 
-- [ ] MP-02A 每日行動打卡與積分 ledger（不可只存總分）。
-- [ ] MP-02B 積分紀錄、兌換／調整規則與稽核。
-- [ ] MP-02C 睡眠日記（睡眠效率、夜醒與歷史）。
-- [ ] MP-02D 疼痛日誌（部位、強度、干擾與歷史）。
-- [ ] MP-02E 三高／BMI 個人資料、部門 opt-in 與 k≥5 彙整。
-- [ ] MP-02F 888 曲線、個人時間軸與行動追蹤。
-- [ ] MP-02G 使用回饋、成效問卷及回饋報告。
+- [x] MP-02A 每日行動打卡與積分 ledger（不可只存總分）。
+- [x] MP-02B 積分紀錄、兌換／調整規則與稽核。
+- [x] MP-02C 睡眠日記（睡眠效率、夜醒與歷史）。
+- [x] MP-02D 疼痛日誌（部位、強度、干擾與歷史）。
+- [x] MP-02E 三高／BMI 個人資料、部門 opt-in 與 k≥5 彙整。
+- [x] MP-02F 888 曲線、個人時間軸與行動追蹤。
+- [x] MP-02G 使用回饋、成效問卷及回饋報告。
 
 ### MP-03 心理健康、EAP 與職安問卷
 
-- [ ] MP-03A PHQ-4、PSS-4、正念自評及 MHI 計算。
-- [ ] MP-03B BSRS-5 與自殺意念敏感轉介流程。
-- [ ] MP-03C 過勞評估、提醒週期、個人歷史與高風險判定。
-- [ ] MP-03D 肌肉骨骼 NMQ 評估與歷史。
-- [ ] MP-03E 職場不法侵害自評與隱私邊界。
-- [ ] MP-03F 職安問卷入口與匿名填答活躍度。
-- [ ] MP-03G EAP 資源、轉介、緊急提示與資源內容管理。
+- [x] MP-03A PHQ-4、PSS-4、正念自評及 MHI 計算。
+- [x] MP-03B BSRS-5 與自殺意念敏感轉介流程。
+- [x] MP-03C 過勞評估、提醒週期、個人歷史與高風險判定。
+- [x] MP-03D 肌肉骨骼 NMQ 評估與歷史。
+- [x] MP-03E 職場不法侵害自評與隱私邊界。
+- [x] MP-03F 職安問卷入口與匿名填答活躍度。
+- [x] MP-03G EAP 資源、轉介、緊急提示與資源內容管理。
 
 ### MP-04 職業健康與 OHS
 
-- [ ] MP-04A occupational-health 帳號與去識別化 roster。
-- [ ] MP-04B 過勞追蹤名單、排程、狀態與訪談紀錄。
-- [ ] MP-04C 臨場健康服務訪談紀錄。
-- [ ] MP-04D OHS 危害辨識、措施、追蹤與定期檢討。
-- [ ] MP-04E OHS 計畫書／報告列印與版本留存。
-- [ ] MP-04F 組織層級只能顯示 k≥5 的彙整資料。
+- [x] MP-04A occupational-health 帳號與去識別化 roster。
+- [x] MP-04B 過勞追蹤名單、排程、狀態與訪談紀錄。
+- [x] MP-04C 臨場健康服務訪談紀錄。
+- [x] MP-04D OHS 危害辨識、措施、追蹤與定期檢討。
+- [x] MP-04E OHS 計畫書／報告列印與版本留存。
+- [x] MP-04F 組織層級只能顯示 k≥5 的彙整資料。
 
 ### MP-05 組織管理與分析
 
@@ -298,3 +298,18 @@
 - [x] PAR-C04：一般企業只能讀寫自身財務；跨企業內部資料只限 `reibi_super`；經銷商入口只回傳自己的企業、應收與分潤，不回傳內部 staff／設定／其他經銷商資料。
 - [x] DB-C01：Batch C migration 與後續佣金護欄 migration 已套用遠端 Supabase；所有新表啟用 RLS，browser roles 無權限，僅 FastAPI `service_role` 可存取。
 - [x] TST-C01：26 個 Python 測試、18 個 pgTAP 資料庫測試、Next.js production build、本機 migration 全量重播與 database lint 全部通過；遠端 6 個 migration 與本機一致。
+
+## 14. Batch D 完成紀錄（2026-08-12）
+
+- [x] HLTH-D01：22 項行動打卡、同項 7 天間隔、不可為負的積分 ledger、兌換與管理調整稽核。
+- [x] HLTH-D02：睡眠效率與睡眠／疼痛日誌歷史、888 週曲線、個人時間軸及季度回饋。
+- [x] HLTH-D03：三高／BMI 個人資料、首次／年度／確診每月積分週期、更新提醒、明確 opt-in 與資料庫端 k≥5 彙整。
+- [x] HLTH-D04：PHQ-4、PSS-4、正念三題、MHI、過勞、NMQ、BSRS-5、自殺意念緊急指引與不法侵害隱私聲明。
+- [x] OHS-D01：職安問卷活躍度低於 5 份即隱藏；不法侵害不納入管理者活躍度統計，管理者看不到個人問卷答案。
+- [x] OHS-D02：EAP 緊急／一般資源與內容管理；預設提供 1925、119 與專業轉介資訊。
+- [x] OHS-D03：獨立 occupational-health PIN、roster 開關、去識別化員工代碼、排程／追蹤／面談與角色範圍限制。
+- [x] OHS-D04：危害風險矩陣、改善措施、定期檢討、計畫版本快照及完整列印／另存 PDF。
+- [x] DB-D01：新增資料表全面啟用 RLS；table、sequence 與 security-definer functions 均禁止 browser roles，僅 FastAPI `service_role` 可操作。
+- [x] TST-D01：36 個 Python 測試、34 個 pgTAP 資料庫測試、本機 migration 全量重播、Next.js production build 與本機／遠端 database lint 通過；遠端 7 個 migrations 與本機一致。
+- [~] TST-D02：遠端 security advisors 只留下既有的 leaked-password protection 警告；「RLS 無 policy」為刻意採 FastAPI `service_role` 邊界並撤銷 browser grants 的拒絕預設設計。新索引因剛建立、尚無正式流量，performance advisors 暫列 unused index 資訊。
+- [ ] AI-D01：OHS／組織分析的 AI 報告統一改用 Gemini；依規劃留在 Batch E，不沿用 Artifact 的 Anthropic 呼叫。

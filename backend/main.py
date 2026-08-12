@@ -37,6 +37,7 @@ from modules.pdf_generator_module import create_full_report_pdf
 from auth import create_access_token, get_current_user, require_admin, require_org_manager, require_member_or_above
 from reibi_api import create_reibi_router
 from reibi_batch_c import create_reibi_batch_c_router
+from reibi_batch_d import create_reibi_batch_d_router
 
 app = FastAPI(
     title="統一多平台 API",
@@ -72,6 +73,7 @@ app.add_middleware(
 # server-side Supabase client. No service-role credential is exposed to clients.
 app.include_router(create_reibi_router(supabase))
 app.include_router(create_reibi_batch_c_router(supabase))
+app.include_router(create_reibi_batch_d_router(supabase))
 
 # 建立密碼加密上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -291,6 +293,8 @@ async def unified_login(request: LoginRequest):
             expected_pin_hash = org_data.get("dept_pin")
         elif request.role == "admin":
             expected_pin_hash = org_data.get("admin_pin")
+        elif request.role == "occupational_health":
+            expected_pin_hash = org_data.get("occupational_health_pin")
         else:
              raise HTTPException(status_code=400, detail="未知的角色")
             

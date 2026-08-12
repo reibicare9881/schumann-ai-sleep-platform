@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, BadgeDollarSign, Boxes, Building2, CalendarClock, FileCheck2, FileText, HardHat, MapPin, Network, Pencil, Plus, RefreshCw, Save, Trash2, Upload, Users } from "lucide-react";
+import { ArrowLeft, BadgeDollarSign, Boxes, Building2, CalendarClock, FileCheck2, FileText, HardHat, HeartPulse, MapPin, Network, Pencil, Plus, RefreshCw, Save, Trash2, Upload, Users } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
 import API from "@/lib/api";
@@ -356,6 +356,7 @@ export default function ReibiManagementPage() {
         <div className="flex flex-wrap justify-end gap-2">
           <Link href="/reibi/workflow" className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2 text-sm font-bold text-white"><FileCheck2 className="w-4 h-4" /> 商務文件工作台</Link>
           <Link href="/reibi/operations" className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white"><BadgeDollarSign className="w-4 h-4" /> 財務與夥伴營運</Link>
+          <Link href="/reibi/health" className="inline-flex items-center gap-2 rounded-xl bg-rose-700 px-4 py-2 text-sm font-bold text-white"><HeartPulse className="w-4 h-4" /> 健康與職安</Link>
           <button onClick={loadOverview} disabled={loading} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-600 disabled:opacity-50">
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> 重新整理
           </button>
