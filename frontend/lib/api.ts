@@ -372,6 +372,50 @@ export const API = {
     });
   },
 
+  async listReibiEnterpriseSites() {
+    return this.request('/api/reibi/enterprise/sites');
+  },
+
+  async createReibiEnterpriseSite(payload: Record<string, any>) {
+    return this.request('/api/reibi/enterprise/sites', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  async updateReibiEnterpriseSite(siteId: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/enterprise/sites/${siteId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  async deleteReibiEnterpriseSite(siteId: number) {
+    return this.request(`/api/reibi/enterprise/sites/${siteId}`, { method: 'DELETE' });
+  },
+
+  async listReibiDepartments() {
+    return this.request('/api/reibi/enterprise/departments');
+  },
+
+  async createReibiDepartment(payload: Record<string, any>) {
+    return this.request('/api/reibi/enterprise/departments', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  async updateReibiDepartment(departmentId: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/enterprise/departments/${departmentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  async deleteReibiDepartment(departmentId: number) {
+    return this.request(`/api/reibi/enterprise/departments/${departmentId}`, { method: 'DELETE' });
+  },
+
   async listReibiQuotes(page = 1, size = 50) {
     return this.request('/api/reibi/quotes', { query: { page, size } });
   },

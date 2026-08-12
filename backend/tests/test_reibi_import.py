@@ -1,10 +1,15 @@
 import unittest
+from datetime import date
 
 from reibi_api import (
     ArtifactExport,
+    EnterpriseWrite,
     _artifact_enterprise,
     _artifact_subscription,
     _dynamic_import_values,
+    _enterprise_metrics,
+    _attach_department_counts,
+    _resolve_department_level,
     plan_artifact_import,
 )
 
@@ -103,6 +108,89 @@ class ReibiArtifactImportTests(unittest.TestCase):
         self.assertIsNotNone(resolved)
         _, payload, _ = resolved
         self.assertEqual(payload["sample_size"], 4)
+
+    def test_department_level_is_calculated_from_parent_chain(self):
+        departments = [
+            {"id": 1, "parent_id": None},
+            {"id": 2, "parent_id": 1},
+            {"id": 3, "parent_id": 2},
+        ]
+
+        self.assertEqual(_resolve_department_level(departments, None, 3), 4)
+
+    def test_department_level_rejects_fifth_level(self):
+        departments = [
+            {"id": 1, "parent_id": None},
+            {"id": 2, "parent_id": 1},
+            {"id": 3, "parent_id": 2},
+            {"id": 4, "parent_id": 3},
+        ]
+
+        with self.assertRaisesRegex(ValueError, "最多四層"):
+            _resolve_department_level(departments, None, 4)
+
+    def test_department_level_rejects_cycle(self):
+        departments = [
+            {"id": 1, "parent_id": None},
+            {"id": 2, "parent_id": 1},
+        ]
+
+        with self.assertRaisesRegex(ValueError, "不可形成循環"):
+            _resolve_department_level(departments, 1, 2)
+
+    def test_enterprise_metrics_reports_usage_and_expiring_contract(self):
+        metrics = _enterprise_metrics(
+            {"member_limit": 100, "used_count": 91, "contract_end": "2026-08-30"},
+            registered_member_count=92,
+            as_of=date(2026, 8, 12),
+        )
+
+        self.assertEqual(metrics["usage_percent"], 91.0)
+        self.assertTrue(metrics["usage_alert"])
+        self.assertTrue(metrics["usage_count_outdated"])
+        self.assertEqual(metrics["contract_state"], "expiring")
+        self.assertEqual(metrics["contract_days_left"], 18)
+
+    def test_enterprise_write_accepts_artifact_device_and_layer_configuration(self):
+        payload = EnterpriseWrite(
+            org_name="測試企業",
+            member_limit=300,
+            used_count=120,
+            a_layer_fee=1200000,
+            devices={"cloudBeds": 1, "relaxChairs": 1, "la200": 0},
+            d_layer_config={"poster": True, "board": False, "digital": True},
+        ).model_dump(mode="json")
+
+        self.assertEqual(payload["devices"]["cloudBeds"], 1)
+        self.assertTrue(payload["d_layer_config"]["poster"])
+        self.assertEqual(payload["used_count"], 120)
+
+        with self.assertRaises(ValueError):
+            EnterpriseWrite(org_name="測試企業", devices={"cloudBeds": -1})
+
+    def test_department_counts_include_children_without_guessing_duplicates(self):
+        departments = [
+            {"id": 1, "parent_id": None, "name": "營運處"},
+            {"id": 2, "parent_id": 1, "name": "人資部"},
+            {"id": 3, "parent_id": 1, "name": "共同名稱"},
+            {"id": 4, "parent_id": None, "name": "共同名稱"},
+        ]
+
+        rows, meta = _attach_department_counts(
+            departments,
+            ["人資部", " 人資部 ", "共同名稱", "未知部門", None],
+        )
+
+        by_id = {row["id"]: row for row in rows}
+        self.assertEqual(by_id[2]["direct_member_count"], 2)
+        self.assertEqual(by_id[1]["member_count"], 2)
+        self.assertEqual(by_id[3]["direct_member_count"], 0)
+        self.assertEqual(meta, {
+            "profile_count": 5,
+            "unassigned_count": 1,
+            "ambiguous_count": 1,
+            "unmatched_count": 1,
+        })
 
 
 if __name__ == "__main__":

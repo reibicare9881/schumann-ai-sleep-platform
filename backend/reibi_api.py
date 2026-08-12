@@ -30,10 +30,33 @@ SKIPPED_STORAGE_PREFIXES = (
     "sess", "rem_", "pin_", "rc_", "lk_", "l5_session", "rq_session",
     "l5_active_context", "l5_pin_", "__rq_handoff_",
 )
+ENTERPRISE_FIELDS = (
+    "id,org_code,org_name,org_alias,enterprise_type,status,ubn,contact_name,phone,email,"
+    "address,industry,plan_code,member_limit,used_count,contract_start,contract_end,"
+    "contract_years,pay_mode,consultant,partner_code,referral_percent,a_layer_fee,"
+    "b_layer_fee,c_layer_fee,d_layer_fee,devices,d_layer_config,created_at,updated_at"
+)
+ENTERPRISE_SITE_FIELDS = "id,label,address,note,sort_order,created_at,updated_at"
+DEPARTMENT_FIELDS = "id,parent_id,name,hierarchy_level,sort_order,is_active,created_at,updated_at"
 
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class EnterpriseDevices(StrictModel):
+    cloudBeds: int = Field(default=0, ge=0, le=10_000)
+    relaxChairs: int = Field(default=0, ge=0, le=10_000)
+    la200: int = Field(default=0, ge=0, le=10_000)
+
+
+class EnterpriseDLayerConfig(StrictModel):
+    poster: bool = False
+    board: bool = False
+    digital: bool = False
+    qr: bool = False
+    display: bool = False
+    install: bool = False
 
 
 class EnterpriseWrite(StrictModel):
@@ -48,9 +71,20 @@ class EnterpriseWrite(StrictModel):
     industry: Optional[str] = Field(default=None, max_length=100)
     plan_code: Optional[str] = Field(default=None, max_length=50)
     member_limit: int = Field(default=0, ge=0)
+    used_count: int = Field(default=0, ge=0)
     contract_start: Optional[date] = None
     contract_end: Optional[date] = None
+    contract_years: Optional[int] = Field(default=None, ge=1, le=99)
     pay_mode: Optional[str] = Field(default=None, max_length=50)
+    consultant: Optional[str] = Field(default=None, max_length=100)
+    partner_code: Optional[str] = Field(default=None, max_length=100)
+    referral_percent: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    a_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    b_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    c_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    d_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    devices: EnterpriseDevices = Field(default_factory=EnterpriseDevices)
+    d_layer_config: EnterpriseDLayerConfig = Field(default_factory=EnterpriseDLayerConfig)
 
     @field_validator("contract_end")
     @classmethod
@@ -59,6 +93,34 @@ class EnterpriseWrite(StrictModel):
         if value and start and value < start:
             raise ValueError("contract_end 不可早於 contract_start")
         return value
+
+
+class EnterpriseSiteWrite(StrictModel):
+    label: str = Field(min_length=1, max_length=200)
+    address: Optional[str] = Field(default=None, max_length=500)
+    note: Optional[str] = Field(default=None, max_length=500)
+    sort_order: int = Field(default=0, ge=0)
+
+
+class EnterpriseSiteUpdate(StrictModel):
+    label: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    address: Optional[str] = Field(default=None, max_length=500)
+    note: Optional[str] = Field(default=None, max_length=500)
+    sort_order: Optional[int] = Field(default=None, ge=0)
+
+
+class DepartmentWrite(StrictModel):
+    name: str = Field(min_length=1, max_length=200)
+    parent_id: Optional[int] = Field(default=None, ge=1)
+    sort_order: int = Field(default=0, ge=0)
+    is_active: bool = True
+
+
+class DepartmentUpdate(StrictModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    parent_id: Optional[int] = Field(default=None, ge=1)
+    sort_order: Optional[int] = Field(default=None, ge=0)
+    is_active: Optional[bool] = None
 
 
 class QuoteWrite(StrictModel):
@@ -729,6 +791,33 @@ def _ensure_required(payload: dict[str, Any], fields: tuple[str, ...]) -> None:
         raise ValueError(f"缺少必要欄位: {', '.join(missing)}")
 
 
+def _resolve_department_level(
+    departments: list[dict[str, Any]],
+    department_id: Optional[int],
+    parent_id: Optional[int],
+) -> int:
+    """Calculate a department level from parent links and reject cycles/orphans."""
+    if parent_id is None:
+        return 1
+    by_id = {int(row["id"]): row for row in departments}
+    visited = {department_id} if department_id is not None else set()
+    level = 1
+    cursor: Optional[int] = parent_id
+    while cursor is not None:
+        if cursor in visited:
+            raise ValueError("部門階層不可形成循環")
+        visited.add(cursor)
+        parent = by_id.get(cursor)
+        if parent is None:
+            raise ValueError("上層部門不存在，或不屬於目前企業")
+        level += 1
+        if level > 4:
+            raise ValueError("部門階層最多四層")
+        raw_parent = parent.get("parent_id")
+        cursor = int(raw_parent) if raw_parent is not None else None
+    return level
+
+
 def _execute(query: Any, operation: str) -> list[dict[str, Any]]:
     try:
         response = query.execute()
@@ -758,6 +847,105 @@ def _serialize_payload(model: BaseModel) -> dict[str, Any]:
     return model.model_dump(mode="json", exclude_none=True)
 
 
+def _serialize_update(model: BaseModel) -> dict[str, Any]:
+    return model.model_dump(mode="json", exclude_unset=True)
+
+
+def _enterprise_metrics(
+    enterprise: dict[str, Any],
+    registered_member_count: int = 0,
+    as_of: Optional[date] = None,
+) -> dict[str, Any]:
+    member_limit = max(0, int(enterprise.get("member_limit") or 0))
+    used_count = max(0, int(enterprise.get("used_count") or 0))
+    usage_percent = round((used_count / member_limit) * 100, 1) if member_limit else None
+    contract_end_raw = enterprise.get("contract_end")
+    contract_start_raw = enterprise.get("contract_start")
+    today = as_of or date.today()
+    contract_days_left: Optional[int] = None
+    contract_state = "not_set"
+    if contract_end_raw:
+        try:
+            contract_end = contract_end_raw if isinstance(contract_end_raw, date) else date.fromisoformat(str(contract_end_raw)[:10])
+            contract_days_left = (contract_end - today).days
+            if contract_days_left < 0:
+                contract_state = "expired"
+            elif contract_days_left <= 30:
+                contract_state = "expiring"
+            else:
+                contract_state = "active"
+            if contract_start_raw:
+                contract_start = contract_start_raw if isinstance(contract_start_raw, date) else date.fromisoformat(str(contract_start_raw)[:10])
+                if contract_start > today:
+                    contract_state = "upcoming"
+        except (TypeError, ValueError):
+            contract_state = "invalid"
+    return {
+        "member_limit": member_limit,
+        "used_count": used_count,
+        "registered_member_count": max(0, int(registered_member_count)),
+        "usage_percent": usage_percent,
+        "usage_alert": usage_percent is not None and usage_percent >= 90,
+        "usage_count_outdated": max(0, int(registered_member_count)) != used_count,
+        "contract_state": contract_state,
+        "contract_days_left": contract_days_left,
+    }
+
+
+def _attach_department_counts(
+    departments: list[dict[str, Any]],
+    profile_departments: list[Optional[str]],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    rows = [dict(row) for row in departments]
+    name_to_ids: dict[str, list[int]] = {}
+    for row in rows:
+        normalized = " ".join(str(row.get("name") or "").split()).casefold()
+        if normalized:
+            name_to_ids.setdefault(normalized, []).append(int(row["id"]))
+
+    direct_counts = {int(row["id"]): 0 for row in rows}
+    unassigned = 0
+    ambiguous = 0
+    unmatched = 0
+    for department_name in profile_departments:
+        normalized = " ".join(str(department_name or "").split()).casefold()
+        if not normalized:
+            unassigned += 1
+            continue
+        matching_ids = name_to_ids.get(normalized, [])
+        if len(matching_ids) == 1:
+            direct_counts[matching_ids[0]] += 1
+        elif len(matching_ids) > 1:
+            ambiguous += 1
+        else:
+            unmatched += 1
+
+    children: dict[Optional[int], list[int]] = {}
+    for row in rows:
+        raw_parent = row.get("parent_id")
+        parent_id = int(raw_parent) if raw_parent is not None else None
+        children.setdefault(parent_id, []).append(int(row["id"]))
+
+    def total_for(department_id: int, path: set[int]) -> int:
+        if department_id in path:
+            return 0
+        next_path = {*path, department_id}
+        return direct_counts.get(department_id, 0) + sum(
+            total_for(child_id, next_path) for child_id in children.get(department_id, [])
+        )
+
+    for row in rows:
+        department_id = int(row["id"])
+        row["direct_member_count"] = direct_counts.get(department_id, 0)
+        row["member_count"] = total_for(department_id, set())
+    return rows, {
+        "profile_count": len(profile_departments),
+        "unassigned_count": unassigned,
+        "ambiguous_count": ambiguous,
+        "unmatched_count": unmatched,
+    }
+
+
 def create_reibi_router(client: Any) -> APIRouter:
     router = APIRouter(prefix="/api/reibi", tags=["REIBI"])
 
@@ -765,8 +953,19 @@ def create_reibi_router(client: Any) -> APIRouter:
     def overview(current_user: dict = Depends(require_reibi_manager)):
         enterprise_id = _current_enterprise_id(client, current_user, required=False)
         if enterprise_id is None:
-            return {"status": "success", "data": {"enterprise": None, "quotes": 0, "contracts": 0, "work_orders": 0}}
-        enterprise = _execute(client.table("reibi_enterprises").select("*").eq("id", enterprise_id).limit(1), "查詢企業")
+            return {"status": "success", "data": {"enterprise": None, "metrics": None, "quotes": 0, "contracts": 0, "work_orders": 0}}
+        enterprise = _execute(
+            client.table("reibi_enterprises").select(ENTERPRISE_FIELDS).eq("id", enterprise_id).limit(1),
+            "查詢企業",
+        )
+        org_code = str(current_user.get("org_code") or "").upper()
+        try:
+            profile_response = (
+                client.table("profiles").select("id", count="exact").eq("org_code", org_code).limit(1).execute()
+            )
+            registered_member_count = int(profile_response.count or 0)
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail="Supabase 統計企業帳號失敗") from exc
         counts: dict[str, int] = {}
         for label, table in (("quotes", "reibi_quotes"), ("contracts", "reibi_contracts"), ("work_orders", "reibi_work_orders")):
             try:
@@ -774,12 +973,23 @@ def create_reibi_router(client: Any) -> APIRouter:
                 counts[label] = int(response.count or 0)
             except Exception as exc:
                 raise HTTPException(status_code=502, detail=f"Supabase 統計 {label} 失敗") from exc
-        return {"status": "success", "data": {"enterprise": enterprise[0] if enterprise else None, **counts}}
+        enterprise_data = enterprise[0] if enterprise else None
+        return {
+            "status": "success",
+            "data": {
+                "enterprise": enterprise_data,
+                "metrics": _enterprise_metrics(enterprise_data, registered_member_count) if enterprise_data else None,
+                **counts,
+            },
+        }
 
     @router.get("/enterprise")
     def get_enterprise(current_user: dict = Depends(require_reibi_manager)):
         enterprise_id = _current_enterprise_id(client, current_user)
-        rows = _execute(client.table("reibi_enterprises").select("*").eq("id", enterprise_id).limit(1), "查詢企業")
+        rows = _execute(
+            client.table("reibi_enterprises").select(ENTERPRISE_FIELDS).eq("id", enterprise_id).limit(1),
+            "查詢企業",
+        )
         return {"status": "success", "data": rows[0]}
 
     @router.put("/enterprise")
@@ -787,13 +997,170 @@ def create_reibi_router(client: Any) -> APIRouter:
         org_code = str(current_user.get("org_code") or "").upper()
         if not org_code:
             raise HTTPException(status_code=400, detail="Token 缺少 org_code")
-        values = _serialize_payload(payload)
+        values = payload.model_dump(mode="json")
         values.update({"org_code": org_code, "updated_at": _now_iso()})
         rows = _execute(
             client.table("reibi_enterprises").upsert(values, on_conflict="org_code"),
             "儲存企業",
         )
         return {"status": "success", "data": rows[0] if rows else values}
+
+    @router.get("/enterprise/sites")
+    def list_enterprise_sites(current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id = _current_enterprise_id(client, current_user)
+        rows = _execute(
+            client.table("reibi_enterprise_sites").select(ENTERPRISE_SITE_FIELDS).eq("enterprise_id", enterprise_id)
+            .order("sort_order").order("id"),
+            "查詢企業場域",
+        )
+        return {"status": "success", "data": rows}
+
+    @router.post("/enterprise/sites", status_code=status.HTTP_201_CREATED)
+    def create_enterprise_site(payload: EnterpriseSiteWrite, current_user: dict = Depends(require_reibi_manager)):
+        values = _serialize_payload(payload)
+        values.update({"enterprise_id": _current_enterprise_id(client, current_user), "source_payload": {}})
+        rows = _execute(client.table("reibi_enterprise_sites").insert(values), "建立企業場域")
+        return {"status": "success", "data": rows[0]}
+
+    @router.patch("/enterprise/sites/{site_id}")
+    def update_enterprise_site(site_id: int, payload: EnterpriseSiteUpdate, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id = _current_enterprise_id(client, current_user)
+        existing = _execute(
+            client.table("reibi_enterprise_sites").select("id").eq("id", site_id)
+            .eq("enterprise_id", enterprise_id).limit(1),
+            "驗證企業場域",
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="找不到場域，或場域不屬於目前企業")
+        values = _serialize_update(payload)
+        if not values:
+            raise HTTPException(status_code=422, detail="至少提供一個要更新的欄位")
+        if "label" in payload.model_fields_set and payload.label is None:
+            raise HTTPException(status_code=422, detail="場域名稱不可為空")
+        if "sort_order" in payload.model_fields_set and payload.sort_order is None:
+            raise HTTPException(status_code=422, detail="場域排序不可為空")
+        values["updated_at"] = _now_iso()
+        rows = _execute(
+            client.table("reibi_enterprise_sites").update(values).eq("id", site_id)
+            .eq("enterprise_id", enterprise_id),
+            "更新企業場域",
+        )
+        return {"status": "success", "data": rows[0]}
+
+    @router.delete("/enterprise/sites/{site_id}")
+    def delete_enterprise_site(site_id: int, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id = _current_enterprise_id(client, current_user)
+        existing = _execute(
+            client.table("reibi_enterprise_sites").select("id").eq("id", site_id)
+            .eq("enterprise_id", enterprise_id).limit(1),
+            "驗證企業場域",
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="找不到場域，或場域不屬於目前企業")
+        _execute(
+            client.table("reibi_enterprise_sites").delete().eq("id", site_id)
+            .eq("enterprise_id", enterprise_id),
+            "刪除企業場域",
+        )
+        return {"status": "success", "data": {"id": site_id}}
+
+    def enterprise_departments(enterprise_id: int) -> list[dict[str, Any]]:
+        return _execute(
+            client.table("reibi_departments").select(DEPARTMENT_FIELDS).eq("enterprise_id", enterprise_id)
+            .order("hierarchy_level").order("sort_order").order("id"),
+            "查詢部門",
+        )
+
+    def profile_departments(org_code: str) -> list[Optional[str]]:
+        values: list[Optional[str]] = []
+        offset = 0
+        page_size = 1_000
+        while True:
+            rows = _execute(
+                client.table("profiles").select("department").eq("org_code", org_code)
+                .range(offset, offset + page_size - 1),
+                "統計部門人數",
+            )
+            values.extend(row.get("department") for row in rows)
+            if len(rows) < page_size:
+                break
+            offset += page_size
+        return values
+
+    @router.get("/enterprise/departments")
+    def list_departments(current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id = _current_enterprise_id(client, current_user)
+        org_code = str(current_user.get("org_code") or "").upper()
+        rows, count_meta = _attach_department_counts(
+            enterprise_departments(enterprise_id),
+            profile_departments(org_code),
+        )
+        return {"status": "success", "data": rows, "meta": count_meta}
+
+    @router.post("/enterprise/departments", status_code=status.HTTP_201_CREATED)
+    def create_department(payload: DepartmentWrite, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id = _current_enterprise_id(client, current_user)
+        departments = enterprise_departments(enterprise_id)
+        try:
+            level = _resolve_department_level(departments, None, payload.parent_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        values = _serialize_payload(payload)
+        values.update({
+            "enterprise_id": enterprise_id,
+            "hierarchy_level": level,
+            "source_payload": {},
+        })
+        rows = _execute(client.table("reibi_departments").insert(values), "建立部門")
+        return {"status": "success", "data": rows[0]}
+
+    @router.patch("/enterprise/departments/{department_id}")
+    def update_department(department_id: int, payload: DepartmentUpdate, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id = _current_enterprise_id(client, current_user)
+        departments = enterprise_departments(enterprise_id)
+        existing = next((row for row in departments if int(row["id"]) == department_id), None)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="找不到部門，或部門不屬於目前企業")
+        values = _serialize_update(payload)
+        if not values:
+            raise HTTPException(status_code=422, detail="至少提供一個要更新的欄位")
+        if "name" in payload.model_fields_set and payload.name is None:
+            raise HTTPException(status_code=422, detail="部門名稱不可為空")
+        if "sort_order" in payload.model_fields_set and payload.sort_order is None:
+            raise HTTPException(status_code=422, detail="部門排序不可為空")
+        if "is_active" in payload.model_fields_set and payload.is_active is None:
+            raise HTTPException(status_code=422, detail="部門啟用狀態不可為空")
+        if "parent_id" in payload.model_fields_set:
+            has_children = any(row.get("parent_id") == department_id for row in departments)
+            if has_children and payload.parent_id != existing.get("parent_id"):
+                raise HTTPException(status_code=409, detail="此部門仍有下層部門；請先移動下層部門再變更上層")
+            try:
+                values["hierarchy_level"] = _resolve_department_level(departments, department_id, payload.parent_id)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+        values["updated_at"] = _now_iso()
+        rows = _execute(
+            client.table("reibi_departments").update(values).eq("id", department_id)
+            .eq("enterprise_id", enterprise_id),
+            "更新部門",
+        )
+        return {"status": "success", "data": rows[0]}
+
+    @router.delete("/enterprise/departments/{department_id}")
+    def delete_department(department_id: int, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id = _current_enterprise_id(client, current_user)
+        departments = enterprise_departments(enterprise_id)
+        existing = next((row for row in departments if int(row["id"]) == department_id), None)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="找不到部門，或部門不屬於目前企業")
+        if any(row.get("parent_id") == department_id for row in departments):
+            raise HTTPException(status_code=409, detail="此部門仍有下層部門，不可直接刪除")
+        _execute(
+            client.table("reibi_departments").delete().eq("id", department_id)
+            .eq("enterprise_id", enterprise_id),
+            "刪除部門",
+        )
+        return {"status": "success", "data": {"id": department_id}}
 
     def list_scoped(table: str, current_user: dict, page: int, size: int) -> dict[str, Any]:
         enterprise_id = _current_enterprise_id(client, current_user)
