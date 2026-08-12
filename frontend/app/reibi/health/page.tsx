@@ -81,6 +81,7 @@ export default function ReibiHealthPage() {
   const [ohs, setOhs] = useState<Row>({ status: "計畫中", risk_level: "medium", owner: "", due_date: "", verified_at: "", title: "", details: "", employee_key: "", severity: "medium", frequency: "low", interviewer_role: "doctor", score: "", follow_date: "", version: "1.0" });
   const [occupationalPin, setOccupationalPin] = useState("");
   const [rosterVisible, setRosterVisible] = useState(false);
+  const [researchOptIn, setResearchOptIn] = useState(false);
 
   const unwrap = (response: any, fallback: string) => {
     if (response.status !== "success") throw new Error(response.message || fallback);
@@ -95,7 +96,7 @@ export default function ReibiHealthPage() {
 
   const loadPersonal = async () => {
     if (!personal) return;
-    const results: any[] = await Promise.all([API.getReibiHealthActions(), API.getReibiPoints(), API.listReibiHealthAssessments(), API.getReibiMentalHealthIndex(), API.getReibiVitals(), API.getReibiHealthTimeline(), API.listReibiEapResources(), API.getReibiAssessmentReminders()]);
+    const results: any[] = await Promise.all([API.getReibiHealthActions(), API.getReibiPoints(), API.listReibiHealthAssessments(), API.getReibiMentalHealthIndex(), API.getReibiVitals(), API.getReibiHealthTimeline(), API.listReibiEapResources(), API.getReibiAssessmentReminders(), API.getReibiResearchConsent()]);
     setActions(unwrap(results[0], "無法讀取行動"));
     setPoints(unwrap(results[1], "無法讀取積分"));
     setAssessments(unwrap(results[2], "無法讀取評估") || []);
@@ -106,6 +107,7 @@ export default function ReibiHealthPage() {
     setTimeline(timelineData.events || []); setCurve(timelineData.curve || []);
     setEap(unwrap(results[6], "無法讀取 EAP") || []);
     setAssessmentReminders(unwrap(results[7], "無法讀取評估提醒") || []);
+    setResearchOptIn(Boolean(unwrap(results[8], "無法讀取研究同意設定")?.research_opt_in));
   };
   const loadManagement = async () => {
     if (manager || aggregateViewer) {
@@ -211,7 +213,7 @@ export default function ReibiHealthPage() {
         <button className={`${primaryClass} mt-5`} onClick={() => void saveVitals()}><Save className="h-4 w-4" />儲存</button>
       </Card>}
 
-      {tab === "timeline" && <section className="space-y-4"><Card><h2 className="font-black">888 行動曲線</h2><div className="mt-4 flex h-40 items-end gap-2">{curve.map(row => <div key={row.week} className="flex flex-1 flex-col items-center"><b className="text-xs">{row.points}</b><div className="w-full rounded-t bg-teal-600" style={{ height: `${Math.max(4, Math.min(120, Math.abs(Number(row.points))))}px` }} /><small className="mt-1 text-[9px] text-slate-400">{String(row.week).slice(5)}</small></div>)}</div></Card><Card><h2 className="font-black">個人時間軸</h2><div className="mt-4 grid gap-2 md:grid-cols-2">{timeline.map((row, index) => <div key={`${row.type}-${row.at}-${index}`} className="rounded-xl border border-slate-200 p-3"><b>{row.action_label || row.assessment_type || row.diary_type}</b><small className="block text-slate-400">{String(row.at).slice(0, 16).replace("T", " ")}</small></div>)}</div></Card></section>}
+      {tab === "timeline" && <section className="space-y-4"><Card><h2 className="font-black">跨企業研究同意</h2><p className="mt-1 text-xs text-slate-500">同意後，資料只會以企業為單位、每組至少 5 人的去識別化統計納入研究；不會提供個人名冊，且可隨時撤回。</p><label className="mt-4 flex gap-2 rounded-xl bg-teal-50 p-3 text-sm"><input type="checkbox" checked={researchOptIn} onChange={async event => { const next = event.target.checked; const data = await run(() => API.setReibiResearchConsent(next), next ? "已同意納入去識別化研究" : "已撤回研究同意"); if (data) setResearchOptIn(next); }} /><span><b>自願納入跨企業去識別化研究</b><small className="block">撤回後不再納入後續統計。</small></span></label></Card><Card><h2 className="font-black">888 行動曲線</h2><div className="mt-4 flex h-40 items-end gap-2">{curve.map(row => <div key={row.week} className="flex flex-1 flex-col items-center"><b className="text-xs">{row.points}</b><div className="w-full rounded-t bg-teal-600" style={{ height: `${Math.max(4, Math.min(120, Math.abs(Number(row.points))))}px` }} /><small className="mt-1 text-[9px] text-slate-400">{String(row.week).slice(5)}</small></div>)}</div></Card><Card><h2 className="font-black">個人時間軸</h2><div className="mt-4 grid gap-2 md:grid-cols-2">{timeline.map((row, index) => <div key={`${row.type}-${row.at}-${index}`} className="rounded-xl border border-slate-200 p-3"><b>{row.action_label || row.assessment_type || row.diary_type}</b><small className="block text-slate-400">{String(row.at).slice(0, 16).replace("T", " ")}</small></div>)}</div></Card></section>}
 
       {tab === "feedback" && <Card className="mx-auto max-w-xl"><h2 className="font-black">季度使用回饋</h2><div className="mt-4 grid gap-3"><Field label="季度"><input className={inputClass} value={feedback.period_key} onChange={e => setFeedback({ ...feedback, period_key: e.target.value })} /></Field><Field label={`滿意度 ${feedback.satisfaction_score}/5`}><input type="range" min="1" max="5" className={inputClass} value={feedback.satisfaction_score} onChange={e => setFeedback({ ...feedback, satisfaction_score: Number(e.target.value) })} /></Field><Field label={`NPS ${feedback.nps_score}/10`}><input type="range" min="0" max="10" className={inputClass} value={feedback.nps_score} onChange={e => setFeedback({ ...feedback, nps_score: Number(e.target.value) })} /></Field><Field label="建議"><textarea className={inputClass} rows={4} value={feedback.free_text} onChange={e => setFeedback({ ...feedback, free_text: e.target.value })} /></Field></div><button className={`${primaryClass} mt-4 w-full`} onClick={() => void run(() => API.submitReibiFeedback({ ...feedback, answers: { satisfaction: feedback.satisfaction_score, nps: feedback.nps_score } }), "回饋已送出").then(data => data && loadPersonal())}>送出回饋</button></Card>}
 

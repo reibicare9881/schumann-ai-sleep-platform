@@ -115,13 +115,13 @@
 
 ### MP-05 組織管理與分析
 
-- [-] MP-05A KPI、OKR、高風險、ESG 現有 sleepm 頁面。
-- [ ] MP-05B 888 計畫總覽、完整報告及時間軸。
-- [ ] MP-05C 年度統計、部門趨勢與 dept_head 專屬篩選。
-- [ ] MP-05D ROI 參數與財務效益計算。
-- [ ] MP-05E GRI 403-6 報告。
-- [ ] MP-05F ESG／OKR／高風險／KPI／ROI／888 的 Gemini 組織報告。
-- [ ] MP-05G CSV/PDF 匯出與列印（在一般瀏覽器環境重做，不沿用 Artifact 沙盒 workaround）。
+- [x] MP-05A KPI、OKR、高風險、ESG 現有 sleepm 頁面。
+- [x] MP-05B 888 計畫總覽、完整報告及時間軸。
+- [x] MP-05C 年度統計、部門趨勢與 dept_head 專屬篩選。
+- [x] MP-05D ROI 參數與財務效益計算。
+- [x] MP-05E GRI 403-6 報告。
+- [x] MP-05F ESG／OKR／高風險／KPI／ROI／888 的 Gemini 組織報告。
+- [x] MP-05G CSV/PDF 匯出與列印（在一般瀏覽器環境重做，不沿用 Artifact 沙盒 workaround）。
 
 ### MP-06 組織設定與服務流程
 
@@ -165,10 +165,10 @@
 
 - [ ] L5-04A 授權管理、PIN／憑證重設與安全替代方案。
 - [ ] L5-04B LINE 推播佇列、範本、寄送結果與 message logs。
-- [ ] L5-04C 跨企業健康大數據（僅 k≥5）。
-- [ ] L5-04D 報表中心、日期篩選與可下載檔案。
-- [ ] L5-04E 名冊查詢。
-- [ ] L5-04F 策略面板與區域／夥伴分析。
+- [x] L5-04C 跨企業健康大數據（明確研究同意且每個企業及指標子群均為 k≥5）。
+- [x] L5-04D 報表中心、日期篩選、CSV 與列印／另存 PDF。
+- [x] L5-04E 企業／經銷商名冊查詢；不提供個人健康名冊。
+- [x] L5-04F 策略面板與區域／夥伴分析。
 - [ ] L5-04G 操作手冊與版本資訊。
 
 ## 6. 報價與合約
@@ -312,4 +312,17 @@
 - [x] DB-D01：新增資料表全面啟用 RLS；table、sequence 與 security-definer functions 均禁止 browser roles，僅 FastAPI `service_role` 可操作。
 - [x] TST-D01：36 個 Python 測試、34 個 pgTAP 資料庫測試、本機 migration 全量重播、Next.js production build 與本機／遠端 database lint 通過；遠端 7 個 migrations 與本機一致。
 - [~] TST-D02：遠端 security advisors 只留下既有的 leaked-password protection 警告；「RLS 無 policy」為刻意採 FastAPI `service_role` 邊界並撤銷 browser grants 的拒絕預設設計。新索引因剛建立、尚無正式流量，performance advisors 暫列 unused index 資訊。
-- [ ] AI-D01：OHS／組織分析的 AI 報告統一改用 Gemini；依規劃留在 Batch E，不沿用 Artifact 的 Anthropic 呼叫。
+- [x] AI-D01：OHS／組織分析的 AI 報告統一由 FastAPI 後端呼叫 Gemini，不沿用 Artifact 的 Anthropic 瀏覽器呼叫。
+
+## 15. Batch E 完成紀錄（2026-08-12）
+
+- [x] ANL-E01：新增組織分析中心，整合 KPI／OKR、高風險、ESG、部門比較、日期篩選及 dept_head 自身部門限制。
+- [x] ANL-E02：依 Artifact 公式完成 WPAI／ROI 參數、保守／中性／樂觀三情境、三年 ROI、回本期與 D 層參與增益試算。
+- [x] ANL-E03：完成三個 80%、八週時間軸與 GRI 403-6／403-9 揭露草稿；正式揭露仍須由組織查核。
+- [x] AI-E01：ESG、OKR、高風險、KPI、ROI、888、GRI、OHS 與跨企業報告統一使用後端 Gemini；保存模型、彙整快照、生成者與版本時間。
+- [x] PRIV-E01：組織統計由 PostgreSQL 強制整體與各指標子群 k≥5；跨企業統計只納入明確 opt-in，個人可隨時撤回。
+- [x] L5-E01：完成跨企業健康、企業／經銷名冊、日期篩選、報表歷史、區域／夥伴／收入策略與 NPS 追蹤名單；不提供個人健康名冊。
+- [x] EXP-E01：分析表格支援 UTF-8 CSV，畫面與 Gemini 報告支援瀏覽器列印／另存 PDF。
+- [x] DB-E01：Batch E migration 已套用遠端 Supabase；新表啟用 RLS 並撤銷 browser roles，彙整函式只授權 FastAPI `service_role`。
+- [x] TST-E01：46 個 Python 測試、52 個 pgTAP 資料庫測試、Next.js production build、本機 migration 全量重播及 database lint 全部通過。
+- [~] TST-E02：遠端 advisors 沒有 Batch E 新增警告；security 唯一 WARN 仍為既有 leaked-password protection，performance 僅有 INFO。

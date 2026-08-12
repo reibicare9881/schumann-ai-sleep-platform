@@ -18,7 +18,7 @@
 | `appt_{orgCode}` | 組織預約 | 既有 `appointments`，並保留匯入來源 |
 | `svc_{orgCode}`、`prs` | 服務請求、問題回報 | `reibi_service_tickets` |
 | `setup_{orgCode}`、`dept_struct_{orgCode}` | 組織設定、L1–L4 部門樹 | `reibi_departments`；非結構設定保留於 enterprise `source_payload` |
-| `params_{orgCode}` | ROI 參數 | 既有 `organizations` ROI 欄位 |
+| `params_{orgCode}` | ROI 參數 | `reibi_analytics_settings`；保留每單位的 WPAI／ROI 情境參數與更新者 |
 | `reibi_orgs`、`org_members_{orgCode}` | 已註冊組織與成員索引 | 組織/會員資料匯入時重建，不把索引陣列當權威資料 |
 | `th_{uid}` | 三高、BMI、部門與同意狀態 | `reibi_health_assessments`，同意資訊保留在 `source_payload` |
 | `sleep_diary_{uid}`、`pain_diary_{uid}` | 睡眠／疼痛日誌 | `reibi_health_diary_entries` |
@@ -26,7 +26,7 @@
 | `osh_cnt_{type}_{orgCode}` | 量表累計計數器 | 不直接搬移；由 assessment 明細重算 |
 | `ow_roster_{orgCode}` | 職健名冊（員工代號、部門） | `reibi_ohs_records(record_type='roster')` |
 | `ohs_hazards_*`、`ohs_measures_*`、`ohs_reviews_*`、`ohs_meta_*` | 危害、措施、審查與職安後設資料 | `reibi_ohs_records` |
-| `org_th_*`、`org_th_dept_*` | k>=5 的組織／部門健康彙整 | `reibi_org_aggregates`；資料庫約束 `sample_size >= 5` |
+| `org_th_*`、`org_th_dept_*` | k>=5 的組織／部門健康彙整 | 歷史匯入存 `reibi_org_aggregates`；正式畫面由 `reibi_org_health_snapshot` 即時計算，整體與各指標子群均強制 k≥5 |
 | `subs` | 個人訂閱申請、同意、核准與到期 | `reibi_subscriptions` |
 | `remit_{orgCode}` | 匯款認領、影像、AI OCR 結果與人工更正 | `reibi_remittances`；影像改放 Supabase Storage，表內只存路徑 |
 | `reibi_versions`、`reibi_snapshots` | Artifact 版本與本機快照 | 不當成正式業務資料；匯入批次記錄來源版本與檔案雜湊 |
@@ -79,3 +79,5 @@ FastAPI 已提供 `/api/reibi/artifacts/validate` 預檢與 `/api/reibi/artifact
 ## AI 統一規則
 
 新資料只接受 `ai_provider = 'gemini'`。Artifact 既有 Claude 呼叫程式不會移植；歷史 AI 文字可作為來源內容保留，但不能偽標成 Gemini。FastAPI 實作時應由後端呼叫 Gemini，並記錄實際 `ai_model`。
+
+Batch E 已將組織與跨企業報告寫入 `reibi_generated_reports`，同時保存產生當下的去識別化 `metrics_snapshot`、Gemini 模型、日期範圍與生成者。跨企業即時分析另要求個人 `research_opt_in = true`，每個企業及各健康指標子群均達 k≥5 才回傳數值。

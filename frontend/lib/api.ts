@@ -640,6 +640,34 @@ export const API = {
     return this.request('/api/reibi/health/ohs/plan/snapshot', { query: { org_code: orgCode } });
   },
 
+  // REIBI Batch E：組織分析、跨企業 k 匿名與 Gemini 報告
+  async getReibiResearchConsent() { return this.request('/api/reibi/analytics/consent'); },
+  async setReibiResearchConsent(researchOptIn: boolean) {
+    return this.request('/api/reibi/analytics/consent', { method: 'PUT', body: JSON.stringify({ research_opt_in: researchOptIn }) });
+  },
+  async getReibiAnalyticsOverview(query: Record<string, any> = {}) {
+    return this.request('/api/reibi/analytics/overview', { query });
+  },
+  async getReibiAnalyticsSettings() { return this.request('/api/reibi/analytics/settings'); },
+  async saveReibiAnalyticsSettings(payload: Record<string, any>) {
+    return this.request('/api/reibi/analytics/settings', { method: 'PUT', body: JSON.stringify(payload) });
+  },
+  async getReibiDepartmentAnalytics(query: Record<string, any> = {}) {
+    return this.request('/api/reibi/analytics/departments', { query });
+  },
+  async listReibiAnalyticsReports() { return this.request('/api/reibi/analytics/reports'); },
+  async getReibiAnalyticsReport(id: number) { return this.request(`/api/reibi/analytics/reports/${id}`); },
+  async generateReibiAnalyticsReport(payload: Record<string, any>) {
+    return this.request('/api/reibi/analytics/reports', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async getReibiCrossOrgAnalytics(query: Record<string, any> = {}) {
+    return this.request('/api/reibi/analytics/cross-org', { query });
+  },
+  async listReibiCrossOrgReports() { return this.request('/api/reibi/analytics/cross-org/reports'); },
+  async getReibiAnalyticsDirectory(kind: 'enterprise' | 'distributor', query: Record<string, any> = {}) {
+    return this.request('/api/reibi/analytics/directory', { query: { kind, ...query } });
+  },
+
   async validateReibiArtifact(payload: {
     source_artifact: 'main' | 'l5' | 'quote' | 'workorder';
     source_version?: string;
