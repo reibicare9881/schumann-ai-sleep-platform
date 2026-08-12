@@ -1,0 +1,1051 @@
+"""REIBI business APIs and Artifact import pipeline.
+
+The browser never receives a Supabase service-role key. Every operation in this
+router is authenticated by the FastAPI JWT layer and scoped before the shared
+server-side Supabase client is used.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
+from typing import Any, Literal, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from auth import require_reibi_manager, require_reibi_super
+
+
+ARTIFACT_SOURCES = {"main", "l5", "quote", "workorder"}
+IMPORT_MAX_BYTES = 10 * 1024 * 1024
+IMPORT_MAX_ENTRIES = 5_000
+SENSITIVE_KEY_FRAGMENTS = (
+    "password", "secret", "token", "pin", "backupcode", "activationcode",
+    "imgfull", "imgthumb", "imagebase64",
+)
+SKIPPED_STORAGE_PREFIXES = (
+    "sess", "rem_", "pin_", "rc_", "lk_", "l5_session", "rq_session",
+    "l5_active_context", "l5_pin_", "__rq_handoff_",
+)
+
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class EnterpriseWrite(StrictModel):
+    org_name: str = Field(min_length=1, max_length=200)
+    org_alias: Optional[str] = Field(default=None, max_length=100)
+    status: str = Field(default="pending", max_length=50)
+    ubn: Optional[str] = Field(default=None, max_length=20)
+    contact_name: Optional[str] = Field(default=None, max_length=100)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    email: Optional[str] = Field(default=None, max_length=254)
+    address: Optional[str] = Field(default=None, max_length=500)
+    industry: Optional[str] = Field(default=None, max_length=100)
+    plan_code: Optional[str] = Field(default=None, max_length=50)
+    member_limit: int = Field(default=0, ge=0)
+    contract_start: Optional[date] = None
+    contract_end: Optional[date] = None
+    pay_mode: Optional[str] = Field(default=None, max_length=50)
+
+    @field_validator("contract_end")
+    @classmethod
+    def validate_contract_dates(cls, value: Optional[date], info: Any) -> Optional[date]:
+        start = info.data.get("contract_start")
+        if value and start and value < start:
+            raise ValueError("contract_end 不可早於 contract_start")
+        return value
+
+
+class QuoteWrite(StrictModel):
+    doc_no: str = Field(min_length=1, max_length=100)
+    doc_type: str = Field(min_length=1, max_length=50)
+    status: str = Field(default="draft", max_length=50)
+    client_name: str = Field(min_length=1, max_length=200)
+    client_alias: Optional[str] = Field(default=None, max_length=100)
+    contact_name: Optional[str] = Field(default=None, max_length=100)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    email: Optional[str] = Field(default=None, max_length=254)
+    address: Optional[str] = Field(default=None, max_length=500)
+    industry: Optional[str] = Field(default=None, max_length=100)
+    member_count: Optional[int] = Field(default=None, ge=0)
+    pay_mode: Optional[str] = Field(default=None, max_length=50)
+    contract_years: Optional[int] = Field(default=None, ge=1, le=99)
+    contract_start: Optional[date] = None
+    contract_end: Optional[date] = None
+    a_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    b_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    c_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    d_layer_fee_min: Decimal = Field(default=Decimal("0"), ge=0)
+    d_layer_fee_max: Decimal = Field(default=Decimal("0"), ge=0)
+    e_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    total_year_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    total_contract_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class ContractWrite(StrictModel):
+    doc_no: str = Field(min_length=1, max_length=100)
+    contract_type: str = Field(min_length=1, max_length=50)
+    status: str = Field(default="draft", max_length=50)
+    quote_id: Optional[int] = Field(default=None, ge=1)
+    from_quote_no: Optional[str] = Field(default=None, max_length=100)
+    client_name: str = Field(min_length=1, max_length=200)
+    contract_start: Optional[date] = None
+    contract_end: Optional[date] = None
+    total_year_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    total_contract_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    terms: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkOrderWrite(StrictModel):
+    work_order_no: str = Field(min_length=1, max_length=100)
+    contract_id: Optional[int] = Field(default=None, ge=1)
+    contract_no: Optional[str] = Field(default=None, max_length=100)
+    client_name: str = Field(min_length=1, max_length=200)
+    status: str = Field(default="draft", max_length=50)
+    contact_name: Optional[str] = Field(default=None, max_length=100)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    email: Optional[str] = Field(default=None, max_length=254)
+    address: Optional[str] = Field(default=None, max_length=500)
+    scheduled_date: Optional[date] = None
+    service_period: Optional[str] = Field(default=None, max_length=100)
+    items: dict[str, Any] = Field(default_factory=dict)
+
+
+class LifecycleStatusUpdate(StrictModel):
+    status: str = Field(min_length=1, max_length=50)
+
+
+class ArtifactEntry(StrictModel):
+    storage_key: str = Field(min_length=1, max_length=300)
+    value: Any
+
+
+class ArtifactExport(StrictModel):
+    source_artifact: Literal["main", "l5", "quote", "workorder"]
+    source_version: Optional[str] = Field(default=None, max_length=100)
+    entries: list[ArtifactEntry] = Field(min_length=1, max_length=IMPORT_MAX_ENTRIES)
+
+
+def _now_iso() -> str:
+    return datetime.now().astimezone().isoformat()
+
+
+def _clean_optional(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    result = str(value).strip()
+    return result or None
+
+
+def _int(value: Any, default: int = 0) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _money(value: Any) -> float:
+    try:
+        return float(Decimal(str(value or 0)))
+    except (InvalidOperation, TypeError, ValueError):
+        return 0.0
+
+
+def _date(value: Any) -> Optional[str]:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10]).isoformat()
+    except ValueError:
+        return None
+
+
+def _timestamp(value: Any) -> Optional[str]:
+    if not value:
+        return None
+    raw = str(value).replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(raw).isoformat()
+    except ValueError:
+        return None
+
+
+def _decode_storage_value(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    candidate = value.strip()
+    if not candidate or candidate[0] not in "[{\"-0123456789tfn":
+        return value
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError:
+        return value
+
+
+def _redact_secrets(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_redact_secrets(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    clean: dict[str, Any] = {}
+    for key, child in value.items():
+        compact = str(key).replace("_", "").lower()
+        if any(fragment in compact for fragment in SENSITIVE_KEY_FRAGMENTS):
+            continue
+        clean[str(key)] = _redact_secrets(child)
+    return clean
+
+
+def _is_skipped_storage_key(storage_key: str) -> bool:
+    lowered = storage_key.lower()
+    return any(lowered == prefix or lowered.startswith(prefix) for prefix in SKIPPED_STORAGE_PREFIXES)
+
+
+def _target_for_key(storage_key: str) -> Optional[str]:
+    exact = {
+        "l5_enterprises": "reibi_enterprises",
+        "l5_distributors": "reibi_distributors",
+        "l5_partners": "reibi_partners",
+        "l5_staff": "reibi_staff",
+        "l5_invoices": "reibi_invoices",
+        "l5_personal_subs": "reibi_subscriptions",
+        "l5_tickets": "reibi_service_tickets",
+        "l5_line_logs": "reibi_message_logs",
+        "rq_quotes": "reibi_quotes",
+        "rq_contracts": "reibi_contracts",
+        "rq_workorders": "reibi_work_orders",
+        "subs": "reibi_subscriptions",
+        "rpts": "reibi_health_assessments",
+    }
+    if storage_key in exact:
+        return exact[storage_key]
+    prefix_targets = (
+        ("remit_", "reibi_remittances"),
+        ("sleep_diary_", "reibi_health_diary_entries"),
+        ("pain_diary_", "reibi_health_diary_entries"),
+        ("ow_hist_", "reibi_health_assessments"),
+        ("msk_hist_", "reibi_health_assessments"),
+        ("bsrs5_hist_", "reibi_health_assessments"),
+        ("viol_hist_", "reibi_health_assessments"),
+        ("mental_hist_", "reibi_health_assessments"),
+        ("ohs_hazards_", "reibi_ohs_records"),
+        ("ohs_measures_", "reibi_ohs_records"),
+        ("ohs_reviews_", "reibi_ohs_records"),
+        ("ohs_meta_", "reibi_ohs_records"),
+        ("ow_roster_", "reibi_ohs_records"),
+        ("org_th_", "reibi_org_aggregates"),
+        ("l5_mhi_agg_", "reibi_org_aggregates"),
+        ("l5_health_agg_", "reibi_org_aggregates"),
+    )
+    return next((table for prefix, table in prefix_targets if storage_key.startswith(prefix)), None)
+
+
+def _record_id(record: Any, index: int) -> str:
+    if isinstance(record, dict):
+        for key in ("id", "docNo", "woNo", "orgCode", "memberCode", "invoiceNo"):
+            if record.get(key) not in (None, ""):
+                return str(record[key])
+    return str(index)
+
+
+def plan_artifact_import(export: ArtifactExport) -> dict[str, Any]:
+    """Pure validation/planning step used by both dry-run API and unit tests."""
+    canonical = json.dumps(export.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    byte_size = len(canonical.encode("utf-8"))
+    if byte_size > IMPORT_MAX_BYTES:
+        raise ValueError(f"匯出檔超過 {IMPORT_MAX_BYTES // 1024 // 1024} MB 上限")
+
+    planned: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    storage_keys: dict[str, int] = {}
+    target_counts: dict[str, int] = {}
+    skipped_count = 0
+    seen_record_ids: set[tuple[str, str]] = set()
+
+    for entry in export.entries:
+        key = entry.storage_key.strip()
+        decoded = _decode_storage_value(entry.value)
+        if _is_skipped_storage_key(key):
+            skipped_count += 1
+            warnings.append(f"{key}: session/憑證/暫存資料不搬移")
+            continue
+        records = decoded if isinstance(decoded, list) else [decoded]
+        target = _target_for_key(key)
+        if target is None:
+            warnings.append(f"{key}: 尚無正規化目標，僅保留於匯入佇列")
+        for index, record in enumerate(records):
+            source_record_id = _record_id(record, index)
+            identity = (key, source_record_id)
+            if identity in seen_record_ids:
+                source_record_id = f"{source_record_id}#{index}"
+                identity = (key, source_record_id)
+                warnings.append(f"{key}: 重複來源 ID，已以陣列位置區分")
+            seen_record_ids.add(identity)
+            sanitized = _redact_secrets(record)
+            planned.append({
+                "storage_key": key,
+                "source_record_id": source_record_id,
+                "target_table": target,
+                "raw_payload": sanitized if isinstance(sanitized, (dict, list)) else {"value": sanitized},
+                "decoded_record": record,
+            })
+            storage_keys[key] = storage_keys.get(key, 0) + 1
+            if target:
+                target_counts[target] = target_counts.get(target, 0) + 1
+
+    return {
+        "sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        "byte_size": byte_size,
+        "record_count": len(planned),
+        "skipped_count": skipped_count,
+        "storage_keys": storage_keys,
+        "target_counts": target_counts,
+        "warnings": warnings,
+        "records": planned,
+    }
+
+
+def _artifact_enterprise(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "artifact_id": _clean_optional(record.get("id")),
+        "org_code": str(record.get("orgCode") or "").upper(),
+        "org_name": str(record.get("orgName") or "").strip(),
+        "org_alias": _clean_optional(record.get("orgAlias")),
+        "enterprise_type": "partner" if record.get("type") == "partner" else "enterprise",
+        "status": _clean_optional(record.get("status")) or "pending",
+        "ubn": _clean_optional(record.get("ubn")),
+        "contact_name": _clean_optional(record.get("contact")),
+        "phone": _clean_optional(record.get("phone")),
+        "email": _clean_optional(record.get("email")),
+        "address": _clean_optional(record.get("address")),
+        "industry": _clean_optional(record.get("industry")),
+        "plan_code": _clean_optional(record.get("plan")),
+        "member_limit": max(0, _int(record.get("memberCount"))),
+        "used_count": max(0, _int(record.get("usedCount"))),
+        "contract_start": _date(record.get("contractStart")),
+        "contract_end": _date(record.get("contractEnd")),
+        "contract_years": _int(record.get("contractYears")) or None,
+        "pay_mode": _clean_optional(record.get("payMode")),
+        "consultant": _clean_optional(record.get("consultant")),
+        "partner_code": _clean_optional(record.get("partnerCode")),
+        "referral_percent": _money(record.get("referralPct")) if record.get("referralPct") not in (None, "") else None,
+        "a_layer_fee": _money(record.get("aLayerFee")),
+        "b_layer_fee": _money(record.get("bLayerFee")),
+        "c_layer_fee": _money(record.get("cLayerFee")),
+        "d_layer_fee": _money(record.get("dLayerFee")),
+        "devices": record.get("devices") if isinstance(record.get("devices"), dict) else {},
+        "d_layer_config": record.get("dLayer") if isinstance(record.get("dLayer"), dict) else {},
+        "source_payload": _redact_secrets(record),
+        "created_at": _timestamp(record.get("createdAt")) or _now_iso(),
+        "updated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+    }
+
+
+def _artifact_staff(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "artifact_id": _clean_optional(record.get("id")),
+        "employee_code": _clean_optional(record.get("empCode")),
+        "name": str(record.get("name") or "").strip(),
+        "title": _clean_optional(record.get("title")),
+        "phone": _clean_optional(record.get("phone")),
+        "email": _clean_optional(record.get("email")),
+        "note": _clean_optional(record.get("note")),
+        "source_payload": _redact_secrets(record),
+        "created_at": _timestamp(record.get("createdAt")) or _now_iso(),
+        "updated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+    }
+
+
+def _artifact_partner(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "artifact_id": _clean_optional(record.get("id")),
+        "name": str(record.get("name") or "").strip(),
+        "contact_name": _clean_optional(record.get("contact")),
+        "phone": _clean_optional(record.get("phone")),
+        "default_percent": _money(record.get("defaultPct")),
+        "note": _clean_optional(record.get("note")),
+        "source_payload": _redact_secrets(record),
+        "created_at": _timestamp(record.get("createdAt")) or _now_iso(),
+        "updated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+    }
+
+
+def _artifact_distributor(record: dict[str, Any]) -> dict[str, Any]:
+    dist_type = record.get("type") if record.get("type") in {"primary", "sub"} else "primary"
+    return {
+        "artifact_id": _clean_optional(record.get("id")),
+        "org_code": str(record.get("orgCode") or "").upper(),
+        "distributor_type": dist_type,
+        "name": str(record.get("name") or "").strip(),
+        "alias": _clean_optional(record.get("alias")),
+        "status": _clean_optional(record.get("status")) or "active",
+        "region": _clean_optional(record.get("region")),
+        "level_code": _clean_optional(record.get("level")),
+        "ubn": _clean_optional(record.get("ubn")),
+        "address": _clean_optional(record.get("address")),
+        "contact_name": _clean_optional(record.get("contact")),
+        "phone": _clean_optional(record.get("phone")),
+        "email": _clean_optional(record.get("email")),
+        "has_sub_authority": bool(record.get("hasSubAuth")),
+        "commission_percent": _money(record.get("commissionPct")) if record.get("commissionPct") not in (None, "") else None,
+        "source_payload": _redact_secrets(record),
+        "created_at": _timestamp(record.get("createdAt")) or _now_iso(),
+        "updated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+    }
+
+
+def _artifact_quote(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "artifact_id": _clean_optional(record.get("id")),
+        "doc_no": str(record.get("docNo") or "").strip(),
+        "doc_type": str(record.get("docType") or "unknown"),
+        "status": str(record.get("status") or "draft"),
+        "client_name": str(record.get("clientName") or record.get("distName") or "").strip(),
+        "client_alias": _clean_optional(record.get("clientAlias") or record.get("distAlias")),
+        "contact_name": _clean_optional(record.get("contact") or record.get("distContact")),
+        "phone": _clean_optional(record.get("phone") or record.get("distPhone")),
+        "email": _clean_optional(record.get("email") or record.get("distEmail")),
+        "address": _clean_optional(record.get("address")),
+        "industry": _clean_optional(record.get("industry")),
+        "member_count": max(0, _int(record.get("memberCount"))) if record.get("memberCount") not in (None, "") else None,
+        "pay_mode": _clean_optional(record.get("payMode")),
+        "contract_years": _int(record.get("contractYears")) or None,
+        "contract_start": _date(record.get("contractStart")),
+        "contract_end": _date(record.get("contractEnd")),
+        "a_layer_fee": _money(record.get("aFee")),
+        "b_layer_fee": _money(record.get("bFee")),
+        "c_layer_fee": _money(record.get("cFeeTotal")),
+        "d_layer_fee_min": _money(record.get("dFeeMin")),
+        "d_layer_fee_max": _money(record.get("dFeeMax")),
+        "e_layer_fee": _money(record.get("eTotalFee")),
+        "total_year_fee": _money(record.get("totalYearFee")),
+        "total_contract_fee": _money(record.get("total3Year")),
+        "original_contract_no": _clean_optional(record.get("origContractNo")),
+        "linked_contract_no": _clean_optional(record.get("linkedContractNo")),
+        "config": _redact_secrets({
+            "bBed": record.get("bBed"), "bChair": record.get("bChair"), "bLA200": record.get("bLA200"),
+            "cTier": record.get("cTier"), "dItems": record.get("dItems"), "dSites": record.get("dSites"),
+            "eValueAdded": record.get("eValueAdded"), "upgradeCalc": record.get("upgradeCalc"),
+        }),
+        "versions": record.get("versions") if isinstance(record.get("versions"), list) else [],
+        "source_payload": _redact_secrets(record),
+        "created_by": _clean_optional(record.get("createdBy")),
+        "created_at": _timestamp(record.get("createdAt")) or _now_iso(),
+        "updated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+    }
+
+
+def _artifact_contract(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "artifact_id": _clean_optional(record.get("id")),
+        "doc_no": str(record.get("docNo") or "").strip(),
+        "contract_type": str(record.get("docType") or "unknown"),
+        "status": str(record.get("status") or "draft"),
+        "from_quote_no": _clean_optional(record.get("fromQuoteNo")),
+        "client_name": str(record.get("clientName") or "").strip(),
+        "contract_start": _date(record.get("contractStart")),
+        "contract_end": _date(record.get("contractEnd")),
+        "total_year_fee": _money(record.get("totalYearFee")),
+        "total_contract_fee": _money(record.get("total3Year")),
+        "terms": _redact_secrets({"note": record.get("note"), "versions": record.get("versions", [])}),
+        "source_payload": _redact_secrets(record),
+        "created_by": _clean_optional(record.get("createdBy")),
+        "created_at": _timestamp(record.get("createdAt")) or _now_iso(),
+        "updated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+    }
+
+
+def _artifact_work_order(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "artifact_id": _clean_optional(record.get("id")),
+        "work_order_no": str(record.get("woNo") or "").strip(),
+        "contract_no": _clean_optional(record.get("contractNo")),
+        "client_name": str(record.get("clientName") or "").strip(),
+        "status": str(record.get("status") or "draft"),
+        "contact_name": _clean_optional(record.get("contact")),
+        "phone": _clean_optional(record.get("phone")),
+        "email": _clean_optional(record.get("email")),
+        "address": _clean_optional(record.get("address")),
+        "scheduled_date": _date(record.get("scheduledDate")),
+        "service_period": _clean_optional(record.get("period")),
+        "staff_names": _clean_optional(record.get("staffNames")),
+        "scope_confirm_reibi": _clean_optional(record.get("scopeConfirmReibi")),
+        "scope_confirm_reibi_date": _date(record.get("scopeConfirmReibiDate")),
+        "scope_confirm_client": _clean_optional(record.get("scopeConfirmClient")),
+        "scope_confirm_client_date": _date(record.get("scopeConfirmClientDate")),
+        "acceptance_result": _clean_optional(record.get("overallResult")),
+        "acceptance_date": _date(record.get("acceptDate")),
+        "client_sign_name": _clean_optional(record.get("clientSignName")),
+        "punch_list": _clean_optional(record.get("punchList")),
+        "items": _redact_secrets({
+            "selectedItems": record.get("selectedItems", {}), "itemSpecs": record.get("itemSpecs", {}),
+            "itemQty": record.get("itemQty", {}), "itemNote": record.get("itemNote", {}),
+            "customItems": record.get("customItems", []), "dSites": record.get("dSites", []),
+        }),
+        "acceptance": _redact_secrets({"acceptChecks": record.get("acceptChecks", {}), "checkNotes": record.get("checkNotes", {})}),
+        "status_history": record.get("statusHistory") if isinstance(record.get("statusHistory"), list) else [],
+        "source_payload": _redact_secrets(record),
+        "created_by": _clean_optional(record.get("createdBy")),
+        "created_at": _timestamp(record.get("createdAt")) or _now_iso(),
+        "updated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+    }
+
+
+def _stable_artifact_id(prefix: str, record: dict[str, Any]) -> str:
+    canonical = json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+    return f"{prefix}_{hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:24]}"
+
+
+def _artifact_invoice(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "artifact_id": _clean_optional(record.get("id")) or _stable_artifact_id("invoice", record),
+        "invoice_no": str(record.get("invoiceNo") or "").strip(),
+        "org_code": _clean_optional(record.get("orgCode")),
+        "org_name": _clean_optional(record.get("orgName")),
+        "ubn": _clean_optional(record.get("ubn")),
+        "invoice_date": _date(record.get("invoiceDate")),
+        "layer_code": _clean_optional(record.get("layer")),
+        "status": _clean_optional(record.get("status")) or "issued",
+        "tax_exclusive": _money(record.get("taxExcl")),
+        "tax": _money(record.get("tax")),
+        "total": _money(record.get("total")),
+        "notes": _clean_optional(record.get("notes")),
+        "items": record.get("items") if isinstance(record.get("items"), list) else [],
+        "source_payload": _redact_secrets(record),
+        "created_by": _clean_optional(record.get("createdBy")),
+        "created_at": _timestamp(record.get("createdAt")) or _now_iso(),
+        "updated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+    }
+
+
+def _artifact_subscription(record: dict[str, Any]) -> dict[str, Any]:
+    requested_at = _timestamp(record.get("requestedAt")) or _timestamp(record.get("createdAt")) or _now_iso()
+    return {
+        "artifact_id": _clean_optional(record.get("id")) or _stable_artifact_id("subscription", record),
+        "member_code": str(record.get("memberCode") or "").strip().upper(),
+        "subscriber_name": _clean_optional(record.get("name")),
+        "contact": _clean_optional(record.get("contact")),
+        "plan_code": str(record.get("plan") or "unknown"),
+        "plan_label": _clean_optional(record.get("planLabel")),
+        "status": str(record.get("status") or "pending"),
+        "amount": _money(record.get("amount")),
+        "invoice_no": _clean_optional(record.get("invoiceNo")),
+        "activation_code": None,
+        "consent_version": _clean_optional(record.get("consentVersion")),
+        "consent_at": _timestamp(record.get("consentAt")),
+        "requested_at": requested_at,
+        "approved_at": _timestamp(record.get("approvedAt")),
+        "expires_at": _timestamp(record.get("expiresAt")),
+        "admin_note": _clean_optional(record.get("adminNote") or record.get("note")),
+        "source_payload": _redact_secrets(record),
+        "created_by": _clean_optional(record.get("createdBy")),
+        "created_at": _timestamp(record.get("createdAt")) or requested_at,
+        "updated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+    }
+
+
+def _artifact_ticket(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "artifact_id": _clean_optional(record.get("id")) or _stable_artifact_id("ticket", record),
+        "ticket_type": str(record.get("type") or "other"),
+        "priority": str(record.get("priority") or "normal"),
+        "status": str(record.get("status") or "pending"),
+        "preferred_date": _date(record.get("preferDate")),
+        "note": _clean_optional(record.get("note")),
+        "handler": _clean_optional(record.get("handler")),
+        "source_payload": _redact_secrets(record),
+        "created_by": _clean_optional(record.get("createdBy")),
+        "created_at": _timestamp(record.get("createdAt")) or _now_iso(),
+        "updated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+    }
+
+
+def _artifact_message(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "artifact_id": _clean_optional(record.get("id")) or _stable_artifact_id("message", record),
+        "target_type": str(record.get("targetType") or "unknown"),
+        "target_artifact_id": _clean_optional(record.get("targetId")),
+        "target_name": _clean_optional(record.get("targetName")),
+        "template_code": _clean_optional(record.get("tmpl")),
+        "message": str(record.get("msg") or ""),
+        "sender": _clean_optional(record.get("sender")),
+        "status": str(record.get("status") or "unknown"),
+        "source_payload": _redact_secrets(record),
+        "sent_at": _timestamp(record.get("ts")) or _now_iso(),
+    }
+
+
+def _dynamic_import_values(storage_key: str, record: dict[str, Any]) -> Optional[tuple[str, dict[str, Any], Optional[str]]]:
+    if storage_key.startswith("remit_"):
+        org_code = str(record.get("orgCode") or storage_key[len("remit_"):]).upper()
+        values = {
+            "artifact_id": _clean_optional(record.get("id")) or _stable_artifact_id("remittance", record),
+            "org_code": org_code,
+            "org_name_guess": _clean_optional(record.get("orgNameGuess")),
+            "corrected_name": _clean_optional(record.get("correctedName")),
+            "corrected_account": _clean_optional(record.get("correctedAccount")),
+            "remitted_on": _date(record.get("correctedDate")),
+            "amount": _money(record.get("correctedAmount")),
+            "status": _clean_optional(record.get("status")) or "pending",
+            "note": _clean_optional(record.get("note")),
+            "ai_result": record.get("aiOriginal") if isinstance(record.get("aiOriginal"), dict) else None,
+            "ai_provider": None,
+            "ai_model": None,
+            "image_storage_path": None,
+            "review_payload": _redact_secrets({"reviewRowIds": record.get("reviewRowIds"), "reviewNote": record.get("reviewNote")}),
+            "source_payload": _redact_secrets(record),
+            "submitted_at": _timestamp(record.get("submittedAt")) or _timestamp(record.get("createdAt")),
+            "reviewed_at": _timestamp(record.get("reviewedAt")),
+            "created_at": _timestamp(record.get("createdAt")) or _now_iso(),
+            "updated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+        }
+        return "reibi_remittances", values, "artifact_id"
+
+    diary_prefixes = {"sleep_diary_": "sleep", "pain_diary_": "pain"}
+    for prefix, diary_type in diary_prefixes.items():
+        if storage_key.startswith(prefix):
+            user_key = storage_key[len(prefix):] or "unknown"
+            entry_date = _date(record.get("date") or record.get("entryDate") or record.get("ts"))
+            values = {
+                "artifact_user_key": user_key,
+                "diary_type": diary_type,
+                "entry_date": entry_date,
+                "source_payload": _redact_secrets(record),
+                "created_at": _timestamp(record.get("createdAt")) or _now_iso(),
+                "updated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+            }
+            return "reibi_health_diary_entries", values, "artifact_user_key,diary_type,entry_date"
+
+    assessment_prefixes = {
+        "ow_hist_": "ow", "msk_hist_": "msk", "bsrs5_hist_": "bsrs5",
+        "viol_hist_": "violence", "mental_hist_": "mental",
+    }
+    if storage_key == "rpts":
+        values = {
+            "artifact_id": _clean_optional(record.get("id")) or _stable_artifact_id("assessment", record),
+            "artifact_user_key": _clean_optional(record.get("uid")) or "unknown",
+            "org_code": _clean_optional(record.get("orgCode")),
+            "assessment_type": "combined",
+            "score": _money(record.get("sScore")),
+            "secondary_score": _money(record.get("pScore")),
+            "level_code": _clean_optional((record.get("sL") or {}).get("key") if isinstance(record.get("sL"), dict) else record.get("sKey")),
+            "level_label": _clean_optional((record.get("sL") or {}).get("label") if isinstance(record.get("sL"), dict) else None),
+            "answers": _redact_secrets({"profile": record.get("profile"), "workScore": record.get("wScore")}),
+            "recommendations": record.get("recs") if isinstance(record.get("recs"), dict) else {},
+            "ai_provider": None,
+            "ai_model": None,
+            "source_payload": _redact_secrets(record),
+            "assessed_at": _timestamp(record.get("ts")) or _now_iso(),
+        }
+        return "reibi_health_assessments", values, "assessment_type,artifact_user_key,artifact_id"
+    for prefix, assessment_type in assessment_prefixes.items():
+        if storage_key.startswith(prefix):
+            user_key = storage_key[len(prefix):] or "unknown"
+            primary_score = record.get("score", record.get("sum", record.get("maxScore")))
+            values = {
+                "artifact_id": _clean_optional(record.get("id")) or _stable_artifact_id(assessment_type, record),
+                "artifact_user_key": user_key,
+                "org_code": _clean_optional(record.get("orgCode")),
+                "assessment_type": assessment_type,
+                "score": _money(primary_score),
+                "secondary_score": None,
+                "level_code": _clean_optional(record.get("level")),
+                "level_label": _clean_optional(record.get("label")),
+                "is_flagged": bool(record.get("item6Flag") or record.get("screened")),
+                "answers": _redact_secrets(record.get("ans") or record.get("scores") or {}),
+                "recommendations": {},
+                "source_payload": _redact_secrets(record),
+                "assessed_at": _timestamp(record.get("ts")) or _now_iso(),
+            }
+            return "reibi_health_assessments", values, "assessment_type,artifact_user_key,artifact_id"
+
+    ohs_prefixes = {
+        "ohs_hazards_": "hazard", "ohs_measures_": "measure", "ohs_reviews_": "review",
+        "ohs_meta_": "meta", "ow_roster_": "roster",
+    }
+    for prefix, record_type in ohs_prefixes.items():
+        if storage_key.startswith(prefix):
+            org_code = storage_key[len(prefix):].upper()
+            values = {
+                "artifact_id": _clean_optional(record.get("id") or record.get("empId")) or _stable_artifact_id(record_type, record),
+                "org_code": org_code,
+                "record_type": record_type,
+                "status": _clean_optional(record.get("status")),
+                "risk_level": _clean_optional(record.get("risk")),
+                "owner": _clean_optional(record.get("owner")),
+                "due_date": _date(record.get("dueDate")),
+                "verified_at": _date(record.get("verifyDate")),
+                "source_payload": _redact_secrets(record),
+                "created_at": _timestamp(record.get("createdAt")) or _now_iso(),
+                "updated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+            }
+            return "reibi_ohs_records", values, "org_code,record_type,artifact_id"
+
+    aggregate_prefixes = ("org_th_", "l5_mhi_agg_", "l5_health_agg_")
+    for prefix in aggregate_prefixes:
+        if storage_key.startswith(prefix):
+            org_code = str(record.get("orgCode") or storage_key[len(prefix):]).upper()
+            sample_size = _int(record.get("n") or record.get("sampleSize"))
+            values = {
+                "org_code": org_code,
+                "department_key": _clean_optional(record.get("dept")) or "",
+                "aggregate_type": prefix.rstrip("_"),
+                "sample_size": sample_size,
+                "metrics": _redact_secrets(record),
+                "period_start": _date(record.get("periodStart")),
+                "period_end": _date(record.get("periodEnd")),
+                "calculated_at": _timestamp(record.get("updatedAt")) or _now_iso(),
+                "source_payload": _redact_secrets(record),
+            }
+            return "reibi_org_aggregates", values, None
+    return None
+
+
+TRANSFORMERS = {
+    "l5_enterprises": ("reibi_enterprises", _artifact_enterprise, "artifact_id"),
+    "l5_staff": ("reibi_staff", _artifact_staff, "artifact_id"),
+    "l5_partners": ("reibi_partners", _artifact_partner, "artifact_id"),
+    "l5_distributors": ("reibi_distributors", _artifact_distributor, "artifact_id"),
+    "rq_quotes": ("reibi_quotes", _artifact_quote, "artifact_id"),
+    "rq_contracts": ("reibi_contracts", _artifact_contract, "artifact_id"),
+    "rq_workorders": ("reibi_work_orders", _artifact_work_order, "artifact_id"),
+    "l5_invoices": ("reibi_invoices", _artifact_invoice, "artifact_id"),
+    "l5_personal_subs": ("reibi_subscriptions", _artifact_subscription, "artifact_id"),
+    "subs": ("reibi_subscriptions", _artifact_subscription, "artifact_id"),
+    "l5_tickets": ("reibi_service_tickets", _artifact_ticket, "artifact_id"),
+    "l5_line_logs": ("reibi_message_logs", _artifact_message, "artifact_id"),
+}
+
+
+def _ensure_required(payload: dict[str, Any], fields: tuple[str, ...]) -> None:
+    missing = [field for field in fields if payload.get(field) in (None, "")]
+    if missing:
+        raise ValueError(f"缺少必要欄位: {', '.join(missing)}")
+
+
+def _execute(query: Any, operation: str) -> list[dict[str, Any]]:
+    try:
+        response = query.execute()
+        return response.data or []
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Supabase {operation} 失敗") from exc
+
+
+def _current_enterprise_id(client: Any, current_user: dict[str, Any], required: bool = True) -> Optional[int]:
+    org_code = str(current_user.get("org_code") or "").upper()
+    if current_user.get("role") == "reibi_super" and not org_code:
+        if required:
+            raise HTTPException(status_code=400, detail="跨組織操作必須指定 org_code")
+        return None
+    rows = _execute(
+        client.table("reibi_enterprises").select("id,org_code").eq("org_code", org_code).limit(1),
+        "查詢企業",
+    )
+    if not rows:
+        if required:
+            raise HTTPException(status_code=404, detail="此單位尚未建立 REIBI 企業資料")
+        return None
+    return int(rows[0]["id"])
+
+
+def _serialize_payload(model: BaseModel) -> dict[str, Any]:
+    return model.model_dump(mode="json", exclude_none=True)
+
+
+def create_reibi_router(client: Any) -> APIRouter:
+    router = APIRouter(prefix="/api/reibi", tags=["REIBI"])
+
+    @router.get("/overview")
+    def overview(current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id = _current_enterprise_id(client, current_user, required=False)
+        if enterprise_id is None:
+            return {"status": "success", "data": {"enterprise": None, "quotes": 0, "contracts": 0, "work_orders": 0}}
+        enterprise = _execute(client.table("reibi_enterprises").select("*").eq("id", enterprise_id).limit(1), "查詢企業")
+        counts: dict[str, int] = {}
+        for label, table in (("quotes", "reibi_quotes"), ("contracts", "reibi_contracts"), ("work_orders", "reibi_work_orders")):
+            try:
+                response = client.table(table).select("id", count="exact").eq("enterprise_id", enterprise_id).limit(1).execute()
+                counts[label] = int(response.count or 0)
+            except Exception as exc:
+                raise HTTPException(status_code=502, detail=f"Supabase 統計 {label} 失敗") from exc
+        return {"status": "success", "data": {"enterprise": enterprise[0] if enterprise else None, **counts}}
+
+    @router.get("/enterprise")
+    def get_enterprise(current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id = _current_enterprise_id(client, current_user)
+        rows = _execute(client.table("reibi_enterprises").select("*").eq("id", enterprise_id).limit(1), "查詢企業")
+        return {"status": "success", "data": rows[0]}
+
+    @router.put("/enterprise")
+    def upsert_enterprise(payload: EnterpriseWrite, current_user: dict = Depends(require_reibi_manager)):
+        org_code = str(current_user.get("org_code") or "").upper()
+        if not org_code:
+            raise HTTPException(status_code=400, detail="Token 缺少 org_code")
+        values = _serialize_payload(payload)
+        values.update({"org_code": org_code, "updated_at": _now_iso()})
+        rows = _execute(
+            client.table("reibi_enterprises").upsert(values, on_conflict="org_code"),
+            "儲存企業",
+        )
+        return {"status": "success", "data": rows[0] if rows else values}
+
+    def list_scoped(table: str, current_user: dict, page: int, size: int) -> dict[str, Any]:
+        enterprise_id = _current_enterprise_id(client, current_user)
+        start = (page - 1) * size
+        try:
+            response = (
+                client.table(table).select("*", count="exact").eq("enterprise_id", enterprise_id)
+                .order("created_at", desc=True).range(start, start + size - 1).execute()
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Supabase 查詢 {table} 失敗") from exc
+        return {"status": "success", "data": response.data or [], "meta": {"page": page, "size": size, "total": response.count or 0}}
+
+    def update_scoped_status(table: str, record_id: int, payload: LifecycleStatusUpdate, current_user: dict) -> dict[str, Any]:
+        enterprise_id = _current_enterprise_id(client, current_user)
+        existing = _execute(
+            client.table(table).select("id").eq("id", record_id).eq("enterprise_id", enterprise_id).limit(1),
+            f"驗證 {table}",
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="找不到資料，或資料不屬於目前企業")
+        rows = _execute(
+            client.table(table).update({"status": payload.status, "updated_at": _now_iso()})
+            .eq("id", record_id).eq("enterprise_id", enterprise_id),
+            f"更新 {table}",
+        )
+        return {"status": "success", "data": rows[0]}
+
+    @router.get("/quotes")
+    def list_quotes(page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=200), current_user: dict = Depends(require_reibi_manager)):
+        return list_scoped("reibi_quotes", current_user, page, size)
+
+    @router.post("/quotes", status_code=status.HTTP_201_CREATED)
+    def create_quote(payload: QuoteWrite, current_user: dict = Depends(require_reibi_manager)):
+        values = _serialize_payload(payload)
+        values.update({"enterprise_id": _current_enterprise_id(client, current_user), "created_by": current_user.get("name"), "source_payload": {}})
+        rows = _execute(client.table("reibi_quotes").insert(values), "建立報價")
+        return {"status": "success", "data": rows[0]}
+
+    @router.patch("/quotes/{record_id}/status")
+    def update_quote_status(record_id: int, payload: LifecycleStatusUpdate, current_user: dict = Depends(require_reibi_manager)):
+        return update_scoped_status("reibi_quotes", record_id, payload, current_user)
+
+    @router.get("/contracts")
+    def list_contracts(page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=200), current_user: dict = Depends(require_reibi_manager)):
+        return list_scoped("reibi_contracts", current_user, page, size)
+
+    @router.post("/contracts", status_code=status.HTTP_201_CREATED)
+    def create_contract(payload: ContractWrite, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id = _current_enterprise_id(client, current_user)
+        values = _serialize_payload(payload)
+        if payload.quote_id:
+            quote = _execute(client.table("reibi_quotes").select("id").eq("id", payload.quote_id).eq("enterprise_id", enterprise_id).limit(1), "驗證報價")
+            if not quote:
+                raise HTTPException(status_code=400, detail="quote_id 不屬於目前企業")
+        values.update({"enterprise_id": enterprise_id, "created_by": current_user.get("name"), "source_payload": {}})
+        rows = _execute(client.table("reibi_contracts").insert(values), "建立合約")
+        return {"status": "success", "data": rows[0]}
+
+    @router.patch("/contracts/{record_id}/status")
+    def update_contract_status(record_id: int, payload: LifecycleStatusUpdate, current_user: dict = Depends(require_reibi_manager)):
+        return update_scoped_status("reibi_contracts", record_id, payload, current_user)
+
+    @router.get("/work-orders")
+    def list_work_orders(page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=200), current_user: dict = Depends(require_reibi_manager)):
+        return list_scoped("reibi_work_orders", current_user, page, size)
+
+    @router.post("/work-orders", status_code=status.HTTP_201_CREATED)
+    def create_work_order(payload: WorkOrderWrite, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id = _current_enterprise_id(client, current_user)
+        values = _serialize_payload(payload)
+        if payload.contract_id:
+            contract = _execute(client.table("reibi_contracts").select("id").eq("id", payload.contract_id).eq("enterprise_id", enterprise_id).limit(1), "驗證合約")
+            if not contract:
+                raise HTTPException(status_code=400, detail="contract_id 不屬於目前企業")
+        values.update({"enterprise_id": enterprise_id, "created_by": current_user.get("name"), "source_payload": {}})
+        rows = _execute(client.table("reibi_work_orders").insert(values), "建立工單")
+        return {"status": "success", "data": rows[0]}
+
+    @router.patch("/work-orders/{record_id}/status")
+    def update_work_order_status(record_id: int, payload: LifecycleStatusUpdate, current_user: dict = Depends(require_reibi_manager)):
+        return update_scoped_status("reibi_work_orders", record_id, payload, current_user)
+
+    @router.post("/artifacts/validate")
+    def validate_artifact(export: ArtifactExport, _: dict = Depends(require_reibi_manager)):
+        try:
+            plan = plan_artifact_import(export)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        public_plan = {key: value for key, value in plan.items() if key != "records"}
+        return {"status": "success", "data": public_plan}
+
+    @router.post("/artifacts/import")
+    def import_artifact(export: ArtifactExport, current_user: dict = Depends(require_reibi_super)):
+        try:
+            plan = plan_artifact_import(export)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        duplicate = _execute(
+            client.table("reibi_artifact_import_batches").select("id,status,completed_at")
+            .eq("source_artifact", export.source_artifact).eq("export_sha256", plan["sha256"])
+            .eq("status", "completed").limit(1),
+            "檢查重複匯入",
+        )
+        if duplicate:
+            return {"status": "success", "data": {"duplicate": True, "batch": duplicate[0], "summary": {key: value for key, value in plan.items() if key != "records"}}}
+
+        batches = _execute(client.table("reibi_artifact_import_batches").insert({
+            "source_artifact": export.source_artifact,
+            "source_version": export.source_version,
+            "export_sha256": plan["sha256"],
+            "status": "importing",
+            "record_count": plan["record_count"],
+            "created_by": current_user.get("uid"),
+        }), "建立匯入批次")
+        batch_id = batches[0]["id"]
+        imported = 0
+        rejected = 0
+        errors: list[dict[str, str]] = []
+
+        priority = {"l5_staff": 1, "l5_partners": 2, "l5_enterprises": 3, "l5_distributors": 4, "rq_quotes": 5, "rq_contracts": 6, "rq_workorders": 7}
+        records = sorted(plan["records"], key=lambda item: priority.get(item["storage_key"], 99))
+        for item in records:
+            target_id: Optional[str] = None
+            record_status = "skipped"
+            error_detail: Optional[str] = None
+            try:
+                transformer_info = TRANSFORMERS.get(item["storage_key"])
+                resolved: Optional[tuple[str, dict[str, Any], Optional[str]]] = None
+                if transformer_info and isinstance(item["decoded_record"], dict):
+                    table, transformer, conflict = transformer_info
+                    resolved = (table, transformer(item["decoded_record"]), conflict)
+                elif isinstance(item["decoded_record"], dict):
+                    resolved = _dynamic_import_values(item["storage_key"], item["decoded_record"])
+
+                if resolved:
+                    table, values, conflict = resolved
+                    required = {
+                        "reibi_enterprises": ("org_code", "org_name"),
+                        "reibi_staff": ("name",),
+                        "reibi_partners": ("name",),
+                        "reibi_distributors": ("org_code", "name"),
+                        "reibi_quotes": ("doc_no", "client_name"),
+                        "reibi_contracts": ("doc_no", "client_name"),
+                        "reibi_work_orders": ("work_order_no", "client_name"),
+                        "reibi_invoices": ("invoice_no", "invoice_date"),
+                        "reibi_subscriptions": ("member_code", "plan_code", "status", "requested_at"),
+                        "reibi_service_tickets": ("ticket_type", "priority", "status"),
+                        "reibi_message_logs": ("target_type", "message", "status"),
+                        "reibi_remittances": ("artifact_id", "org_code"),
+                        "reibi_health_assessments": ("artifact_id", "artifact_user_key", "assessment_type", "assessed_at"),
+                        "reibi_health_diary_entries": ("artifact_user_key", "diary_type", "entry_date"),
+                        "reibi_ohs_records": ("artifact_id", "org_code", "record_type"),
+                        "reibi_org_aggregates": ("org_code", "aggregate_type", "sample_size"),
+                    }.get(table, ())
+                    _ensure_required(values, required)
+                    if table == "reibi_org_aggregates" and values.get("sample_size", 0) < 5:
+                        raise ValueError("組織彙整樣本數小於 k=5，不得匯入")
+                    source_record = item["decoded_record"]
+                    if table in {"reibi_quotes", "reibi_contracts", "reibi_work_orders", "reibi_invoices", "reibi_remittances", "reibi_service_tickets", "reibi_ohs_records"}:
+                        org_code = _clean_optional(values.get("org_code") or source_record.get("orgCode") or source_record.get("entCode"))
+                        client_name = _clean_optional(source_record.get("clientName") or source_record.get("orgName") or source_record.get("entName"))
+                        enterprise_query = client.table("reibi_enterprises").select("id")
+                        if org_code:
+                            enterprise_query = enterprise_query.eq("org_code", org_code.upper())
+                        elif client_name:
+                            enterprise_query = enterprise_query.eq("org_name", client_name)
+                        else:
+                            enterprise_query = None
+                        if enterprise_query is not None:
+                            enterprise_rows = _execute(enterprise_query.limit(2), "比對企業")
+                            if len(enterprise_rows) == 1:
+                                values["enterprise_id"] = enterprise_rows[0]["id"]
+                    if table == "reibi_contracts" and values.get("from_quote_no"):
+                        quote_rows = _execute(
+                            client.table("reibi_quotes").select("id").eq("doc_no", values["from_quote_no"]).limit(1),
+                            "比對來源報價",
+                        )
+                        if quote_rows:
+                            values["quote_id"] = quote_rows[0]["id"]
+                    if table == "reibi_work_orders" and values.get("contract_no"):
+                        contract_rows = _execute(
+                            client.table("reibi_contracts").select("id").eq("doc_no", values["contract_no"]).limit(1),
+                            "比對來源合約",
+                        )
+                        if contract_rows:
+                            values["contract_id"] = contract_rows[0]["id"]
+                    if table == "reibi_distributors":
+                        staff_artifact_id = _clean_optional(source_record.get("staffId"))
+                        parent_artifact_id = _clean_optional(source_record.get("parentId"))
+                        if staff_artifact_id:
+                            staff_rows = _execute(client.table("reibi_staff").select("id").eq("artifact_id", staff_artifact_id).limit(1), "比對服務人員")
+                            if staff_rows:
+                                values["staff_id"] = staff_rows[0]["id"]
+                        if parent_artifact_id:
+                            parent_rows = _execute(client.table("reibi_distributors").select("id").eq("artifact_id", parent_artifact_id).limit(1), "比對上級經銷商")
+                            if parent_rows:
+                                values["parent_id"] = parent_rows[0]["id"]
+                    write_query = client.table(table).upsert(values, on_conflict=conflict) if conflict else client.table(table).insert(values)
+                    normalized = _execute(write_query, f"匯入 {table}")
+                    if normalized:
+                        target_id = str(normalized[0].get("id") or "")
+                    if table == "reibi_enterprises" and normalized and isinstance(source_record.get("dSites"), list):
+                        enterprise_id = normalized[0]["id"]
+                        for site_index, site in enumerate(source_record["dSites"]):
+                            if not isinstance(site, dict):
+                                continue
+                            site_artifact_id = _clean_optional(site.get("id")) or str(site_index)
+                            site_payload = {
+                                "enterprise_id": enterprise_id,
+                                "artifact_id": site_artifact_id,
+                                "label": _clean_optional(site.get("label")) or f"場域 {site_index + 1}",
+                                "address": _clean_optional(site.get("address")),
+                                "note": _clean_optional(site.get("note")),
+                                "sort_order": site_index,
+                                "source_payload": _redact_secrets(site),
+                                "updated_at": _now_iso(),
+                            }
+                            _execute(
+                                client.table("reibi_enterprise_sites").upsert(site_payload, on_conflict="enterprise_id,artifact_id"),
+                                "匯入企業場域",
+                            )
+                    record_status = "imported"
+                    imported += 1
+                else:
+                    record_status = "skipped"
+            except Exception as exc:
+                rejected += 1
+                record_status = "rejected"
+                error_detail = str(exc.detail if isinstance(exc, HTTPException) else exc)[:500]
+                errors.append({"storage_key": item["storage_key"], "source_record_id": item["source_record_id"], "error": error_detail})
+
+            _execute(client.table("reibi_artifact_import_records").insert({
+                "batch_id": batch_id,
+                "storage_key": item["storage_key"],
+                "source_record_id": item["source_record_id"],
+                "target_table": item["target_table"],
+                "target_id": target_id,
+                "status": record_status,
+                "error_detail": error_detail,
+                "raw_payload": item["raw_payload"],
+            }), "記錄匯入結果")
+
+        final_status = "completed" if rejected == 0 else "failed"
+        updated = _execute(client.table("reibi_artifact_import_batches").update({
+            "status": final_status,
+            "imported_count": imported,
+            "rejected_count": rejected,
+            "error_summary": errors[:100],
+            "completed_at": _now_iso(),
+        }).eq("id", batch_id), "完成匯入批次")
+        return {"status": "success", "data": {"duplicate": False, "batch": updated[0], "summary": {key: value for key, value in plan.items() if key != "records"}}}
+
+    return router

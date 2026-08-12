@@ -356,6 +356,51 @@ export const API = {
       method: 'GET'
     });
   },
+
+  // ==========================================
+  // REIBI 管理 API（目前限單位 admin）
+  // ==========================================
+
+  async getReibiOverview() {
+    return this.request('/api/reibi/overview');
+  },
+
+  async saveReibiEnterprise(payload: Record<string, any>) {
+    return this.request('/api/reibi/enterprise', {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  async listReibiQuotes(page = 1, size = 50) {
+    return this.request('/api/reibi/quotes', { query: { page, size } });
+  },
+
+  async listReibiContracts(page = 1, size = 50) {
+    return this.request('/api/reibi/contracts', { query: { page, size } });
+  },
+
+  async listReibiWorkOrders(page = 1, size = 50) {
+    return this.request('/api/reibi/work-orders', { query: { page, size } });
+  },
+
+  async updateReibiDocumentStatus(kind: 'quotes' | 'contracts' | 'work-orders', recordId: number, status: string) {
+    return this.request(`/api/reibi/${kind}/${recordId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    });
+  },
+
+  async validateReibiArtifact(payload: {
+    source_artifact: 'main' | 'l5' | 'quote' | 'workorder';
+    source_version?: string;
+    entries: Array<{ storage_key: string; value: any }>;
+  }) {
+    return this.request('/api/reibi/artifacts/validate', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
   // ==========================================
   // 通用方法
   // ==========================================

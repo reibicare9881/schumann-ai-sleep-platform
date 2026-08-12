@@ -86,3 +86,17 @@ def require_member_or_above(current_user: dict = Depends(get_current_user)) -> d
         raise HTTPException(status_code=403, detail="權限不足：此功能不開放給個人帳號")
     return current_user
 
+
+def require_reibi_manager(current_user: dict = Depends(get_current_user)) -> dict:
+    """REIBI 管理 API：現有單位管理者或未來的 REIBI 內部超管。"""
+    if current_user.get("role") not in {"admin", "reibi_super"}:
+        raise HTTPException(status_code=403, detail="權限不足：限 REIBI 管理人員使用")
+    return current_user
+
+
+def require_reibi_super(current_user: dict = Depends(get_current_user)) -> dict:
+    """跨組織寫入與 Artifact 正式匯入只允許 REIBI 內部超管。"""
+    if current_user.get("role") != "reibi_super":
+        raise HTTPException(status_code=403, detail="權限不足：正式匯入限 REIBI 內部超級管理者")
+    return current_user
+

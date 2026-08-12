@@ -1,0 +1,120 @@
+# Supabase 現況盤點
+
+盤點日期：2026-08-10  
+Project：`Schumann-AI-Platform`  
+Project ref：`wfgqnjupemzfhaosmogx`  
+盤點方式：Supabase MCP 唯讀 metadata 查詢、本機程式碼對照與 Supabase CLI baseline pull
+
+## 摘要
+
+- 專案狀態為 `ACTIVE_HEALTHY`，PostgreSQL 17.6。
+- `public` schema 有 6 個資料表；Supabase 回報的資料列數目前皆為 0。
+- 已建立版本化 baseline migration；本機與遠端 migration history 皆為 `20260810032520_baseline_remote_schema`。
+- 沒有 Edge Functions。
+- 沒有 public views 或一般 table triggers。
+- 已安裝的主要 extension：`pgcrypto`、`uuid-ossp`、`supabase_vault`、`pg_stat_statements`、`plpgsql`。
+- 後端使用 `service_role` 存取 Supabase，因此應用程式層授權失誤會直接繞過 RLS。
+
+## Public tables
+
+| Table | 用途 | RLS | Policy | 主要關聯 |
+| --- | --- | --- | --- | --- |
+| `profiles` | 使用者基本資料、角色與組織歸屬 | 已啟用 | 使用者自己的 `id` | `org_code -> organizations.org_code` |
+| `analysis_records` | 舒曼分析結果 | 已啟用 | 使用者自己的 `user_id` | `user_id -> profiles.id`，cascade delete |
+| `appointments` | 預約與活動 | 已啟用 | 使用者自己的 `user_id` | `user_id -> profiles.id`，cascade delete |
+| `organizations` | 組織、PIN hash 與 KPI/OKR 參數 | 已啟用 | 無 | 無外部 FK |
+| `audit_logs` | 稽核紀錄 | 已啟用 | 無 | `user_id -> profiles.id`，set null |
+| `sleep_reports` | 睡眠、疼痛、工作評估與建議 | 已啟用 | 無 | 目前沒有 FK |
+
+## RLS 與權限
+
+目前只有三個 policy：
+
+- `profiles`: `auth.uid() = id`
+- `analysis_records`: `auth.uid() = user_id`
+- `appointments`: `auth.uid() = user_id`
+
+三者都是 `FOR ALL`、角色為 `public`。Performance Advisor 建議將每列重算的 `auth.uid()` 改為 `(select auth.uid())`。
+
+下列表雖已啟用 RLS，但沒有 policy，因此一般 Data API 角色無法透過 RLS 取得資料：
+
+- `organizations`
+- `audit_logs`
+- `sleep_reports`
+
+目前所有 public tables 都對 `anon`、`authenticated`、`service_role` 保留非常寬的 table privileges，包括 `TRUNCATE`、`REFERENCES`、`TRIGGER`。此外，public schema 的 default ACL 也會讓未來新建 table/function/sequence 繼承寬權限。後續 migration 應改成明確、最小權限的 grants。
+
+## Security Advisor
+
+### 必須先處理
+
+1. `public.rls_auto_enable()` 是 `SECURITY DEFINER` event-trigger function，且 `anon`、`authenticated` 具有 `EXECUTE`。Supabase Advisor 判定它可透過 Data API RPC 呼叫。應撤銷 public/anon/authenticated execute 權限，或將管理函式移出 exposed schema。
+2. FastAPI 全域使用 `supabase_service_role_key`。這本身可以是合理的 server-side 架構，但所有 API endpoint 都必須有完整的身分、組織與資源所有權檢查，因為資料庫 RLS 不會保護 service-role 查詢。
+3. `GET /api/org/settings/{org_code}` 沒有登入依賴，且以 service role 對 `organizations` 執行 `select("*")`。這可能回傳 `member_pin`、`dept_pin`、`admin_pin` 的 hash，必須改成已授權 endpoint 並限定欄位。
+
+### 需要納入 schema 整理
+
+- `organizations`、`audit_logs`、`sleep_reports` 缺少符合實際角色模型的 policies。
+- `sleep_reports.user_id` 與 `sleep_reports.org_code` 沒有 FK。
+- `appointments.org_code` 與 `audit_logs.org_code` 沒有 FK。
+- `profiles.id` 並未連到 `auth.users.id`；目前系統採自建 JWT 與 profile-based identity，需明確決定是否維持，不能在 migration 中默認改接 Supabase Auth。
+- `organizations` 的三種 PIN 欄位需要保證只保存 bcrypt hash，並避免出現在一般讀取 response。
+- 所有業務表目前都未啟用 `FORCE ROW LEVEL SECURITY`；若繼續由 service role 存取，仍需依賴 FastAPI 授權層。
+
+## Performance Advisor
+
+目前只有 primary-key indexes。Supabase Advisor 指出以下 foreign key 缺少 covering index：
+
+- `analysis_records.user_id`
+- `appointments.user_id`
+- `audit_logs.user_id`
+- `profiles.org_code`
+
+依現有 FastAPI 查詢模式，後續也應評估：
+
+- `sleep_reports(user_id, created_at)`
+- `sleep_reports(org_code, created_at)`
+- `analysis_records(user_id, created_at)`
+- `appointments(org_code, service_type, execution_date, appointment_time)`
+- `profiles(org_code, system_role)`
+- `profiles(full_name, system_role)`
+
+是否建立這些複合索引，應在有實際查詢量或 `EXPLAIN` 證據後確認；目前不直接建立。
+
+## 資料與遷移結論
+
+- Supabase 目前沒有業務資料，已發布 Artifact 的既有資料並不在這個 project 裡。
+- `reibi` 四個已發布 Claude Artifact 的原始碼未使用 Supabase URL、client 或 `anon`/`authenticated` key；它們使用各 Artifact 隔離的 `window.storage`，所以 database hardening 不會切斷既有 Artifact 資料。
+- Artifact 資料搬移必須走獨立 export/import pipeline，不能假設 `db pull` 會帶回這些資料。
+- CLI 已完成 `link` 與 `db pull`，baseline 位於 `supabase/migrations/20260810032520_baseline_remote_schema.sql`。
+- baseline 只代表目前 Supabase schema；安全修正與 reibi 擴充必須拆成後續、可審查的 migrations。
+- baseline 保留遠端現況，包括寬鬆 grants、公開可執行的 `SECURITY DEFINER` function，以及移除本機預設 `pg_net`/`pg_graphql` extension 的語句；這些項目應在後續 migration 處理，而不是改寫已記錄為 applied 的 baseline。
+
+## Migration 順序與進度
+
+1. `baseline_remote_schema`：已完成，只捕捉現有遠端 schema。
+2. `harden_existing_access`：已建立並通過本機重播與 Database Advisors；尚未推送遠端。內容包含撤銷瀏覽器角色的直接 table access、鎖定 event-trigger function、優化 RLS policy，以及保護敏感 settings endpoint。
+3. `extend_reibi_domain`：已建立並通過本機完整重播；新增 20 張 REIBI 業務、健康與 Artifact 匯入 tables，包含 constraints、FK indexes、RLS 與明確 grants；尚未推送遠端。
+4. `add_existing_integrity_indexes`：仍待補既有 baseline tables 的 FK 與經查詢模式確認需要的索引，不混入 REIBI domain migration。
+5. Artifact data import：獨立程式與 dry-run，不放入 `seed.sql`；欄位映射見 `docs/reibi-artifact-mapping.md`。
+
+## 本機驗證紀錄
+
+- baseline、hardening 與 extend_reibi_domain migrations 可從空白本機 Supabase Postgres 依序成功套用。
+- REIBI public tables 共 20 張，RLS disabled 數量為 0；`anon`/`authenticated`/`PUBLIC` table grants 數量為 0，`service_role` 可存取 20 張。
+- `anon`、`authenticated` 對 `public` tables 的直接 grants 數量為 0。
+- `anon`、`authenticated`、`service_role` 均無法直接執行 `public.rls_auto_enable()`。
+- 三個既有 ownership policies 已限定為 `authenticated`，並同時包含快取式 `(select auth.uid())` ownership check 與 `WITH CHECK`。
+- 本機 `supabase db advisors --type all --level warn` 回報 `No issues found`。
+- 遠端 migration history 目前仍只有 baseline；hardening 與 REIBI domain 尚未套用遠端。
+- `supabase db push --linked --dry-run` 已確認目前會推送 `20260810033150_harden_existing_access.sql` 與 `20260810035451_extend_reibi_domain.sql`，dry-run 沒有實際變更遠端。
+- 原正式 FastAPI Railway 服務因免費試用到期已停止，production URL 回傳 404 `Application not found`；需先選定新的正式後端主機，才進行部署與遠端 migration 推送。
+
+## Advisor references
+
+- RLS enabled without policy: https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy
+- Public SECURITY DEFINER execution: https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable
+- Authenticated SECURITY DEFINER execution: https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable
+- Unindexed foreign keys: https://supabase.com/docs/guides/database/database-linter?lint=0001_unindexed_foreign_keys
+- RLS init plan: https://supabase.com/docs/guides/database/database-linter?lint=0003_auth_rls_initplan
+- Leaked password protection: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection

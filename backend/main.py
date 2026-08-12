@@ -35,6 +35,7 @@ from google import genai
 from google.genai import types
 from modules.pdf_generator_module import create_full_report_pdf
 from auth import create_access_token, get_current_user, require_admin, require_org_manager, require_member_or_above
+from reibi_api import create_reibi_router
 
 app = FastAPI(
     title="統一多平台 API",
@@ -65,6 +66,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# REIBI business and Artifact-import endpoints use the same authenticated,
+# server-side Supabase client. No service-role credential is exposed to clients.
+app.include_router(create_reibi_router(supabase))
 
 # 建立密碼加密上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -440,16 +445,30 @@ async def update_org_settings(
     return {"status": "success", "data": res.data[0] if res.data else None}
 
 @app.get("/api/org/settings/{org_code}")
-async def get_org_settings(org_code: str):
-    """獲取單位 OKR/ESG 設定參數"""
-    
-    # 從資料庫中抓取該單位的資料
-    res = supabase.table("organizations").select("*").eq("org_code", org_code.upper()).execute()
+async def get_org_settings(
+    org_code: str,
+    current_user: dict = Depends(require_org_manager),
+):
+    """獲取所屬單位的 OKR/ESG 設定參數（限管理員與部門主管）。"""
+    normalized_org_code = org_code.upper()
+    if current_user.get("org_code") != normalized_org_code:
+        raise HTTPException(status_code=403, detail="越權存取：只能查看所屬單位的設定")
+
+    # 明確列出非敏感欄位，避免 member/dept/admin PIN hash 被回傳。
+    public_settings_columns = (
+        "org_code,org_name,base_budget,activation_pct,value_multiplier,"
+        "sick_days,daily_salary,ins_saving,impl_cost,eff_gain,prod_gain,created_at"
+    )
+    res = (
+        supabase.table("organizations")
+        .select(public_settings_columns)
+        .eq("org_code", normalized_org_code)
+        .execute()
+    )
     
     if not res.data:
         raise HTTPException(status_code=404, detail="找不到該單位的設定資料")
         
-    # 將整包資料回傳，讓前端提取需要的 base_budget, sick_days 等參數
     return {"status": "success", "data": res.data[0]}
 
 

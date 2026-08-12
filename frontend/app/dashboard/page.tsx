@@ -11,7 +11,7 @@ import { MappedSleepReport, BackendSleepReport } from "@/types";
 import { useRouter } from "next/navigation";
 import { 
   ClipboardEdit, FileText, BarChart3, Target, 
-  CalendarDays, Leaf, TrendingUp, AlertTriangle, ShieldCheck, LogOut, ChevronRight, RefreshCw, ChevronDown, Activity, Moon, HeartPulse
+  CalendarDays, Leaf, TrendingUp, AlertTriangle, ShieldCheck, LogOut, ChevronRight, RefreshCw, ChevronDown, Activity, Moon, HeartPulse, Database
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -89,6 +89,7 @@ export default function DashboardPage() {
     { id: "esg", icon: <Leaf className="w-8 h-8 text-green-600" />, label: "ESG健康效益", sub: "降本/增效/社會責任", color: "border-green-200 hover:border-green-500", link: "/esg", show: isAdmin || can(session.systemRole, "view_esg") },
     { id: "analysis", icon: <TrendingUp className="w-8 h-8 text-indigo-600" />, label: "健康分析 & 趨勢", sub: "睡眠/疼痛曲線・預測", color: "border-indigo-200 hover:border-indigo-500", link: "/analysis", show: !isAdmin && can(session.systemRole, "view_history") },
     { id: "highrisk", icon: <AlertTriangle className="w-8 h-8 text-red-600" />, label: "高風險族群分析", sub: "健康分布・介入建議", color: "border-red-200 hover:border-red-500", link: "/highrisk", show: isAdmin || can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr") },
+    { id: "reibi", icon: <Database className="w-8 h-8 text-cyan-700" />, label: "REIBI 管理中心", sub: "企業資料・商務文件・Artifact 搬移預檢", color: "border-cyan-200 hover:border-cyan-600", link: "/reibi", show: can(session.systemRole, "manage_reibi") },
     { id: "privacy", icon: <ShieldCheck className="w-8 h-8 text-slate-600" />, label: "隱私 & 安全中心", sub: "加密機制・法規・稽核", color: "border-slate-200 hover:border-slate-500", link: "/privacy", show: true },
   ].filter(t => t.show);
 
