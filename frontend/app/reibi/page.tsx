@@ -353,9 +353,12 @@ export default function ReibiManagementPage() {
           <h1 className="text-2xl font-black text-slate-800">REIBI 管理中心</h1>
           <p className="text-sm text-slate-500 mt-1">企業資料、商務文件統計與 Artifact 搬移預檢</p>
         </div>
-        <button onClick={loadOverview} disabled={loading} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-600 disabled:opacity-50">
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> 重新整理
-        </button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Link href="/reibi/workflow" className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2 text-sm font-bold text-white"><FileCheck2 className="w-4 h-4" /> 商務文件工作台</Link>
+          <button onClick={loadOverview} disabled={loading} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-600 disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> 重新整理
+          </button>
+        </div>
       </div>
 
       {(message || error) && <div className={`rounded-xl border px-4 py-3 text-sm ${error ? "bg-red-50 border-red-200 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-700"}`}>{error || message}</div>}

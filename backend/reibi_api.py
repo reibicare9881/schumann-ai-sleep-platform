@@ -38,6 +38,40 @@ ENTERPRISE_FIELDS = (
 )
 ENTERPRISE_SITE_FIELDS = "id,label,address,note,sort_order,created_at,updated_at"
 DEPARTMENT_FIELDS = "id,parent_id,name,hierarchy_level,sort_order,is_active,created_at,updated_at"
+QUOTE_STATUSES = ("草稿", "已發送", "已確認", "作廢", "已轉合約")
+CONTRACT_STATUSES = ("草稿(合約)", "已發送", "待用印", "用印完成", "執行中", "存檔")
+WORK_ORDER_STATUSES = (
+    "草稿", "已發出", "出貨中", "安裝中", "待驗收", "驗收中",
+    "驗收完成", "驗收異常", "已存檔",
+)
+LIFECYCLE_TRANSITIONS = {
+    "quote": {
+        "草稿": {"已發送", "作廢"},
+        "已發送": {"已確認", "作廢"},
+        "已確認": {"作廢"},
+        "作廢": set(),
+        "已轉合約": set(),
+    },
+    "contract": {
+        "草稿(合約)": {"已發送"},
+        "已發送": {"待用印"},
+        "待用印": {"用印完成"},
+        "用印完成": {"執行中"},
+        "執行中": {"存檔"},
+        "存檔": set(),
+    },
+    "work_order": {
+        "草稿": {"已發出"},
+        "已發出": {"出貨中"},
+        "出貨中": {"安裝中"},
+        "安裝中": {"待驗收"},
+        "待驗收": {"驗收中"},
+        "驗收中": {"驗收完成", "驗收異常"},
+        "驗收異常": {"安裝中", "驗收中"},
+        "驗收完成": {"已存檔"},
+        "已存檔": set(),
+    },
+}
 
 
 class StrictModel(BaseModel):
@@ -124,9 +158,12 @@ class DepartmentUpdate(StrictModel):
 
 
 class QuoteWrite(StrictModel):
-    doc_no: str = Field(min_length=1, max_length=100)
+    doc_no: Optional[str] = Field(default=None, min_length=1, max_length=100)
     doc_type: str = Field(min_length=1, max_length=50)
-    status: str = Field(default="draft", max_length=50)
+    status: str = Field(default="草稿", max_length=50)
+    distributor_id: Optional[int] = Field(default=None, ge=1)
+    partner_id: Optional[int] = Field(default=None, ge=1)
+    staff_id: Optional[int] = Field(default=None, ge=1)
     client_name: str = Field(min_length=1, max_length=200)
     client_alias: Optional[str] = Field(default=None, max_length=100)
     contact_name: Optional[str] = Field(default=None, max_length=100)
@@ -147,13 +184,14 @@ class QuoteWrite(StrictModel):
     e_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
     total_year_fee: Decimal = Field(default=Decimal("0"), ge=0)
     total_contract_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    original_contract_no: Optional[str] = Field(default=None, max_length=100)
     config: dict[str, Any] = Field(default_factory=dict)
 
 
 class ContractWrite(StrictModel):
-    doc_no: str = Field(min_length=1, max_length=100)
+    doc_no: Optional[str] = Field(default=None, min_length=1, max_length=100)
     contract_type: str = Field(min_length=1, max_length=50)
-    status: str = Field(default="draft", max_length=50)
+    status: str = Field(default="草稿(合約)", max_length=50)
     quote_id: Optional[int] = Field(default=None, ge=1)
     from_quote_no: Optional[str] = Field(default=None, max_length=100)
     client_name: str = Field(min_length=1, max_length=200)
@@ -165,22 +203,84 @@ class ContractWrite(StrictModel):
 
 
 class WorkOrderWrite(StrictModel):
-    work_order_no: str = Field(min_length=1, max_length=100)
+    work_order_no: Optional[str] = Field(default=None, min_length=1, max_length=100)
     contract_id: Optional[int] = Field(default=None, ge=1)
     contract_no: Optional[str] = Field(default=None, max_length=100)
     client_name: str = Field(min_length=1, max_length=200)
-    status: str = Field(default="draft", max_length=50)
+    status: str = Field(default="草稿", max_length=50)
     contact_name: Optional[str] = Field(default=None, max_length=100)
     phone: Optional[str] = Field(default=None, max_length=50)
     email: Optional[str] = Field(default=None, max_length=254)
     address: Optional[str] = Field(default=None, max_length=500)
     scheduled_date: Optional[date] = None
     service_period: Optional[str] = Field(default=None, max_length=100)
+    staff_names: Optional[str] = Field(default=None, max_length=500)
+    scope_confirm_reibi: Optional[str] = Field(default=None, max_length=100)
+    scope_confirm_reibi_date: Optional[date] = None
+    scope_confirm_client: Optional[str] = Field(default=None, max_length=100)
+    scope_confirm_client_date: Optional[date] = None
+    acceptance_result: Optional[str] = Field(default=None, max_length=50)
+    acceptance_date: Optional[date] = None
+    client_sign_name: Optional[str] = Field(default=None, max_length=100)
+    punch_list: Optional[str] = Field(default=None, max_length=2_000)
     items: dict[str, Any] = Field(default_factory=dict)
+    acceptance: dict[str, Any] = Field(default_factory=dict)
 
 
 class LifecycleStatusUpdate(StrictModel):
     status: str = Field(min_length=1, max_length=50)
+
+
+class QuoteConvertRequest(StrictModel):
+    contract_type: str = Field(default="企業合約", min_length=1, max_length=50)
+    terms: dict[str, Any] = Field(default_factory=dict)
+
+
+class ContractAdjustmentRequest(StrictModel):
+    adjustment_type: Literal["upgrade", "renewal"]
+
+
+class ContractExecutionUpdate(StrictModel):
+    signed_by: Optional[str] = Field(default=None, max_length=100)
+    signed_at: Optional[date] = None
+    sealed_at: Optional[date] = None
+    executed_at: Optional[date] = None
+    note: Optional[str] = Field(default=None, max_length=1_000)
+
+
+class WorkOrderAcceptance(StrictModel):
+    acceptance_result: Literal["驗收完成", "驗收異常"]
+    acceptance_date: date
+    client_sign_name: str = Field(min_length=1, max_length=100)
+    punch_list: Optional[str] = Field(default=None, max_length=2_000)
+    acceptance: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkOrderFromContractRequest(StrictModel):
+    contact_name: Optional[str] = Field(default=None, max_length=100)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    email: Optional[str] = Field(default=None, max_length=254)
+    address: Optional[str] = Field(default=None, max_length=500)
+    scheduled_date: Optional[date] = None
+    service_period: Optional[str] = Field(default=None, max_length=100)
+    staff_names: Optional[str] = Field(default=None, max_length=500)
+    items: dict[str, Any] = Field(default_factory=dict)
+
+
+class QuoteCalculationRequest(StrictModel):
+    member_count: Optional[int] = Field(default=None, ge=0)
+    pay_mode: Literal["annual", "semi", "quarterly"] = "annual"
+    contract_years: int = Field(default=3, ge=1, le=99)
+    discount_percent: Decimal = Field(default=Decimal("0"), ge=0, le=99)
+    a_custom_fee: Optional[Decimal] = Field(default=None, ge=0)
+    b_bed: int = Field(default=0, ge=0, le=10_000)
+    b_chair: int = Field(default=0, ge=0, le=10_000)
+    b_la200: int = Field(default=0, ge=0, le=10_000)
+    c_tier: Optional[Literal["基本型", "成長型", "專業型", "旗艦型"]] = None
+    c_high_risk: int = Field(default=0, ge=0, le=10_000)
+    c_custom_fee: Optional[Decimal] = Field(default=None, ge=0)
+    d_items: list[Literal["poster", "board", "display", "qr", "digital", "install"]] = Field(default_factory=list)
+    e_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
 
 
 class ArtifactEntry(StrictModel):
@@ -821,7 +921,9 @@ def _resolve_department_level(
 def _execute(query: Any, operation: str) -> list[dict[str, Any]]:
     try:
         response = query.execute()
-        return response.data or []
+        if response.data is None:
+            return []
+        return response.data if isinstance(response.data, list) else [response.data]
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Supabase {operation} 失敗") from exc
 
@@ -849,6 +951,82 @@ def _serialize_payload(model: BaseModel) -> dict[str, Any]:
 
 def _serialize_update(model: BaseModel) -> dict[str, Any]:
     return model.model_dump(mode="json", exclude_unset=True)
+
+
+def calculate_quote_fees(payload: QuoteCalculationRequest) -> dict[str, Any]:
+    """Reproduce the Artifact quote rules without exposing its internal floor prices."""
+    a_tiers = ((100, 600_000), (300, 1_200_000), (500, 1_800_000), (1_000, 3_000_000))
+    pay_factors = {
+        "annual": Decimal("0.95"),
+        "semi": Decimal("1.00"),
+        "quarterly": Decimal("1.03"),
+    }
+    c_tiers = {"基本型": 35_000, "成長型": 70_000, "專業型": 105_000, "旗艦型": 210_000}
+    d_prices = {
+        "poster": (15_000, 30_000), "board": (25_000, 50_000),
+        "display": (20_000, 40_000), "qr": (5_000, 10_000),
+        "digital": (30_000, 60_000), "install": (10_000, 25_000),
+    }
+    discount = Decimal("1") - (payload.discount_percent / Decimal("100"))
+
+    a_base = 0
+    if payload.member_count is not None:
+        for maximum, annual_fee in a_tiers:
+            if payload.member_count <= maximum:
+                a_base = annual_fee
+                break
+    a_fee = payload.a_custom_fee.quantize(Decimal("1")) if payload.a_custom_fee is not None else (
+        Decimal(a_base) * pay_factors[payload.pay_mode] * discount
+    ).quantize(Decimal("1"))
+    b_base = payload.b_bed * 800_000 + payload.b_chair * 750_000 + payload.b_la200 * 149_400
+    b_fee = (Decimal(b_base) * discount).quantize(Decimal("1"))
+    c_base = payload.c_custom_fee if payload.c_custom_fee is not None else Decimal(c_tiers.get(payload.c_tier or "", 0))
+    c_fee = ((c_base + Decimal(payload.c_high_risk * 14_000)) * discount).quantize(Decimal("1"))
+    d_min = (Decimal(sum(d_prices[item][0] for item in payload.d_items)) * discount).quantize(Decimal("1"))
+    d_max = (Decimal(sum(d_prices[item][1] for item in payload.d_items)) * discount).quantize(Decimal("1"))
+    e_fee = payload.e_layer_fee.quantize(Decimal("1"))
+    total_year = a_fee + c_fee + e_fee
+    total_contract = total_year * payload.contract_years + b_fee
+    return {
+        "a_layer_fee": a_fee,
+        "b_layer_fee": b_fee,
+        "c_layer_fee": c_fee,
+        "d_layer_fee_min": d_min,
+        "d_layer_fee_max": d_max,
+        "e_layer_fee": e_fee,
+        "total_year_fee": total_year,
+        "total_contract_fee": total_contract,
+        "grand_total_min": total_contract + d_min,
+        "grand_total_max": total_contract + d_max,
+        "a_custom_required": payload.member_count is not None and payload.member_count > 1_000,
+    }
+
+
+def _assert_lifecycle_transition(kind: str, current_status: str, next_status: str) -> None:
+    allowed = LIFECYCLE_TRANSITIONS.get(kind, {}).get(current_status)
+    if allowed is None:
+        raise ValueError(f"未知的目前狀態：{current_status}")
+    if next_status not in allowed:
+        raise ValueError(f"不可從「{current_status}」直接變更為「{next_status}」")
+
+
+def _next_document_no(client: Any, kind: str, doc_type: Optional[str] = None) -> str:
+    rows = _execute(
+        client.rpc("reibi_next_document_no", {"p_kind": kind, "p_doc_type": doc_type}),
+        "產生正式文件編號",
+    )
+    if not rows:
+        raise HTTPException(status_code=502, detail="Supabase 未回傳正式文件編號")
+    value = rows[0] if isinstance(rows[0], str) else next(iter(rows[0].values()), None)
+    if not value:
+        raise HTTPException(status_code=502, detail="Supabase 回傳的正式文件編號無效")
+    return str(value)
+
+
+def _append_version(existing: Any, status_value: str, user_name: Optional[str], **extra: Any) -> list[dict[str, Any]]:
+    versions = list(existing) if isinstance(existing, list) else []
+    versions.append({"savedAt": _now_iso(), "status": status_value, "by": user_name, **extra})
+    return versions
 
 
 def _enterprise_metrics(
@@ -1162,87 +1340,331 @@ def create_reibi_router(client: Any) -> APIRouter:
         )
         return {"status": "success", "data": {"id": department_id}}
 
-    def list_scoped(table: str, current_user: dict, page: int, size: int) -> dict[str, Any]:
+    @router.get("/business-catalogs")
+    def business_catalogs(current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id = _current_enterprise_id(client, current_user)
+        distributors = _execute(
+            client.table("reibi_distributors").select("id,name,alias,status,level_code,has_sub_authority").eq("status", "active").order("name"),
+            "查詢經銷商",
+        )
+        partners = _execute(
+            client.table("reibi_partners").select("id,name,default_percent,is_active").eq("is_active", True).order("name"),
+            "查詢合作夥伴",
+        )
+        staff = _execute(
+            client.table("reibi_staff").select("id,name,title,is_active").eq("is_active", True).order("name"),
+            "查詢負責人員",
+        )
+        sites = _execute(
+            client.table("reibi_enterprise_sites").select("id,label,address,note").eq("enterprise_id", enterprise_id).order("sort_order").order("id"),
+            "查詢報價服務場域",
+        )
+        return {"status": "success", "data": {"distributors": distributors, "partners": partners, "staff": staff, "sites": sites}}
+
+    def validate_quote_relations(payload: QuoteWrite, enterprise_id: int) -> None:
+        if payload.doc_type == "經銷商報價":
+            if payload.distributor_id is None:
+                raise HTTPException(status_code=422, detail="經銷商報價必須指定經銷商")
+            monetary_fields = (
+                payload.a_layer_fee, payload.b_layer_fee, payload.c_layer_fee,
+                payload.d_layer_fee_min, payload.d_layer_fee_max, payload.e_layer_fee,
+                payload.total_year_fee, payload.total_contract_fee,
+            )
+            if any(value != 0 for value in monetary_fields):
+                raise HTTPException(status_code=422, detail="經銷商資格報價不可帶入企業 A–E 層費用")
+        if payload.doc_type in {"升級報價", "續約報價"}:
+            if not payload.original_contract_no:
+                raise HTTPException(status_code=422, detail="升級或續約報價必須關聯原合約")
+            contracts = _execute(
+                client.table("reibi_contracts").select("id").eq("doc_no", payload.original_contract_no)
+                .eq("enterprise_id", enterprise_id).limit(1),
+                "驗證原合約",
+            )
+            if not contracts:
+                raise HTTPException(status_code=422, detail="原合約不存在或不屬於目前企業")
+        relations = (
+            ("reibi_distributors", payload.distributor_id, "經銷商"),
+            ("reibi_partners", payload.partner_id, "合作夥伴"),
+            ("reibi_staff", payload.staff_id, "負責人員"),
+        )
+        for table, relation_id, label in relations:
+            if relation_id is None:
+                continue
+            rows = _execute(client.table(table).select("id").eq("id", relation_id).limit(1), f"驗證{label}")
+            if not rows:
+                raise HTTPException(status_code=422, detail=f"指定的{label}不存在")
+
+    def list_scoped(
+        table: str,
+        current_user: dict,
+        page: int,
+        size: int,
+        record_status: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> dict[str, Any]:
         enterprise_id = _current_enterprise_id(client, current_user)
         start = (page - 1) * size
+        number_field = "work_order_no" if table == "reibi_work_orders" else "doc_no"
         try:
-            response = (
-                client.table(table).select("*", count="exact").eq("enterprise_id", enterprise_id)
-                .order("created_at", desc=True).range(start, start + size - 1).execute()
-            )
+            query = client.table(table).select("*", count="exact").eq("enterprise_id", enterprise_id)
+            if record_status:
+                query = query.eq("status", record_status)
+            if search:
+                query = query.ilike(number_field, f"%{search.strip()}%")
+            response = query.order("created_at", desc=True).range(start, start + size - 1).execute()
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Supabase 查詢 {table} 失敗") from exc
         return {"status": "success", "data": response.data or [], "meta": {"page": page, "size": size, "total": response.count or 0}}
 
-    def update_scoped_status(table: str, record_id: int, payload: LifecycleStatusUpdate, current_user: dict) -> dict[str, Any]:
+    def get_scoped(table: str, record_id: int, current_user: dict) -> tuple[int, dict[str, Any]]:
         enterprise_id = _current_enterprise_id(client, current_user)
-        existing = _execute(
-            client.table(table).select("id").eq("id", record_id).eq("enterprise_id", enterprise_id).limit(1),
+        rows = _execute(
+            client.table(table).select("*").eq("id", record_id).eq("enterprise_id", enterprise_id).limit(1),
             f"驗證 {table}",
         )
-        if not existing:
+        if not rows:
             raise HTTPException(status_code=404, detail="找不到資料，或資料不屬於目前企業")
+        return enterprise_id, rows[0]
+
+    def update_scoped_status(
+        kind: str,
+        table: str,
+        record_id: int,
+        payload: LifecycleStatusUpdate,
+        current_user: dict,
+    ) -> dict[str, Any]:
+        enterprise_id, existing = get_scoped(table, record_id, current_user)
+        try:
+            _assert_lifecycle_transition(kind, str(existing.get("status") or ""), payload.status)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        values: dict[str, Any] = {"status": payload.status, "updated_at": _now_iso()}
+        if kind == "quote":
+            values["versions"] = _append_version(existing.get("versions"), payload.status, current_user.get("name"))
+        if kind == "work_order":
+            values["status_history"] = _append_version(
+                existing.get("status_history"), payload.status, current_user.get("name")
+            )
         rows = _execute(
-            client.table(table).update({"status": payload.status, "updated_at": _now_iso()})
+            client.table(table).update(values)
             .eq("id", record_id).eq("enterprise_id", enterprise_id),
             f"更新 {table}",
         )
         return {"status": "success", "data": rows[0]}
 
+    @router.post("/quotes/calculate")
+    def calculate_quote(payload: QuoteCalculationRequest, _: dict = Depends(require_reibi_manager)):
+        return {"status": "success", "data": calculate_quote_fees(payload)}
+
     @router.get("/quotes")
-    def list_quotes(page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=200), current_user: dict = Depends(require_reibi_manager)):
-        return list_scoped("reibi_quotes", current_user, page, size)
+    def list_quotes(
+        page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=200),
+        record_status: Optional[str] = Query(None, alias="status"), search: Optional[str] = None,
+        current_user: dict = Depends(require_reibi_manager),
+    ):
+        return list_scoped("reibi_quotes", current_user, page, size, record_status, search)
+
+    @router.get("/quotes/{record_id}")
+    def get_quote(record_id: int, current_user: dict = Depends(require_reibi_manager)):
+        _, row = get_scoped("reibi_quotes", record_id, current_user)
+        return {"status": "success", "data": row}
 
     @router.post("/quotes", status_code=status.HTTP_201_CREATED)
     def create_quote(payload: QuoteWrite, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id = _current_enterprise_id(client, current_user)
+        validate_quote_relations(payload, enterprise_id)
         values = _serialize_payload(payload)
-        values.update({"enterprise_id": _current_enterprise_id(client, current_user), "created_by": current_user.get("name"), "source_payload": {}})
+        if payload.status not in QUOTE_STATUSES or payload.status in {"已轉合約", "作廢"}:
+            raise HTTPException(status_code=422, detail="新報價只能建立為草稿、已發送或已確認")
+        values["doc_no"] = payload.doc_no or _next_document_no(client, "quote", payload.doc_type)
+        values["versions"] = _append_version([], payload.status, current_user.get("name"), snapshot=values.copy())
+        values.update({"enterprise_id": enterprise_id, "created_by": current_user.get("name"), "source_payload": {}})
         rows = _execute(client.table("reibi_quotes").insert(values), "建立報價")
+        return {"status": "success", "data": rows[0]}
+
+    @router.put("/quotes/{record_id}")
+    def update_quote(record_id: int, payload: QuoteWrite, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id, existing = get_scoped("reibi_quotes", record_id, current_user)
+        if existing.get("status") not in {"草稿", "已發送"}:
+            raise HTTPException(status_code=409, detail="只有草稿或已發送報價可以編輯")
+        validate_quote_relations(payload, enterprise_id)
+        values = _serialize_payload(payload)
+        values.pop("doc_no", None)
+        values.pop("status", None)
+        values["versions"] = _append_version(
+            existing.get("versions"), str(existing.get("status")), current_user.get("name"), snapshot=values.copy()
+        )
+        values["updated_at"] = _now_iso()
+        rows = _execute(client.table("reibi_quotes").update(values).eq("id", record_id).eq("enterprise_id", enterprise_id), "更新報價")
         return {"status": "success", "data": rows[0]}
 
     @router.patch("/quotes/{record_id}/status")
     def update_quote_status(record_id: int, payload: LifecycleStatusUpdate, current_user: dict = Depends(require_reibi_manager)):
-        return update_scoped_status("reibi_quotes", record_id, payload, current_user)
+        return update_scoped_status("quote", "reibi_quotes", record_id, payload, current_user)
+
+    @router.post("/quotes/{record_id}/convert", status_code=status.HTTP_201_CREATED)
+    def convert_quote(record_id: int, payload: QuoteConvertRequest, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id, _ = get_scoped("reibi_quotes", record_id, current_user)
+        rows = _execute(client.rpc("reibi_convert_quote_to_contract", {
+            "p_enterprise_id": enterprise_id,
+            "p_quote_id": record_id,
+            "p_contract_type": payload.contract_type,
+            "p_created_by": current_user.get("name"),
+            "p_terms": payload.terms,
+        }), "報價轉合約")
+        return {"status": "success", "data": rows[0]}
 
     @router.get("/contracts")
-    def list_contracts(page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=200), current_user: dict = Depends(require_reibi_manager)):
-        return list_scoped("reibi_contracts", current_user, page, size)
+    def list_contracts(
+        page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=200),
+        record_status: Optional[str] = Query(None, alias="status"), search: Optional[str] = None,
+        current_user: dict = Depends(require_reibi_manager),
+    ):
+        return list_scoped("reibi_contracts", current_user, page, size, record_status, search)
+
+    @router.get("/contracts/{record_id}")
+    def get_contract(record_id: int, current_user: dict = Depends(require_reibi_manager)):
+        _, row = get_scoped("reibi_contracts", record_id, current_user)
+        return {"status": "success", "data": row}
 
     @router.post("/contracts", status_code=status.HTTP_201_CREATED)
     def create_contract(payload: ContractWrite, current_user: dict = Depends(require_reibi_manager)):
         enterprise_id = _current_enterprise_id(client, current_user)
         values = _serialize_payload(payload)
         if payload.quote_id:
-            quote = _execute(client.table("reibi_quotes").select("id").eq("id", payload.quote_id).eq("enterprise_id", enterprise_id).limit(1), "驗證報價")
-            if not quote:
-                raise HTTPException(status_code=400, detail="quote_id 不屬於目前企業")
+            raise HTTPException(status_code=422, detail="報價轉合約請使用原子轉換端點，避免重複合約")
+        if payload.status not in CONTRACT_STATUSES:
+            raise HTTPException(status_code=422, detail="不支援的合約狀態")
+        values["doc_no"] = payload.doc_no or _next_document_no(client, "contract", payload.contract_type)
+        values["terms"] = {**payload.terms, "snapshots": [{"savedAt": _now_iso(), "by": current_user.get("name"), "data": values.copy()}]}
         values.update({"enterprise_id": enterprise_id, "created_by": current_user.get("name"), "source_payload": {}})
         rows = _execute(client.table("reibi_contracts").insert(values), "建立合約")
         return {"status": "success", "data": rows[0]}
 
     @router.patch("/contracts/{record_id}/status")
     def update_contract_status(record_id: int, payload: LifecycleStatusUpdate, current_user: dict = Depends(require_reibi_manager)):
-        return update_scoped_status("reibi_contracts", record_id, payload, current_user)
+        return update_scoped_status("contract", "reibi_contracts", record_id, payload, current_user)
+
+    @router.patch("/contracts/{record_id}/execution")
+    def update_contract_execution(record_id: int, payload: ContractExecutionUpdate, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id, existing = get_scoped("reibi_contracts", record_id, current_user)
+        if existing.get("status") == "存檔":
+            raise HTTPException(status_code=409, detail="已存檔合約不可再修改簽署與用印資料")
+        terms = dict(existing.get("terms")) if isinstance(existing.get("terms"), dict) else {}
+        execution = _serialize_update(payload)
+        terms["execution"] = execution
+        snapshots = list(terms.get("snapshots")) if isinstance(terms.get("snapshots"), list) else []
+        snapshots.append({"savedAt": _now_iso(), "by": current_user.get("name"), "execution": execution})
+        terms["snapshots"] = snapshots
+        rows = _execute(
+            client.table("reibi_contracts").update({"terms": terms, "updated_at": _now_iso()})
+            .eq("id", record_id).eq("enterprise_id", enterprise_id),
+            "更新合約簽署與用印",
+        )
+        return {"status": "success", "data": rows[0]}
+
+    @router.post("/contracts/{record_id}/adjustment-quote", status_code=status.HTTP_201_CREATED)
+    def create_adjustment_quote(record_id: int, payload: ContractAdjustmentRequest, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id, contract = get_scoped("reibi_contracts", record_id, current_user)
+        terms = contract.get("terms") if isinstance(contract.get("terms"), dict) else {}
+        snapshot = terms.get("quote_snapshot") if isinstance(terms.get("quote_snapshot"), dict) else {}
+        doc_type = "升級報價" if payload.adjustment_type == "upgrade" else "續約報價"
+        allowed = {
+            "client_alias", "contact_name", "phone", "email", "address", "industry", "member_count",
+            "pay_mode", "contract_years", "contract_start", "contract_end", "a_layer_fee", "b_layer_fee",
+            "c_layer_fee", "d_layer_fee_min", "d_layer_fee_max", "e_layer_fee", "total_year_fee",
+            "total_contract_fee", "config", "distributor_id", "partner_id", "staff_id",
+        }
+        values = {key: value for key, value in snapshot.items() if key in allowed}
+        values.update({
+            "doc_no": _next_document_no(client, "quote", doc_type), "doc_type": doc_type, "status": "草稿",
+            "enterprise_id": enterprise_id, "client_name": contract["client_name"],
+            "original_contract_no": contract["doc_no"], "created_by": current_user.get("name"),
+            "source_payload": {}, "versions": [],
+        })
+        values["versions"] = _append_version([], "草稿", current_user.get("name"), snapshot=values.copy())
+        rows = _execute(client.table("reibi_quotes").insert(values), "建立升級或續約報價")
+        return {"status": "success", "data": rows[0]}
 
     @router.get("/work-orders")
-    def list_work_orders(page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=200), current_user: dict = Depends(require_reibi_manager)):
-        return list_scoped("reibi_work_orders", current_user, page, size)
+    def list_work_orders(
+        page: int = Query(1, ge=1), size: int = Query(50, ge=1, le=200),
+        record_status: Optional[str] = Query(None, alias="status"), search: Optional[str] = None,
+        current_user: dict = Depends(require_reibi_manager),
+    ):
+        return list_scoped("reibi_work_orders", current_user, page, size, record_status, search)
+
+    @router.get("/work-orders/{record_id}")
+    def get_work_order(record_id: int, current_user: dict = Depends(require_reibi_manager)):
+        _, row = get_scoped("reibi_work_orders", record_id, current_user)
+        return {"status": "success", "data": row}
 
     @router.post("/work-orders", status_code=status.HTTP_201_CREATED)
     def create_work_order(payload: WorkOrderWrite, current_user: dict = Depends(require_reibi_manager)):
         enterprise_id = _current_enterprise_id(client, current_user)
         values = _serialize_payload(payload)
+        if payload.status not in WORK_ORDER_STATUSES:
+            raise HTTPException(status_code=422, detail="不支援的工單狀態")
         if payload.contract_id:
             contract = _execute(client.table("reibi_contracts").select("id").eq("id", payload.contract_id).eq("enterprise_id", enterprise_id).limit(1), "驗證合約")
             if not contract:
                 raise HTTPException(status_code=400, detail="contract_id 不屬於目前企業")
+        values["work_order_no"] = payload.work_order_no or _next_document_no(client, "work_order")
+        values["status_history"] = _append_version([], payload.status, current_user.get("name"))
         values.update({"enterprise_id": enterprise_id, "created_by": current_user.get("name"), "source_payload": {}})
         rows = _execute(client.table("reibi_work_orders").insert(values), "建立工單")
         return {"status": "success", "data": rows[0]}
 
+    @router.put("/work-orders/{record_id}")
+    def update_work_order(record_id: int, payload: WorkOrderWrite, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id, existing = get_scoped("reibi_work_orders", record_id, current_user)
+        if existing.get("status") in {"驗收完成", "已存檔"}:
+            raise HTTPException(status_code=409, detail="已完成或已存檔工單不可再編輯")
+        values = _serialize_payload(payload)
+        values.pop("work_order_no", None)
+        values.pop("status", None)
+        values["updated_at"] = _now_iso()
+        rows = _execute(client.table("reibi_work_orders").update(values).eq("id", record_id).eq("enterprise_id", enterprise_id), "更新工單")
+        return {"status": "success", "data": rows[0]}
+
     @router.patch("/work-orders/{record_id}/status")
     def update_work_order_status(record_id: int, payload: LifecycleStatusUpdate, current_user: dict = Depends(require_reibi_manager)):
-        return update_scoped_status("reibi_work_orders", record_id, payload, current_user)
+        return update_scoped_status("work_order", "reibi_work_orders", record_id, payload, current_user)
+
+    @router.post("/contracts/{record_id}/work-order", status_code=status.HTTP_201_CREATED)
+    def create_work_order_from_contract(record_id: int, payload: WorkOrderFromContractRequest, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id, contract = get_scoped("reibi_contracts", record_id, current_user)
+        terms = contract.get("terms") if isinstance(contract.get("terms"), dict) else {}
+        quote_snapshot = terms.get("quote_snapshot") if isinstance(terms.get("quote_snapshot"), dict) else {}
+        carried_items = {
+            "dItems": quote_snapshot.get("config", {}).get("dItems", {}) if isinstance(quote_snapshot.get("config"), dict) else {},
+            "dSites": quote_snapshot.get("config", {}).get("dSites", []) if isinstance(quote_snapshot.get("config"), dict) else [],
+            **payload.items,
+        }
+        values = _serialize_payload(payload)
+        values.update({
+            "work_order_no": _next_document_no(client, "work_order"), "contract_id": record_id,
+            "contract_no": contract["doc_no"], "enterprise_id": enterprise_id,
+            "client_name": contract["client_name"], "status": "草稿", "items": carried_items,
+            "status_history": _append_version([], "草稿", current_user.get("name")),
+            "created_by": current_user.get("name"), "source_payload": {},
+        })
+        rows = _execute(client.table("reibi_work_orders").insert(values), "由合約建立工單")
+        return {"status": "success", "data": rows[0]}
+
+    @router.post("/work-orders/{record_id}/acceptance")
+    def accept_work_order(record_id: int, payload: WorkOrderAcceptance, current_user: dict = Depends(require_reibi_manager)):
+        enterprise_id, existing = get_scoped("reibi_work_orders", record_id, current_user)
+        if existing.get("status") != "驗收中":
+            raise HTTPException(status_code=409, detail="只有驗收中的工單可以登錄驗收結果")
+        values = _serialize_payload(payload)
+        values.update({
+            "status": payload.acceptance_result,
+            "status_history": _append_version(existing.get("status_history"), payload.acceptance_result, current_user.get("name")),
+            "updated_at": _now_iso(),
+        })
+        rows = _execute(client.table("reibi_work_orders").update(values).eq("id", record_id).eq("enterprise_id", enterprise_id), "登錄工單驗收")
+        return {"status": "success", "data": rows[0]}
 
     @router.post("/artifacts/validate")
     def validate_artifact(export: ArtifactExport, _: dict = Depends(require_reibi_manager)):

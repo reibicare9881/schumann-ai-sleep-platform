@@ -416,16 +416,66 @@ export const API = {
     return this.request(`/api/reibi/enterprise/departments/${departmentId}`, { method: 'DELETE' });
   },
 
-  async listReibiQuotes(page = 1, size = 50) {
-    return this.request('/api/reibi/quotes', { query: { page, size } });
+  async getReibiBusinessCatalogs() {
+    return this.request('/api/reibi/business-catalogs');
   },
 
-  async listReibiContracts(page = 1, size = 50) {
-    return this.request('/api/reibi/contracts', { query: { page, size } });
+  async calculateReibiQuote(payload: Record<string, any>) {
+    return this.request('/api/reibi/quotes/calculate', { method: 'POST', body: JSON.stringify(payload) });
   },
 
-  async listReibiWorkOrders(page = 1, size = 50) {
-    return this.request('/api/reibi/work-orders', { query: { page, size } });
+  async listReibiQuotes(page = 1, size = 50, status?: string, search?: string) {
+    return this.request('/api/reibi/quotes', { query: { page, size, status, search } });
+  },
+
+  async createReibiQuote(payload: Record<string, any>) {
+    return this.request('/api/reibi/quotes', { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async updateReibiQuote(recordId: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/quotes/${recordId}`, { method: 'PUT', body: JSON.stringify(payload) });
+  },
+
+  async convertReibiQuote(recordId: number, contractType: string, terms: Record<string, any> = {}) {
+    return this.request(`/api/reibi/quotes/${recordId}/convert`, {
+      method: 'POST', body: JSON.stringify({ contract_type: contractType, terms })
+    });
+  },
+
+  async listReibiContracts(page = 1, size = 50, status?: string, search?: string) {
+    return this.request('/api/reibi/contracts', { query: { page, size, status, search } });
+  },
+
+  async createReibiAdjustmentQuote(contractId: number, adjustmentType: 'upgrade' | 'renewal') {
+    return this.request(`/api/reibi/contracts/${contractId}/adjustment-quote`, {
+      method: 'POST', body: JSON.stringify({ adjustment_type: adjustmentType })
+    });
+  },
+
+  async updateReibiContractExecution(contractId: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/contracts/${contractId}/execution`, {
+      method: 'PATCH', body: JSON.stringify(payload)
+    });
+  },
+
+  async createReibiWorkOrderFromContract(contractId: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/contracts/${contractId}/work-order`, {
+      method: 'POST', body: JSON.stringify(payload)
+    });
+  },
+
+  async listReibiWorkOrders(page = 1, size = 50, status?: string, search?: string) {
+    return this.request('/api/reibi/work-orders', { query: { page, size, status, search } });
+  },
+
+  async updateReibiWorkOrder(recordId: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/work-orders/${recordId}`, { method: 'PUT', body: JSON.stringify(payload) });
+  },
+
+  async acceptReibiWorkOrder(recordId: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/work-orders/${recordId}/acceptance`, {
+      method: 'POST', body: JSON.stringify(payload)
+    });
   },
 
   async updateReibiDocumentStatus(kind: 'quotes' | 'contracts' | 'work-orders', recordId: number, status: string) {
