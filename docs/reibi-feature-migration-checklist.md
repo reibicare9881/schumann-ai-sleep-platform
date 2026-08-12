@@ -148,18 +148,18 @@
 
 ### L5-02 財務
 
-- [ ] L5-02A 付款時程與應收狀態。
-- [ ] L5-02B 匯款申報比對與覆核。
-- [ ] L5-02C 發票 CRUD、品項、稅額、狀態與匯款關聯。
-- [ ] L5-02D 個人訂閱審核、啟用碼重新核發與發票關聯。
+- [x] L5-02A 付款時程與應收狀態。
+- [x] L5-02B 匯款申報比對與覆核。
+- [x] L5-02C 發票 CRUD、品項、稅額、狀態與匯款關聯。
+- [x] L5-02D 個人訂閱審核、啟用碼重新核發與發票關聯。
 
 ### L5-03 夥伴與內部人員
 
-- [ ] L5-03A 經銷商 CRUD、上下線、區域、等級與服務人員。
-- [ ] L5-03B 分潤計算、護欄、佣金明細與年度業績。
-- [ ] L5-03C 合作夥伴／推薦人 CRUD 與預設比例。
-- [ ] L5-03D REIBI staff CRUD、職稱、啟停用與接單歸戶。
-- [ ] L5-03E 經銷商可見資料與內部角色可見資料隔離測試。
+- [x] L5-03A 經銷商 CRUD、上下線、區域、等級與服務人員。
+- [x] L5-03B 分潤計算、護欄、佣金明細與年度業績。
+- [x] L5-03C 合作夥伴／推薦人 CRUD 與預設比例。
+- [x] L5-03D REIBI staff CRUD、職稱、啟停用與接單歸戶。
+- [x] L5-03E 經銷商可見資料與內部角色可見資料隔離測試。
 
 ### L5-04 系統與分析
 
@@ -285,3 +285,16 @@
 - [x] DB-B02：報價轉合約由單一 PostgreSQL transaction 完成，避免重複轉換或半套資料。
 - [x] DB-B03：新增函式與 sequence 僅授權 `service_role`，`anon`／`authenticated` 不可執行。
 - [x] TST-B01：20 個 Python 單元測試、8 個 pgTAP 資料庫測試、Next.js production build 全部通過。
+
+## 13. Batch C 完成紀錄（2026-08-12）
+
+- [x] FIN-C01：依 L5 Artifact 唯一權威 `buildEntPaymentRows` 公式建立 A1–A3、B1–B3、C1–C3、D1–D2 應收時程，保留到期、待確認、部分付款、已付款與通知日期。
+- [x] FIN-C02：匯款申報、人工比對、跨應收項目配置與原子沖帳；重複覆核由 FastAPI 擋下。
+- [x] FIN-C03：發票草稿 CRUD、品項、5% 稅額、受控狀態、匯款與 B2C 訂閱關聯。
+- [x] FIN-C04：個人訂閱審核、到期日與啟用碼重發；新碼只回傳一次，資料庫只保存 SHA-256 與末四碼，舊 Artifact 明碼保留待正式匯入預檢決策。
+- [x] PAR-C01：經銷商主／次層級、區域、等級、服務人員、三方合約分配欄位與停用流程。
+- [x] PAR-C02：銀／金／白金／戰略四等級 A/B/C 獨立分潤、LA200 併入 B 層、預設 65% REIBI 保留下限、資料庫觸發器護欄、月結帳冊與年度業績。
+- [x] PAR-C03：合作夥伴／推薦人與 REIBI staff CRUD、預設比例、職稱、啟停用。
+- [x] PAR-C04：一般企業只能讀寫自身財務；跨企業內部資料只限 `reibi_super`；經銷商入口只回傳自己的企業、應收與分潤，不回傳內部 staff／設定／其他經銷商資料。
+- [x] DB-C01：Batch C migration 與後續佣金護欄 migration 已套用遠端 Supabase；所有新表啟用 RLS，browser roles 無權限，僅 FastAPI `service_role` 可存取。
+- [x] TST-C01：26 個 Python 測試、18 個 pgTAP 資料庫測試、Next.js production build、本機 migration 全量重播與 database lint 全部通過；遠端 6 個 migration 與本機一致。

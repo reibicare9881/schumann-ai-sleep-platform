@@ -100,3 +100,12 @@ def require_reibi_super(current_user: dict = Depends(get_current_user)) -> dict:
         raise HTTPException(status_code=403, detail="權限不足：正式匯入限 REIBI 內部超級管理者")
     return current_user
 
+
+def require_reibi_partner(current_user: dict = Depends(get_current_user)) -> dict:
+    """經銷商入口只接受經銷商角色，不與企業或 REIBI 內部角色混用。"""
+    if current_user.get("role") not in {"partner_primary", "partner_sub"}:
+        raise HTTPException(status_code=403, detail="權限不足：限已驗證的 REIBI 經銷商使用")
+    if not (current_user.get("partner_org_code") or current_user.get("org_code")):
+        raise HTTPException(status_code=403, detail="經銷商身分缺少 partner_org_code")
+    return current_user
+

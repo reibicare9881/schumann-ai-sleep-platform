@@ -1,10 +1,13 @@
 import unittest
 
 from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
 import main
-from auth import create_access_token, require_reibi_manager
+from auth import create_access_token, require_reibi_manager, require_reibi_partner
 from reibi_api import QuoteCalculationRequest, _assert_lifecycle_transition, calculate_quote_fees
+from reibi_batch_c import build_payment_schedule, calculate_distributor_commission
+from decimal import Decimal
 
 
 class ReibiApiTests(unittest.TestCase):
@@ -98,6 +101,58 @@ class ReibiApiTests(unittest.TestCase):
 
     def test_lifecycle_allows_artifact_next_step(self):
         _assert_lifecycle_transition("quote", "已發送", "已確認")
+
+    def test_batch_c_payment_schedule_matches_artifact_rules(self):
+        rows = build_payment_schedule({
+            "plan_code": "基本", "pay_mode": "annual", "contract_start": "2026-01-31",
+            "a_layer_fee": 600000, "b_layer_fee": 1000000,
+            "c_layer_fee": 120000, "d_layer_fee": 200000,
+        })
+        by_code = {row["installment_code"]: row for row in rows}
+
+        self.assertEqual(set(by_code), {"A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2", "C3", "D1", "D2"})
+        self.assertEqual(by_code["A2"]["due_date"].isoformat(), "2027-01-31")
+        self.assertEqual(by_code["B1"]["amount"], Decimal("300000"))
+        self.assertEqual(by_code["B2"]["amount"], Decimal("400000"))
+        self.assertEqual(by_code["D2"]["status"], "待確認")
+
+    def test_batch_c_commission_uses_independent_layer_percentages(self):
+        result = calculate_distributor_commission(
+            {"org_code": "D001", "level_code": "gold", "commission_b_percent": 18},
+            [{"partner_code": "D001", "a_layer_fee": 100000, "b_layer_fee": 200000, "c_layer_fee": 50000}],
+            Decimal("65"),
+        )
+
+        self.assertEqual(result["a_commission"], Decimal("14000"))
+        self.assertEqual(result["b_commission"], Decimal("36000"))
+        self.assertEqual(result["c_commission"], Decimal("4000"))
+        self.assertEqual(result["total_commission"], Decimal("54000"))
+        self.assertEqual(result["annual_sales"], Decimal("350000"))
+
+    def test_batch_c_commission_retain_guard_blocks_excess(self):
+        with self.assertRaisesRegex(ValueError, "超過"):
+            calculate_distributor_commission(
+                {"org_code": "D001", "level_code": "silver", "commission_a_percent": 36},
+                [], Decimal("65"),
+            )
+
+    def test_org_admin_cannot_access_internal_distributor_catalog(self):
+        token = create_access_token({
+            "uid": "00000000-0000-0000-0000-000000000001",
+            "name": "單位管理者", "role": "admin", "org_code": "ACME",
+        })
+        response = self.client.get("/api/reibi/distributors", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_partner_scope_rejects_internal_or_org_admin_roles(self):
+        with self.assertRaises(HTTPException) as caught:
+            require_reibi_partner({"role": "admin", "org_code": "ACME"})
+        self.assertIn("限已驗證", caught.exception.detail)
+
+    def test_partner_scope_requires_partner_org_code(self):
+        with self.assertRaises(HTTPException) as caught:
+            require_reibi_partner({"role": "partner_primary"})
+        self.assertIn("partner_org_code", caught.exception.detail)
 
 
 if __name__ == "__main__":

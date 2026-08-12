@@ -36,6 +36,7 @@ from google.genai import types
 from modules.pdf_generator_module import create_full_report_pdf
 from auth import create_access_token, get_current_user, require_admin, require_org_manager, require_member_or_above
 from reibi_api import create_reibi_router
+from reibi_batch_c import create_reibi_batch_c_router
 
 app = FastAPI(
     title="統一多平台 API",
@@ -70,6 +71,7 @@ app.add_middleware(
 # REIBI business and Artifact-import endpoints use the same authenticated,
 # server-side Supabase client. No service-role credential is exposed to clients.
 app.include_router(create_reibi_router(supabase))
+app.include_router(create_reibi_batch_c_router(supabase))
 
 # 建立密碼加密上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

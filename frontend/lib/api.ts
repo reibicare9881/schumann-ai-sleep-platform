@@ -485,6 +485,97 @@ export const API = {
     });
   },
 
+  async listReibiOperationEnterprises() {
+    return this.request('/api/reibi/operations/enterprises');
+  },
+
+  async syncReibiPayments(enterpriseId?: number) {
+    return this.request('/api/reibi/finance/payments/sync', {
+      method: 'POST', body: JSON.stringify({ enterprise_id: enterpriseId ?? null })
+    });
+  },
+
+  async listReibiPayments(enterpriseId?: number) {
+    return this.request('/api/reibi/finance/payments', { query: { page: 1, size: 500, enterprise_id: enterpriseId } });
+  },
+
+  async updateReibiPayment(paymentId: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/finance/payments/${paymentId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+
+  async listReibiRemittances() {
+    return this.request('/api/reibi/finance/remittances', { query: { page: 1, size: 500 } });
+  },
+
+  async createReibiRemittance(payload: Record<string, any>) {
+    return this.request('/api/reibi/finance/remittances', { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async reconcileReibiRemittance(remittanceId: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/finance/remittances/${remittanceId}/reconcile`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async rejectReibiRemittance(remittanceId: number, reason: string) {
+    return this.request(`/api/reibi/finance/remittances/${remittanceId}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
+  },
+
+  async listReibiInvoices() {
+    return this.request('/api/reibi/finance/invoices', { query: { page: 1, size: 500 } });
+  },
+
+  async createReibiInvoice(payload: Record<string, any>) {
+    return this.request('/api/reibi/finance/invoices', { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async updateReibiInvoice(invoiceId: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/finance/invoices/${invoiceId}`, { method: 'PUT', body: JSON.stringify(payload) });
+  },
+
+  async updateReibiInvoiceStatus(invoiceId: number, status: string) {
+    return this.request(`/api/reibi/finance/invoices/${invoiceId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+  },
+
+  async deleteReibiInvoice(invoiceId: number) {
+    return this.request(`/api/reibi/finance/invoices/${invoiceId}`, { method: 'DELETE' });
+  },
+
+  async listReibiSubscriptions() { return this.request('/api/reibi/subscriptions'); },
+  async createReibiSubscription(payload: Record<string, any>) {
+    return this.request('/api/reibi/subscriptions', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async reviewReibiSubscription(id: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/subscriptions/${id}/review`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async reissueReibiSubscription(id: number) {
+    return this.request(`/api/reibi/subscriptions/${id}/reissue`, { method: 'POST' });
+  },
+
+  async listReibiCatalog(kind: 'staff' | 'partners' | 'distributors') {
+    return this.request(`/api/reibi/${kind}`);
+  },
+  async createReibiCatalog(kind: 'staff' | 'partners' | 'distributors', payload: Record<string, any>) {
+    return this.request(`/api/reibi/${kind}`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async updateReibiCatalog(kind: 'staff' | 'partners' | 'distributors', id: number, payload: Record<string, any>) {
+    return this.request(`/api/reibi/${kind}/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+  },
+  async deactivateReibiCatalog(kind: 'staff' | 'partners' | 'distributors', id: number) {
+    return this.request(`/api/reibi/${kind}/${id}`, { method: 'DELETE' });
+  },
+
+  async getReibiFinanceSettings() { return this.request('/api/reibi/finance/settings'); },
+  async updateReibiFinanceSettings(minRetain: number) {
+    return this.request('/api/reibi/finance/settings', { method: 'PATCH', body: JSON.stringify({ min_reibi_retain_percent: minRetain }) });
+  },
+  async previewReibiCommissions() { return this.request('/api/reibi/commissions/preview'); },
+  async listReibiCommissionLedger() { return this.request('/api/reibi/commissions/ledger'); },
+  async confirmReibiCommission(distributorId: number, periodMonth: string, note = '') {
+    return this.request('/api/reibi/commissions/ledger', { method: 'POST', body: JSON.stringify({ distributor_id: distributorId, period_month: periodMonth, note: note || null }) });
+  },
+  async markReibiCommissionPaid(ledgerId: number) {
+    return this.request(`/api/reibi/commissions/ledger/${ledgerId}/paid`, { method: 'POST' });
+  },
+
   async validateReibiArtifact(payload: {
     source_artifact: 'main' | 'l5' | 'quote' | 'workorder';
     source_version?: string;
