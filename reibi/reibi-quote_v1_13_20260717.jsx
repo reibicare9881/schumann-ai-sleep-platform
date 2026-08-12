@@ -133,6 +133,68 @@ var stor={
   d:async function(k){try{await window.storage.delete(k);}catch(e){}}
 };
 
+// ── BATCH G：版本化搬移匯出 ─────────────────────────────────────────────────
+function useArtifactExportButton(config){
+  useEffect(function(){
+    var button=document.createElement("button");
+    button.textContent="匯出搬移資料";
+    Object.assign(button.style,{position:"fixed",right:"18px",bottom:"18px",zIndex:"99999",border:"0",borderRadius:"999px",padding:"11px 17px",background:"#0f766e",color:"white",fontWeight:"800",boxShadow:"0 6px 22px rgba(15,23,42,.25)",cursor:"pointer"});
+    button.onclick=async function(){
+      button.disabled=true;button.textContent="整理資料中…";
+      try{await exportArtifactData(config);}catch(error){alert("匯出失敗："+(error&&error.message?error.message:String(error)));}
+      finally{button.disabled=false;button.textContent="匯出搬移資料";}
+    };
+    document.body.appendChild(button);
+    return function(){button.remove();};
+  },[]);
+}
+function stableExportJson(value){
+  if(Array.isArray(value))return "["+value.map(stableExportJson).join(",")+"]";
+  if(value&&typeof value==="object")return "{"+Object.keys(value).sort().map(function(key){return JSON.stringify(key)+":"+stableExportJson(value[key]);}).join(",")+"}";
+  return JSON.stringify(value);
+}
+async function exportSha256(text){
+  var digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest)).map(function(byte){return byte.toString(16).padStart(2,"0");}).join("");
+}
+function exportKeyAllowed(key,config){
+  var lower=String(key).toLowerCase();
+  if(["sess","pin_","rc_","lk_","rem_","token","l5_session","rq_session","l5_active_context","l5_pin_","__rq_handoff_"].some(function(prefix){return lower===prefix||lower.indexOf(prefix)===0;}))return false;
+  return config.exact.indexOf(key)>=0||config.prefixes.some(function(prefix){return key.indexOf(prefix)===0;});
+}
+function sanitizeExportValue(value){
+  if(Array.isArray(value))return value.map(sanitizeExportValue);
+  if(!value||typeof value!=="object")return value;
+  var clean={};Object.keys(value).forEach(function(key){var compact=String(key).replace(/_/g,"").toLowerCase();if(["password","secret","token","pin","backupcode","activationcode","imgfull","imgthumb","imagebase64"].some(function(fragment){return compact.indexOf(fragment)>=0;}))return;clean[key]=sanitizeExportValue(value[key]);});return clean;
+}
+async function exportArtifactData(config){
+  var keys=new Set(config.exact), discovered=[];
+  if(window.storage&&typeof window.storage.list==="function"){
+    try{var listed=await window.storage.list();discovered=Array.isArray(listed)?listed:(listed&&listed.keys)||[];}catch(error){}
+  }
+  discovered.forEach(function(item){var key=typeof item==="string"?item:item&&item.key;if(key&&exportKeyAllowed(key,config))keys.add(key);});
+  var entries=[];
+  for(var key of keys){
+    if(!exportKeyAllowed(key,config))continue;
+    var result=await window.storage.get(key).catch(function(){return null;});
+    if(!result||result.value==null)continue;
+    var value=result.value;try{value=JSON.parse(value);}catch(error){}
+    entries.push({storage_key:key,value:sanitizeExportValue(value)});
+  }
+  if(!entries.length)throw new Error("找不到可搬移資料");
+  var chunks=[],current=[],bytes=0,limit=7.5*1024*1024;
+  entries.forEach(function(entry){var size=new TextEncoder().encode(stableExportJson(entry)).length;if(current.length&&(bytes+size>limit||current.length>=5000)){chunks.push(current);current=[];bytes=0;}current.push(entry);bytes+=size;});
+  if(current.length)chunks.push(current);
+  var stamp=new Date().toISOString();
+  for(var index=0;index<chunks.length;index++){
+    var envelope={schema_version:"reibi-artifact-export/1.0",source_artifact:config.source,source_version:config.version,exported_at:stamp,part:index+1,parts:chunks.length,entries:chunks[index]};
+    envelope.export_sha256=await exportSha256(stableExportJson(envelope));
+    var blob=new Blob([JSON.stringify(envelope,null,2)],{type:"application/json;charset=utf-8"}),url=URL.createObjectURL(blob),link=document.createElement("a");
+    link.href=url;link.download="reibi-"+config.source+"-"+stamp.slice(0,10)+"-part"+(index+1)+"of"+chunks.length+".json";link.click();URL.revokeObjectURL(url);
+  }
+  alert("匯出完成："+entries.length+" 個 storage keys，共 "+chunks.length+" 個檔案。請妥善保管 JSON 與匯出前筆數截圖。");
+}
+
 // ── UI PRIMITIVES ──────────────────────────────────────────────────────────────
 function Btn(props){
   var v=props.v||"primary",sz=props.sz||"md",sx=props.style||{};
@@ -1384,6 +1446,7 @@ function ContractList(props){
 
 // ── MAIN APP ───────────────────────────────────────────────────────────────────
 export default function App(){
+  useArtifactExportButton({source:"quote",version:"v1.13",exact:["rq_quotes","rq_contracts","rq_workorders","l5_staff","l5_partners","l5_distributors"],prefixes:[]});
   var[sess,setSess]=useState(null);
   var[loading,setLoading]=useState(true);
   var[tab,setTab]=useState("quotes");

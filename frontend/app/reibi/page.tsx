@@ -106,8 +106,13 @@ const D_LAYER_FIELDS = [
 function normalizeExport(parsed: any, source: ArtifactSource, version: string) {
   if (parsed && Array.isArray(parsed.entries)) {
     return {
+      schema_version: parsed.schema_version,
       source_artifact: parsed.source_artifact || source,
       source_version: parsed.source_version || version || undefined,
+      exported_at: parsed.exported_at,
+      part: parsed.part,
+      parts: parsed.parts,
+      export_sha256: parsed.export_sha256,
       entries: parsed.entries,
     };
   }
@@ -136,6 +141,7 @@ export default function ReibiManagementPage() {
   const [exportPayload, setExportPayload] = useState<any>(null);
   const [fileName, setFileName] = useState("");
   const [validation, setValidation] = useState<Validation | null>(null);
+  const [importResult, setImportResult] = useState<any>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -324,7 +330,9 @@ export default function ReibiManagementPage() {
     setLoading(true);
     setError("");
     setMessage("");
-    const payload = { ...exportPayload, source_artifact: source, source_version: version || exportPayload.source_version };
+    const payload = exportPayload.export_sha256
+      ? exportPayload
+      : { ...exportPayload, source_artifact: source, source_version: version || exportPayload.source_version };
     const response: any = await API.validateReibiArtifact(payload);
     if (response.status === "success") {
       setValidation(response.data);
@@ -332,6 +340,29 @@ export default function ReibiManagementPage() {
     } else {
       setValidation(null);
       setError(response.message || "Artifact 預檢失敗");
+    }
+    setLoading(false);
+  };
+
+  const importExport = async () => {
+    if (!exportPayload || !validation || session?.systemRole !== "reibi_super") return;
+    const confirmed = window.confirm(
+      `即將正式寫入 ${validation.record_count} 筆記錄。請確認已保管原始匯出檔並建立 Supabase 備份／還原點。是否繼續？`
+    );
+    if (!confirmed) return;
+    setLoading(true);
+    setError("");
+    setMessage("");
+    setImportResult(null);
+    const payload = exportPayload.export_sha256
+      ? exportPayload
+      : { ...exportPayload, source_artifact: source, source_version: version || exportPayload.source_version };
+    const response: any = await API.importReibiArtifact(payload);
+    if (response.status === "success") {
+      setImportResult(response.data);
+      setMessage(response.data?.duplicate ? "相同檔案已完成匯入，本次未重複寫入。" : "正式匯入流程已完成，請核對批次摘要。")
+    } else {
+      setError(response.message || "Artifact 正式匯入失敗");
     }
     setLoading(false);
   };
@@ -559,8 +590,8 @@ export default function ReibiManagementPage() {
       </section>
 
       <section className="bg-white border border-slate-200 rounded-2xl p-6">
-        <h2 className="font-black text-slate-800 mb-1">Artifact 搬移預檢</h2>
-        <p className="text-xs text-slate-500 mb-5">只解析、分類並檢查 JSON，不會寫入資料庫；session、PIN、token 與暫存 handoff 會被排除。</p>
+        <h2 className="font-black text-slate-800 mb-1">Artifact 搬移預檢與匯入</h2>
+        <p className="text-xs text-slate-500 mb-5">預檢不寫入資料庫；session、PIN、token 與暫存 handoff 會被排除。正式寫入只對 REIBI 內部超管開放。</p>
         <div className="grid md:grid-cols-3 gap-4">
           <label className="text-xs font-bold text-slate-600">Artifact
             <select value={source} onChange={event => { setSource(event.target.value as ArtifactSource); setValidation(null); }} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm bg-white">
@@ -588,7 +619,22 @@ export default function ReibiManagementPage() {
             <div><div className="text-xs font-bold text-slate-600 mb-2">目標資料表</div><div className="flex flex-wrap gap-2">{Object.entries(validation.target_counts).map(([table, count]) => <span key={table} className="rounded-full bg-teal-50 px-3 py-1 text-xs font-bold text-teal-700">{table}: {count}</span>)}</div></div>
             {validation.warnings.length > 0 && <div className="rounded-xl bg-amber-50 border border-amber-200 p-4"><div className="text-xs font-bold text-amber-800 mb-2">注意事項</div><ul className="list-disc pl-5 text-xs text-amber-700 space-y-1">{validation.warnings.slice(0, 20).map((warning, index) => <li key={`${warning}-${index}`}>{warning}</li>)}</ul></div>}
             <div className="rounded-xl bg-slate-900 p-3 text-[11px] text-slate-300 font-mono break-all">SHA-256: {validation.sha256}</div>
-            <p className="text-xs text-slate-500">正式跨企業匯入尚未在網頁開放；後端只允許未來的 <code>reibi_super</code> 身分執行。</p>
+            {session.systemRole === "reibi_super" ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                <div className="text-xs font-black text-red-800">正式寫入前檢查</div>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-red-700">
+                  <li>保管原始 JSON 與匯出前筆數截圖。</li>
+                  <li>先在 Supabase 建立資料庫備份／還原點。</li>
+                  <li>確認來源 Artifact、版本、分檔編號與 SHA-256。</li>
+                </ul>
+                <button onClick={importExport} disabled={loading} className="mt-4 rounded-xl bg-red-700 px-5 py-2.5 text-sm font-black text-white disabled:opacity-50">確認並正式匯入</button>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">目前登入角色只能預檢；跨企業正式匯入限 <code>reibi_super</code>。</p>
+            )}
+            {importResult && <div className="rounded-xl border border-teal-200 bg-teal-50 p-4 text-xs text-teal-900">
+              批次 #{importResult.batch?.id}：{importResult.batch?.status}；新增成功 {importResult.batch?.imported_count ?? 0}、拒絕 {importResult.batch?.rejected_count ?? 0}、由先前失敗批次恢復 {importResult.resumed_count ?? 0}。
+            </div>}
           </div>
         )}
       </section>

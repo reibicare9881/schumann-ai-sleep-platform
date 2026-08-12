@@ -16,7 +16,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     // 定義免登入白名單
-    const publicPaths = ['/login', '/pain-education', '/sleep-management'];
+    const publicPaths = ['/login', '/reibi-login', '/pain-education', '/sleep-management'];
     const isPublicPath = publicPaths.includes(pathname);
 
     // 嚴格使用後端 API Session，不允許退回 LocalStorage

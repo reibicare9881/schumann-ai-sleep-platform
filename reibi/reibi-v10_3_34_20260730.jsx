@@ -98,6 +98,36 @@ const stor={
   s:async(k,v)=>{try{await Promise.race([window.storage.set(k,JSON.stringify(v)),new Promise(res=>setTimeout(res,2000))]);}catch{}},
   d:async(k)=>{try{await window.storage.delete(k);}catch{}},
 };
+
+// ── BATCH G：版本化搬移匯出 ─────────────────────────────────────────────────
+function useArtifactExportButton(config){
+  useEffect(function(){
+    const button=document.createElement("button");button.textContent="匯出搬移資料";
+    Object.assign(button.style,{position:"fixed",right:"18px",bottom:"18px",zIndex:"99999",border:"0",borderRadius:"999px",padding:"11px 17px",background:"#0f766e",color:"white",fontWeight:"800",boxShadow:"0 6px 22px rgba(15,23,42,.25)",cursor:"pointer"});
+    button.onclick=async()=>{button.disabled=true;button.textContent="整理資料中…";try{await exportArtifactData(config);}catch(error){alert("匯出失敗："+(error&&error.message?error.message:String(error)));}finally{button.disabled=false;button.textContent="匯出搬移資料";}};
+    document.body.appendChild(button);return()=>button.remove();
+  },[]);
+}
+function stableExportJson(value){if(Array.isArray(value))return "["+value.map(stableExportJson).join(",")+"]";if(value&&typeof value==="object")return "{"+Object.keys(value).sort().map(key=>JSON.stringify(key)+":"+stableExportJson(value[key])).join(",")+"}";return JSON.stringify(value);}
+async function exportSha256(text){const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(text));return Array.from(new Uint8Array(digest)).map(byte=>byte.toString(16).padStart(2,"0")).join("");}
+function exportKeyAllowed(key,config){const lower=String(key).toLowerCase();if(["sess","pin_","rc_","lk_","rem_","token","l5_session","rq_session","l5_active_context","l5_pin_","__rq_handoff_"].some(prefix=>lower===prefix||lower.startsWith(prefix)))return false;return config.exact.includes(key)||config.prefixes.some(prefix=>key.startsWith(prefix));}
+function sanitizeExportValue(value){if(Array.isArray(value))return value.map(sanitizeExportValue);if(!value||typeof value!=="object")return value;const clean={};Object.keys(value).forEach(key=>{const compact=String(key).replace(/_/g,"").toLowerCase();if(["password","secret","token","pin","backupcode","activationcode","imgfull","imgthumb","imagebase64"].some(fragment=>compact.includes(fragment)))return;clean[key]=sanitizeExportValue(value[key]);});return clean;}
+async function exportArtifactData(config){
+  const keys=new Set(config.exact),cache=new Map(),orgs=new Set(),users=new Set();
+  const read=async key=>{if(cache.has(key))return cache.get(key);const result=await window.storage.get(key).catch(()=>null);if(!result||result.value==null){cache.set(key,null);return null;}let value=result.value;try{value=JSON.parse(value);}catch(error){}cache.set(key,value);return value;};
+  if(window.storage&&typeof window.storage.list==="function"){try{const listed=await window.storage.list(),items=Array.isArray(listed)?listed:(listed&&listed.keys)||[];items.forEach(item=>{const key=typeof item==="string"?item:item&&item.key;if(key&&exportKeyAllowed(key,config))keys.add(key);});}catch(error){}}
+  const collect=(value,depth=0)=>{if(depth>6||value==null)return;if(Array.isArray(value)){value.slice(0,5000).forEach(item=>collect(item,depth+1));return;}if(typeof value!=="object")return;Object.entries(value).forEach(([key,child])=>{const name=key.toLowerCase();if(typeof child==="string"){if(["orgcode","org_code","entcode"].includes(name))orgs.add(child);if(["uid","userid","user_id","artifact_user_key","membercode"].includes(name))users.add(child);}collect(child,depth+1);});};
+  for(const key of config.exact){const value=await read(key);collect(value);if(key==="reibi_orgs"&&Array.isArray(value))value.forEach(item=>{if(typeof item==="string")orgs.add(item);});}
+  collect(await read("sess"));
+  for(const spec of config.indexes){const values=await read(spec.key);if(Array.isArray(values))values.forEach(value=>{const code=typeof value==="string"?value:value&&value.orgCode;if(code)keys.add(spec.prefix+String(code).replace(/\W/g,"_"));});}
+  [...orgs].slice(0,2000).forEach(code=>{const clean=String(code).replace(/\W/g,"_");config.orgPrefixes.forEach(prefix=>keys.add(prefix+clean));["ow","msk","bsrs5"].forEach(type=>keys.add("osh_cnt_"+type+"_"+clean));});
+  [...users].slice(0,5000).forEach(uid=>{const clean=String(uid);config.userPrefixes.forEach(prefix=>keys.add(prefix+clean));});
+  const entries=[];for(const key of keys){if(!exportKeyAllowed(key,config))continue;const value=await read(key);if(value!=null)entries.push({storage_key:key,value:sanitizeExportValue(value)});}
+  if(!entries.length)throw new Error("找不到可搬移資料");
+  const chunks=[];let current=[],bytes=0;const limit=7.5*1024*1024;entries.forEach(entry=>{const size=new TextEncoder().encode(stableExportJson(entry)).length;if(current.length&&(bytes+size>limit||current.length>=5000)){chunks.push(current);current=[];bytes=0;}current.push(entry);bytes+=size;});if(current.length)chunks.push(current);
+  const stamp=new Date().toISOString();for(let index=0;index<chunks.length;index++){const envelope={schema_version:"reibi-artifact-export/1.0",source_artifact:config.source,source_version:config.version,exported_at:stamp,part:index+1,parts:chunks.length,entries:chunks[index]};envelope.export_sha256=await exportSha256(stableExportJson(envelope));const blob=new Blob([JSON.stringify(envelope,null,2)],{type:"application/json;charset=utf-8"}),url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;link.download="reibi-"+config.source+"-"+stamp.slice(0,10)+"-part"+(index+1)+"of"+chunks.length+".json";link.click();URL.revokeObjectURL(url);}
+  alert("匯出完成："+entries.length+" 個 storage keys，共 "+chunks.length+" 個檔案。請妥善保管 JSON 與匯出前筆數截圖。");
+}
 const DB={
   sess:()=>stor.g("sess"),saveSess:(v)=>stor.s("sess",v),clearSess:()=>stor.d("sess"),
   rpts:()=>stor.g("rpts"),
@@ -6552,6 +6582,14 @@ function MentalWellnessScreen({session,onBack,onPtsChange,onRptChange}){
 
 
 export default function App(){
+  useArtifactExportButton({
+    source:"main",version:"v10.3.34",
+    exact:["rpts","prs","reibi_orgs","subs","l5_enterprises","l5_invoices","l5_remit_index","l5_appt_index","l5_change_req_index","l5_health_agg_index"],
+    prefixes:["pts_","ci_","th_","appt_","org_","svc_","osh_cnt_","setup_","dept_struct_","params_","remit_","change_req_","sleep_diary_","sleep_diary_today_","pain_diary_","pain_diary_today_","ow_hist_","ow_schedule_","ow_tracklist_","ow_int_","ow_roster_","ohs_hazards_","ohs_measures_","ohs_reviews_","ohs_meta_","msk_hist_","bsrs5_hist_","viol_hist_","mental_hist_","org_th_","org_th_dept_","l5_health_agg_","feedback_list:"],
+    orgPrefixes:["appt_","org_","svc_","setup_","dept_struct_","params_","remit_","change_req_","ow_schedule_","ow_tracklist_","ow_int_","ow_roster_","ohs_hazards_","ohs_measures_","ohs_reviews_","ohs_meta_","org_th_","org_th_dept_","l5_health_agg_"],
+    userPrefixes:["pts_","ci_","th_","sleep_diary_","sleep_diary_today_","pain_diary_","pain_diary_today_","ow_hist_","msk_hist_","bsrs5_hist_","viol_hist_","mental_hist_","feedback_list:"],
+    indexes:[{key:"l5_remit_index",prefix:"remit_"},{key:"l5_appt_index",prefix:"appt_"},{key:"l5_change_req_index",prefix:"change_req_"},{key:"l5_health_agg_index",prefix:"l5_health_agg_"}]
+  });
   const[sess,setSess]=useState(null);
   const[screen,setScreen]=useState("login");
   const[pts,setPts]=useState(0);

@@ -250,6 +250,11 @@ export default function LoginPage() {
               </Link>
             </div>
           </div>
+          <div className="mt-6 text-center">
+            <Link href="/reibi-login" className="inline-flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-slate-700">
+              <ShieldCheck className="h-4 w-4" /> REIBI 內部人員登入
+            </Link>
+          </div>
         </>
       ) : (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-lg overflow-hidden">

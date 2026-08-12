@@ -46,16 +46,21 @@
 | Artifact JSON 預檢 | 是 | 是 |
 | Artifact 跨組織正式匯入 | 否 | 是 |
 
-`reibi_super` 尚未接上正式登入流程。這是刻意限制：不能用單位共用 PIN 取得跨企業 service-role 權限。正式匯入前必須先完成 REIBI 內部帳號與角色模型；在此之前，管理頁只提供預檢，不提供正式寫入按鈕。
+`reibi_super` 使用獨立的 `/reibi-login`：Supabase Auth Email／密碼、已驗證 Email、`reibi_internal_users` 白名單與可撤銷的 30 分鐘 server-side session。單位共用 PIN 永遠不能取得這個角色；若帳號設定 `mfa_required`，後端還會要求 TOTP 並驗證到 AAL2。管理頁只對該角色顯示正式寫入按鈕。第一位正式內部帳號的建立與 Artifact 搬移操作見 `docs/reibi-batch-g-runbook.md`。
 
 ## Artifact JSON 格式
 
-標準格式：
+標準格式（舊格式仍可預檢；正式匯出使用版本化 envelope）：
 
 ```json
 {
+  "schema_version": "reibi-artifact-export/1.0",
   "source_artifact": "l5",
   "source_version": "v2.14",
+  "exported_at": "2026-08-12T08:00:00.000Z",
+  "part": 1,
+  "parts": 1,
+  "export_sha256": "64-character-lowercase-hex",
   "entries": [
     {
       "storage_key": "l5_enterprises",
@@ -107,4 +112,4 @@ npm.cmd run build
 
 截至 2026-08-12，migration 重播、前端 production build，以及本機／遠端資料表、RLS、權限與 Database Advisors 已完成驗證。遠端 advisor 尚有一項既有警告：Auth 的 leaked-password protection 未啟用；正式上線前應在 Supabase Auth 設定中開啟。
 
-後端 Python 測試仍須在可用的 Python 環境執行。目前工作站原有虛擬環境指向已移除的 Python 3.11，不能把該啟動失敗誤判為 FastAPI 測試失敗。
+後端 `.venv` 已重新連上 Python 3.11.9；`pip check` 與完整 Python 測試可正常執行。

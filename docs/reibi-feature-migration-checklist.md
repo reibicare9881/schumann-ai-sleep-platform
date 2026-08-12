@@ -69,7 +69,7 @@
 - [ ] IAM-02 將 Artifact 的角色矩陣整理成後端單一權威來源。
 - [ ] IAM-03 支援 `admin_hr/admin_finance/admin_it/occupational_health` 的可信身分與權限。
 - [ ] IAM-04 支援 L5 內部角色及經銷商角色，不再使用 Artifact 測試模式登入。
-- [ ] IAM-05 建立 `reibi_super` 內部帳號與安全登入；禁止以單位共用 PIN 取得此角色。
+- [-] IAM-05 已完成 Supabase Auth、內部白名單、可撤銷 session、登入限速與選用 AAL2/TOTP；第一位正式 Auth user 仍待使用者提供工作 Email 後建立。
 - [ ] IAM-06 管理者建立、停用、重設角色及撤銷 session。
 - [ ] IAM-07 前後端權限矩陣自動化測試，避免 UI 顯示與 API 權限脫節。
 - [ ] IAM-08 部門必選角色與 `session.dept` 的伺服器端驗證。
@@ -209,23 +209,23 @@
 
 ### EXP：四個 Artifact 匯出
 
-- [ ] EXP-01 定義版本化 JSON envelope、來源版本、匯出時間與 SHA-256。
-- [ ] EXP-02 主平台匯出工具；排除 session、PIN、token、lock 與暫存資料。
-- [ ] EXP-03 L5 匯出工具。
-- [ ] EXP-04 quote 匯出工具。
-- [ ] EXP-05 workorder 匯出工具。
+- [x] EXP-01 定義版本化 JSON envelope、來源版本、匯出時間與 SHA-256。
+- [x] EXP-02 主平台匯出工具；排除 session、PIN、token、lock 與暫存資料。
+- [x] EXP-03 L5 匯出工具。
+- [x] EXP-04 quote 匯出工具。
+- [x] EXP-05 workorder 匯出工具。
 - [ ] EXP-06 每個 Artifact 重新發布後，以有意義的測試資料驗證匯出。
-- [ ] EXP-07 大資料分批／分檔與 20 MB Artifact 限制處理。
+- [x] EXP-07 大資料分批／分檔與 20 MB Artifact 限制處理。
 - [ ] EXP-08 使用者保管原始匯出檔與匯出前筆數截圖，作為核對依據。
 
 ### IMP：預檢與匯入
 
-- [-] IMP-01 JSON schema、10 MB／5,000 entries 限制、敏感欄位移除與 target planning。
-- [-] IMP-02 import batch／record、SHA-256 去重與失敗摘要。
+- [x] IMP-01 JSON schema、10 MB／5,000 entries 限制、敏感欄位移除、SHA-256 驗證與 target planning。
+- [x] IMP-02 import batch／record、SHA-256 去重、失敗摘要與 retry lineage。
 - [ ] IMP-03 真實匯出檔逐 key 預檢與欄位差異報告。
-- [ ] IMP-04 前端只開放 `reibi_super` 的正式匯入確認流程。
-- [ ] IMP-05 匯入前資料庫備份／還原點與操作 runbook。
-- [ ] IMP-06 分 Artifact、分批匯入與可重跑策略。
+- [x] IMP-04 前端只開放 `reibi_super` 的正式匯入確認流程。
+- [x] IMP-05 匯入前資料庫備份／還原點與操作 runbook。
+- [x] IMP-06 分 Artifact、分批匯入與可重跑策略。
 - [ ] IMP-07 來源筆數、imported/skipped/rejected、目標筆數與關聯完整性核對。
 - [ ] IMP-08 敏感資料、k≥5、舊 activation code、歷史 AI provider 抽樣驗證。
 - [ ] IMP-09 匯入完成簽核與 Artifact 舊系統唯讀／退役決策。
@@ -337,3 +337,14 @@
 - [x] MSG-F01：LINE provider-neutral 草稿／佇列／人工複製／成功／失敗結果；沒有 token 時拒絕 API 發送，不偽造送達結果。
 - [x] SEC-F01：新表均啟用 RLS，撤銷 `anon`／`authenticated` table 與 RPC 權限，只授權 FastAPI `service_role`；預約更新與刪除補上組織範圍檢查。
 - [x] TST-F01：51 個 Python 測試、75 個 pgTAP 資料庫測試、本機 migration 全量重播、Next.js production build 與 database lint 全部通過。
+
+## 17. Batch G 實作紀錄（2026-08-12）
+
+- [x] EXP-G01：四個 Artifact 皆加入版本化 JSON、來源版本、匯出時間、分檔編號與 SHA-256；明確排除 session、PIN、token、lock、remember-login 與 handoff。
+- [x] EXP-G02：匯出依約 7.5 MB／5,000 entries 自動分檔，後端以相同穩定 JSON 規則重算並驗證 SHA-256。
+- [x] IAM-G01：`reibi_super` 改由 Supabase Auth Email／密碼、內部 UUID 白名單、已驗證 Email、登入限速與 30 分鐘可撤銷工作階段建立；共用 PIN 無法取得該角色。
+- [x] IAM-G02：內部帳號可要求 TOTP；後端在同一次登入挑戰並驗證 AAL2，沒有通過時不建立應用工作階段。瀏覽器不接收 service-role 或 Supabase refresh token。
+- [x] IMP-G01：管理頁新增只對 `reibi_super` 顯示的正式匯入確認；完成檔案去重，失敗重跑保留 retry lineage 並跳過先前成功來源記錄。
+- [x] OPS-G01：完成內部帳號 bootstrap、Artifact 重發／匯出、還原點、匯入順序、核對與緊急撤銷 runbook。
+- [x] TST-G01：56 個 Python 測試、95 個 pgTAP 測試、四份 Artifact JSX 語法解析、本機 migration 全量重播與 Next.js production build 通過。
+- [ ] DATA-G01：仍需從四個已發布 Artifact 取得實際 JSON 與來源筆數截圖，才可執行真實資料預檢、正式匯入與簽核；repo 內沒有這些 `window.storage` 資料。

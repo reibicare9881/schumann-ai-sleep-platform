@@ -8,6 +8,7 @@ server-side Supabase client is used.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -289,8 +290,13 @@ class ArtifactEntry(StrictModel):
 
 
 class ArtifactExport(StrictModel):
+    schema_version: Literal["reibi-artifact-export/1.0"] = "reibi-artifact-export/1.0"
     source_artifact: Literal["main", "l5", "quote", "workorder"]
     source_version: Optional[str] = Field(default=None, max_length=100)
+    exported_at: Optional[datetime] = None
+    part: int = Field(default=1, ge=1, le=999)
+    parts: int = Field(default=1, ge=1, le=999)
+    export_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     entries: list[ArtifactEntry] = Field(min_length=1, max_length=IMPORT_MAX_ENTRIES)
 
 
@@ -416,12 +422,46 @@ def _record_id(record: Any, index: int) -> str:
     return str(index)
 
 
+def _stable_export_json(value: Any) -> str:
+    """Match the Artifact exporters' sorted-key JSON representation."""
+    if value is None:
+        return "null"
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if not (float("-inf") < value < float("inf")):
+            return "null"
+        if value.is_integer():
+            return str(int(value))
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    if isinstance(value, list):
+        return "[" + ",".join(_stable_export_json(item) for item in value) + "]"
+    if isinstance(value, dict):
+        return "{" + ",".join(
+            f"{json.dumps(str(key), ensure_ascii=False)}:{_stable_export_json(value[key])}"
+            for key in sorted(value, key=lambda item: str(item))
+        ) + "}"
+    return _stable_export_json(str(value))
+
+
 def plan_artifact_import(export: ArtifactExport) -> dict[str, Any]:
     """Pure validation/planning step used by both dry-run API and unit tests."""
-    canonical = json.dumps(export.model_dump(mode="json"), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if export.part > export.parts:
+        raise ValueError("匯出檔 part 不可大於 parts")
+    hash_payload = export.model_dump(mode="json", exclude={"export_sha256"})
+    canonical = _stable_export_json(hash_payload)
     byte_size = len(canonical.encode("utf-8"))
     if byte_size > IMPORT_MAX_BYTES:
         raise ValueError(f"匯出檔超過 {IMPORT_MAX_BYTES // 1024 // 1024} MB 上限")
+    calculated_sha256 = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    if export.export_sha256 and not hmac.compare_digest(export.export_sha256, calculated_sha256):
+        raise ValueError("匯出檔 SHA-256 不符，檔案可能不完整或已被修改")
 
     planned: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -462,7 +502,7 @@ def plan_artifact_import(export: ArtifactExport) -> dict[str, Any]:
                 target_counts[target] = target_counts.get(target, 0) + 1
 
     return {
-        "sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        "sha256": calculated_sha256,
         "byte_size": byte_size,
         "record_count": len(planned),
         "skipped_count": skipped_count,
@@ -1691,22 +1731,66 @@ def create_reibi_router(client: Any) -> APIRouter:
         if duplicate:
             return {"status": "success", "data": {"duplicate": True, "batch": duplicate[0], "summary": {key: value for key, value in plan.items() if key != "records"}}}
 
+        previous_batches = _execute(
+            client.table("reibi_artifact_import_batches").select("id,status")
+            .eq("source_artifact", export.source_artifact).eq("export_sha256", plan["sha256"])
+            .in_("status", ["failed", "importing"]).order("created_at", desc=True).limit(1),
+            "檢查可恢復匯入批次",
+        )
+        retry_of_batch_id = previous_batches[0]["id"] if previous_batches else None
+        prior_imported: dict[tuple[str, str], dict[str, Any]] = {}
+        if retry_of_batch_id is not None:
+            previous_records = _execute(
+                client.table("reibi_artifact_import_records")
+                .select("storage_key,source_record_id,target_id,status")
+                .eq("batch_id", retry_of_batch_id).eq("status", "imported"),
+                "讀取已完成的匯入記錄",
+            )
+            prior_imported = {
+                (row["storage_key"], row["source_record_id"]): row
+                for row in previous_records
+            }
+
+        public_plan = {key: value for key, value in plan.items() if key != "records"}
         batches = _execute(client.table("reibi_artifact_import_batches").insert({
+            "schema_version": export.schema_version,
             "source_artifact": export.source_artifact,
             "source_version": export.source_version,
+            "exported_at": export.exported_at.isoformat() if export.exported_at else None,
+            "part": export.part,
+            "parts": export.parts,
             "export_sha256": plan["sha256"],
             "status": "importing",
             "record_count": plan["record_count"],
-            "created_by": current_user.get("uid"),
+            "internal_created_by": current_user.get("auth_user_id") or current_user.get("uid"),
+            "retry_of_batch_id": retry_of_batch_id,
+            "started_at": _now_iso(),
+            "last_resumed_at": _now_iso() if retry_of_batch_id is not None else None,
+            "preflight_summary": public_plan,
         }), "建立匯入批次")
         batch_id = batches[0]["id"]
         imported = 0
         rejected = 0
+        resumed = 0
         errors: list[dict[str, str]] = []
 
         priority = {"l5_staff": 1, "l5_partners": 2, "l5_enterprises": 3, "l5_distributors": 4, "rq_quotes": 5, "rq_contracts": 6, "rq_workorders": 7}
         records = sorted(plan["records"], key=lambda item: priority.get(item["storage_key"], 99))
         for item in records:
+            previous = prior_imported.get((item["storage_key"], item["source_record_id"]))
+            if previous:
+                resumed += 1
+                _execute(client.table("reibi_artifact_import_records").insert({
+                    "batch_id": batch_id,
+                    "storage_key": item["storage_key"],
+                    "source_record_id": item["source_record_id"],
+                    "target_table": item["target_table"],
+                    "target_id": previous.get("target_id"),
+                    "status": "skipped",
+                    "error_detail": "先前批次已成功匯入，本次恢復流程不重複寫入",
+                    "raw_payload": item["raw_payload"],
+                }), "記錄已恢復的匯入結果")
+                continue
             target_id: Optional[str] = None
             record_status = "skipped"
             error_detail: Optional[str] = None
@@ -1835,6 +1919,6 @@ def create_reibi_router(client: Any) -> APIRouter:
             "error_summary": errors[:100],
             "completed_at": _now_iso(),
         }).eq("id", batch_id), "完成匯入批次")
-        return {"status": "success", "data": {"duplicate": False, "batch": updated[0], "summary": {key: value for key, value in plan.items() if key != "records"}}}
+        return {"status": "success", "data": {"duplicate": False, "resumed_count": resumed, "batch": updated[0], "summary": public_plan}}
 
     return router

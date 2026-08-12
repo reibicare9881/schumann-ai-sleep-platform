@@ -1,6 +1,6 @@
 # Supabase 現況盤點
 
-盤點日期：2026-08-10  
+初始盤點：2026-08-10；最近驗證：2026-08-12
 Project：`Schumann-AI-Platform`  
 Project ref：`wfgqnjupemzfhaosmogx`  
 盤點方式：Supabase MCP 唯讀 metadata 查詢、本機程式碼對照與 Supabase CLI baseline pull
@@ -8,8 +8,8 @@ Project ref：`wfgqnjupemzfhaosmogx`
 ## 摘要
 
 - 專案狀態為 `ACTIVE_HEALTHY`，PostgreSQL 17.6。
-- `public` schema 有 6 個資料表；Supabase 回報的資料列數目前皆為 0。
-- 已建立版本化 baseline migration；本機與遠端 migration history 皆為 `20260810032520_baseline_remote_schema`。
+- 初始 `public` schema 有 6 個資料表；Batch A–G migrations 套用後目前有 43 張 public tables。
+- 本機與遠端共有 11 個 migrations，最新為 `20260812145751_reibi_batch_g_secure_import`。
 - 沒有 Edge Functions。
 - 沒有 public views 或一般 table triggers。
 - 已安裝的主要 extension：`pgcrypto`、`uuid-ossp`、`supabase_vault`、`pg_stat_statements`、`plpgsql`。
@@ -93,22 +93,22 @@ Project ref：`wfgqnjupemzfhaosmogx`
 ## Migration 順序與進度
 
 1. `baseline_remote_schema`：已完成，只捕捉現有遠端 schema。
-2. `harden_existing_access`：已建立並通過本機重播與 Database Advisors；尚未推送遠端。內容包含撤銷瀏覽器角色的直接 table access、鎖定 event-trigger function、優化 RLS policy，以及保護敏感 settings endpoint。
-3. `extend_reibi_domain`：已建立並通過本機完整重播；新增 20 張 REIBI 業務、健康與 Artifact 匯入 tables，包含 constraints、FK indexes、RLS 與明確 grants；尚未推送遠端。
-4. `add_existing_integrity_indexes`：仍待補既有 baseline tables 的 FK 與經查詢模式確認需要的索引，不混入 REIBI domain migration。
-5. Artifact data import：獨立程式與 dry-run，不放入 `seed.sql`；欄位映射見 `docs/reibi-artifact-mapping.md`。
+2. `harden_existing_access`：已套用遠端；撤銷瀏覽器角色直接 table access、鎖定 event-trigger function、優化 RLS policy 並保護敏感 settings endpoint。
+3. `extend_reibi_domain`：已套用遠端；建立 REIBI 業務、健康與 Artifact 匯入基礎 tables、constraints、FK indexes、RLS 與明確 grants。
+4. Batch B–F：商務閉環、財務夥伴、健康職安、Gemini 組織分析、設定服務及安全索引均已套用遠端。
+5. `reibi_batch_g_secure_import`：已套用遠端；新增內部 Auth 白名單、可撤銷 session、登入稽核與可恢復 Artifact 匯入欄位。
+6. Artifact data import：獨立匯出／預檢／匯入流程，不放入 `seed.sql`；欄位映射見 `docs/reibi-artifact-mapping.md`，正式操作見 `docs/reibi-batch-g-runbook.md`。
 
 ## 本機驗證紀錄
 
-- baseline、hardening 與 extend_reibi_domain migrations 可從空白本機 Supabase Postgres 依序成功套用。
-- REIBI public tables 共 20 張，RLS disabled 數量為 0；`anon`/`authenticated`/`PUBLIC` table grants 數量為 0，`service_role` 可存取 20 張。
+- 全部 11 個 migrations 可從空白本機 Supabase Postgres 依序成功套用。
+- 所有 Batch A–G 新增 REIBI public tables 均啟用 RLS；`anon`/`authenticated`/`PUBLIC` 沒有直接 table grants，`service_role` 只由 FastAPI 後端使用。
 - `anon`、`authenticated` 對 `public` tables 的直接 grants 數量為 0。
 - `anon`、`authenticated`、`service_role` 均無法直接執行 `public.rls_auto_enable()`。
 - 三個既有 ownership policies 已限定為 `authenticated`，並同時包含快取式 `(select auth.uid())` ownership check 與 `WITH CHECK`。
-- 本機 `supabase db advisors --type all --level warn` 回報 `No issues found`。
-- 遠端 migration history 目前仍只有 baseline；hardening 與 REIBI domain 尚未套用遠端。
-- `supabase db push --linked --dry-run` 已確認目前會推送 `20260810033150_harden_existing_access.sql` 與 `20260810035451_extend_reibi_domain.sql`，dry-run 沒有實際變更遠端。
-- 原正式 FastAPI Railway 服務因免費試用到期已停止，production URL 回傳 404 `Application not found`；需先選定新的正式後端主機，才進行部署與遠端 migration 推送。
+- 本機 database lint 無 warning/error，95 個 pgTAP 測試全部通過。
+- 遠端 11 個 migrations 與本機一致；security advisors 只有既有的 leaked-password protection WARN，其他為刻意採 deny-by-default 的 RLS INFO；performance advisors 只有新系統尚無正式流量造成的 unused-index INFO。
+- 原正式 FastAPI Railway 服務因免費試用到期已停止；不阻擋本機開發與 migration，但在選定新後端主機前無法進行正式網路匯入。
 
 ## Advisor references
 

@@ -181,6 +181,20 @@ export const API = {
     
     return response;
   },
+
+  async internalLogin(email: string, password: string, totpCode?: string) {
+    const response = await this.request('/api/auth/internal/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, totp_code: totpCode || undefined })
+    });
+    const rawResponse = response as any;
+    const sessionData = rawResponse.data?.session || rawResponse.session;
+    const accessToken = rawResponse.data?.access_token || rawResponse.access_token;
+    if (response.status === 'success' && sessionData && accessToken) {
+      this.setSession({ ...sessionData, platform: 'sleep', access_token: accessToken });
+    }
+    return response;
+  },
   
   async logout() {
     const session = this.getSession();
@@ -715,6 +729,21 @@ export const API = {
     entries: Array<{ storage_key: string; value: any }>;
   }) {
     return this.request('/api/reibi/artifacts/validate', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+  async importReibiArtifact(payload: {
+    schema_version?: 'reibi-artifact-export/1.0';
+    source_artifact: 'main' | 'l5' | 'quote' | 'workorder';
+    source_version?: string;
+    exported_at?: string;
+    part?: number;
+    parts?: number;
+    export_sha256?: string;
+    entries: Array<{ storage_key: string; value: any }>;
+  }) {
+    return this.request('/api/reibi/artifacts/import', {
       method: 'POST',
       body: JSON.stringify(payload)
     });

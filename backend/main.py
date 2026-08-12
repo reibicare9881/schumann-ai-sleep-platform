@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from auth import create_access_token, get_current_user, require_admin
+from auth import create_access_token, get_current_user, require_admin, configure_reibi_super_session_validator
 from config import settings
 import fitz      # PyMuPDF
 import requests
@@ -40,6 +40,7 @@ from reibi_batch_c import create_reibi_batch_c_router
 from reibi_batch_d import create_reibi_batch_d_router
 from reibi_batch_e import create_reibi_batch_e_router
 from reibi_batch_f import create_reibi_batch_f_router
+from reibi_batch_g import create_internal_session_validator, create_reibi_batch_g_router
 
 app = FastAPI(
     title="統一多平台 API",
@@ -70,6 +71,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+configure_reibi_super_session_validator(create_internal_session_validator(supabase))
 
 # REIBI business and Artifact-import endpoints use the same authenticated,
 # server-side Supabase client. No service-role credential is exposed to clients.
@@ -78,6 +80,7 @@ app.include_router(create_reibi_batch_c_router(supabase))
 app.include_router(create_reibi_batch_d_router(supabase))
 app.include_router(create_reibi_batch_e_router(supabase))
 app.include_router(create_reibi_batch_f_router(supabase))
+app.include_router(create_reibi_batch_g_router(supabase))
 
 # 建立密碼加密上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

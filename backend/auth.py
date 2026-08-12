@@ -1,5 +1,7 @@
 import jwt
-from datetime import datetime, timedelta
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Callable, Optional
 from fastapi import Depends, HTTPException, status, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from config import settings  # 引入我們之前建立的環境變數設定檔
@@ -12,6 +14,14 @@ ALGORITHM = "HS256"
 # 對應你前端 Zero Trust 的 30 分鐘超時設定
 ACCESS_TOKEN_EXPIRE_MINUTES = 30 
 
+_reibi_super_session_validator: Optional[Callable[[dict], bool]] = None
+
+
+def configure_reibi_super_session_validator(validator: Callable[[dict], bool]) -> None:
+    """Register the server-side revocation check after Supabase is initialized."""
+    global _reibi_super_session_validator
+    _reibi_super_session_validator = validator
+
 def create_access_token(data: dict) -> str:
     """
     產生 JWT Token
@@ -20,8 +30,9 @@ def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     
     # 設定過期時間 (UTC 時間 + 30 分鐘)
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"iat": now, "exp": expire, "jti": to_encode.get("jti") or str(uuid.uuid4())})
     
     # 使用環境變數中的 JWT_SECRET_KEY 進行加密簽章
     encoded_jwt = jwt.encode(to_encode, settings.jwt_secret_key, algorithm=ALGORITHM)
@@ -53,6 +64,20 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
         if uid is None or role is None:
             raise credentials_exception
             
+        if role == "reibi_super":
+            if _reibi_super_session_validator is None:
+                raise credentials_exception
+            try:
+                session_is_active = _reibi_super_session_validator(payload)
+            except Exception:
+                session_is_active = False
+            if not session_is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="REIBI 內部工作階段已失效，請重新登入",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
         return payload  # 回傳完整的 payload (包含 uid, name, role, org_code 等)
         
     except jwt.ExpiredSignatureError:

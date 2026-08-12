@@ -1,4 +1,5 @@
 import unittest
+import hashlib
 from datetime import date
 
 from reibi_api import (
@@ -29,6 +30,32 @@ class ReibiArtifactImportTests(unittest.TestCase):
         self.assertEqual(plan["record_count"], 1)
         self.assertEqual(plan["target_counts"], {"reibi_enterprises": 1})
         self.assertEqual(plan["records"][0]["source_record_id"], "CASE_1")
+
+    def test_versioned_export_hash_is_verified_with_javascript_number_rules(self):
+        payload = {
+            "schema_version": "reibi-artifact-export/1.0",
+            "source_artifact": "quote",
+            "source_version": "v1.13",
+            "exported_at": "2026-08-12T08:00:00Z",
+            "part": 1,
+            "parts": 1,
+            "entries": [{"storage_key": "rq_quotes", "value": [{"id": "Q1", "amount": 1.0, "name": "測試"}]}],
+        }
+        # This string mirrors stableExportJson() in the four Artifact files.
+        canonical = '{"entries":[{"storage_key":"rq_quotes","value":[{"amount":1,"id":"Q1","name":"測試"}]}],"exported_at":"2026-08-12T08:00:00Z","part":1,"parts":1,"schema_version":"reibi-artifact-export/1.0","source_artifact":"quote","source_version":"v1.13"}'
+        payload["export_sha256"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+        plan = plan_artifact_import(ArtifactExport(**payload))
+
+        self.assertEqual(plan["sha256"], payload["export_sha256"])
+
+    def test_versioned_export_rejects_modified_payload(self):
+        with self.assertRaisesRegex(ValueError, "SHA-256 不符"):
+            plan_artifact_import(ArtifactExport(
+                source_artifact="quote",
+                export_sha256="0" * 64,
+                entries=[{"storage_key": "rq_quotes", "value": [{"id": "Q1"}]}],
+            ))
 
     def test_skips_credentials_and_does_not_stage_pin(self):
         export = ArtifactExport(
