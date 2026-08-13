@@ -19,14 +19,16 @@ export default function ReibiInternalLoginPage() {
     event.preventDefault();
     setLoading(true);
     setError("");
-    const response: any = await API.internalLogin(email, password, totpCode);
+    const response: any = await API.accountLogin(email, password, totpCode);
     if (response.status === "success") {
       const apiSession = API.getSession();
       await login({
         id: apiSession?.user_id,
         uid: apiSession?.user_id,
         name: apiSession?.name,
-        systemRole: "reibi_super",
+        systemRole: apiSession?.role,
+        orgCode: apiSession?.org_code,
+        dept: apiSession?.dept,
         platform: "sleep",
         apiSession,
       });
@@ -46,13 +48,13 @@ export default function ReibiInternalLoginPage() {
           <div className="flex items-start gap-4">
             <div className="rounded-2xl bg-teal-500/15 p-3 text-teal-300"><ShieldCheck className="h-7 w-7" /></div>
             <div>
-              <h1 className="text-xl font-black">REIBI 內部管理登入</h1>
-              <p className="mt-1 text-xs leading-5 text-slate-400">僅供已加入 Supabase Auth 白名單的內部人員。一般企業通行碼無法取得此權限。</p>
+              <h1 className="text-xl font-black">SleepM／REIBI 帳號登入</h1>
+              <p className="mt-1 text-xs leading-5 text-slate-400">使用受邀的 Supabase Auth 帳號登入；角色、企業、部門及經銷商範圍均由伺服器核定。</p>
             </div>
           </div>
 
           <form onSubmit={submit} className="mt-7 space-y-4">
-            <label className="block text-xs font-bold text-slate-300">內部 Email
+            <label className="block text-xs font-bold text-slate-300">Email
               <input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm outline-none focus:border-teal-500" />
             </label>
             <label className="block text-xs font-bold text-slate-300">密碼

@@ -189,7 +189,9 @@ export default function LoginPage() {
     }
   };
 
-  const nonAdminRoles = Object.entries(ROLES).filter(([k]) => !["individual", "reibi_super"].includes(k));
+  // The shared-PIN compatibility flow must never expose trusted-only roles.
+  const legacyPinRoles = new Set(["member", "dept_head", "admin", "occupational_health"]);
+  const nonAdminRoles = Object.entries(ROLES).filter(([key]) => legacyPinRoles.has(key));
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
@@ -252,7 +254,7 @@ export default function LoginPage() {
           </div>
           <div className="mt-6 text-center">
             <Link href="/reibi-login" className="inline-flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-slate-700">
-              <ShieldCheck className="h-4 w-4" /> REIBI 內部人員登入
+              <ShieldCheck className="h-4 w-4" /> 受邀帳號安全登入
             </Link>
           </div>
         </>

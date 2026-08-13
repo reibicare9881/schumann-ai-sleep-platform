@@ -41,9 +41,9 @@
 | FastAPI REIBI router | `[-]` | 有企業、報價、合約、工單基礎 API 與 Artifact 預檢／匯入 |
 | Next.js REIBI 管理頁 | `[-]` | 有企業基本資料與 Artifact 預檢；尚無完整業務模組 |
 | Artifact 欄位映射 | `[-]` | 主要 storage keys 已映射；仍需以實際匯出檔驗證 |
-| Python 測試環境 | `[x]` | 工作區 `.venv` 已以 Python 3.11.9 重建；依賴檢查及 16 項後端測試通過 |
+| Python 測試環境 | `[x]` | 工作區 `.venv` 使用 Python 3.11.9；66 項後端與 127 項 pgTAP 測試通過 |
 | 四 Artifact JSON 匯出 | `[ ]` | 尚未加入已發布 Artifact |
-| `reibi_super` 安全登入 | `[ ]` | 後端角色守門已存在，但沒有可信登入來源 |
+| `reibi_super` 安全登入 | `[x]` | Supabase Auth、邀請、TOTP、可撤銷 session 與管理介面完成；正式帳號數仍為 0 |
 | 既有資料正式匯入 | `[ ]` | 必須等匯出工具與 `reibi_super` 完成 |
 
 ## 3. 全域基礎與資安
@@ -66,13 +66,13 @@
 ### IAM：身分與權限
 
 - [-] IAM-01 現有 `individual/member/dept_head/admin` JWT 登入。
-- [ ] IAM-02 將 Artifact 的角色矩陣整理成後端單一權威來源。
-- [ ] IAM-03 支援 `admin_hr/admin_finance/admin_it/occupational_health` 的可信身分與權限。
-- [ ] IAM-04 支援 L5 內部角色及經銷商角色，不再使用 Artifact 測試模式登入。
+- [x] IAM-02 將 Artifact 的 15 個來源角色正規化為 14 個可信角色，後端 `roles.py` 為權限判定來源；`admin_reibi` 與 L5 `super` 合併為 `reibi_super`。
+- [x] IAM-03 支援 `admin_hr/admin_finance/admin_it/occupational_health` 的 Supabase Auth 可信身分與企業／部門範圍。
+- [x] IAM-04 支援 L5 `reibi_super/reibi_finance/reibi_data/reibi_cs` 與兩種經銷商可信角色；新增角色不能由舊共用 PIN 取得。
 - [-] IAM-05 已完成 Supabase Auth、內部白名單、可撤銷 session、登入限速與選用 AAL2/TOTP；第一位正式 Auth user 仍待使用者提供工作 Email 後建立。
-- [ ] IAM-06 管理者建立、停用、重設角色及撤銷 session。
-- [ ] IAM-07 前後端權限矩陣自動化測試，避免 UI 顯示與 API 權限脫節。
-- [ ] IAM-08 部門必選角色與 `session.dept` 的伺服器端驗證。
+- [x] IAM-06 `reibi_super` 可跨範圍邀請、停用及撤銷 session；單位 `admin` 只能管理自己企業的非 admin 角色，並防止自我停用與最後一位超管被停用。
+- [-] IAM-07 已有 14 角色、權限、可信 session 與資料庫 scope 測試；全站逐 endpoint 的 401／403 矩陣仍併入 TST-04。
+- [x] IAM-08 五種部門必選角色由 DB constraint、跨表 trigger 與 FastAPI 同時驗證，登入 token 的 `session.dept` 取自伺服器資料。
 
 ## 4. 主平台功能
 
@@ -348,3 +348,12 @@
 - [x] OPS-G01：完成內部帳號 bootstrap、Artifact 重發／匯出、還原點、匯入順序、核對與緊急撤銷 runbook。
 - [x] TST-G01：56 個 Python 測試、95 個 pgTAP 測試、四份 Artifact JSX 語法解析、本機 migration 全量重播與 Next.js production build 通過。
 - [ ] DATA-G01：仍需從四個已發布 Artifact 取得實際 JSON 與來源筆數截圖，才可執行真實資料預檢、正式匯入與簽核；repo 內沒有這些 `window.storage` 資料。
+
+## 18. Batch H 身分／角色系統（2026-08-13）
+
+- [x] IAM-H01：建立 14 角色後端權威 registry，涵蓋主平台、L5 內部與經銷商；可信專屬角色一律要求 server-side session 驗證。
+- [x] IAM-H02：擴充 `reibi_internal_users` 的 profile、企業、部門、staff、distributor 與 MFA 綁定，DB constraint 與 trigger 阻擋錯誤範圍。
+- [x] IAM-H03：完成帳號邀請、邀請密碼設定、TOTP 設定／驗證、可信登入、停用、重新啟用及 session 撤銷 API 與前端頁面。
+- [x] SEC-H01：身分、session 與稽核表維持 RLS；`anon`／`authenticated` 無 table access，瀏覽器不取得 service-role、Supabase access token 或 refresh token。
+- [x] TST-H01：66 個 Python 測試、127 個 pgTAP、全量 migration 重播、database lint、FastAPI 路由 smoke test 與 Next.js production build 通過。
+- [ ] OPS-H01：第一位正式 `reibi_super` 尚未建立；遠端 `reibi_internal_users` 目前為 0 筆，歸下一個獨立步驟。

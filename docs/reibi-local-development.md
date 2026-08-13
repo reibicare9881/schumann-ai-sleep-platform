@@ -46,7 +46,7 @@
 | Artifact JSON 預檢 | 是 | 是 |
 | Artifact 跨組織正式匯入 | 否 | 是 |
 
-`reibi_super` 使用獨立的 `/reibi-login`：Supabase Auth Email／密碼、已驗證 Email、`reibi_internal_users` 白名單與可撤銷的 30 分鐘 server-side session。單位共用 PIN 永遠不能取得這個角色；若帳號設定 `mfa_required`，後端還會要求 TOTP 並驗證到 AAL2。管理頁只對該角色顯示正式寫入按鈕。第一位正式內部帳號的建立與 Artifact 搬移操作見 `docs/reibi-batch-g-runbook.md`。
+受邀的主平台、REIBI 內部與經銷商角色統一使用 `/reibi-login`：Supabase Auth Email／密碼、已驗證 Email、`reibi_internal_users` 可信 registry 與可撤銷的 30 分鐘 server-side session。角色、企業、部門及經銷商範圍均由伺服器載入，瀏覽器不能自行指定。單位共用 PIN 永遠不能取得 L5 或經銷商角色；要求 MFA 的邀請會在 `/auth/complete` 完成 TOTP 設定，後續登入必須達 AAL2。`admin` 與 `reibi_super` 可使用 `/reibi/accounts`，但前者只能管理自己企業且不能授予 `admin`。第一位正式內部帳號的建立與 Artifact 搬移操作見 `docs/reibi-batch-g-runbook.md`。
 
 ## Artifact JSON 格式
 

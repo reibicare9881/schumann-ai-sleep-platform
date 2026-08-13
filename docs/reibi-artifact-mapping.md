@@ -74,7 +74,7 @@
 
 目前 repo 只有 Artifact 原始碼，沒有已發布環境中的 `window.storage` 實際資料，因此 migration 能先完成，真正搬移仍需要四個 Artifact 各自的 export。
 
-FastAPI 已提供 `/api/reibi/artifacts/validate` 預檢與 `/api/reibi/artifacts/import` 正式匯入骨架。JSON 格式、權限及本機啟動方式見 `docs/reibi-local-development.md`。目前網頁只開放預檢；跨組織匯入必須使用尚待接入正式身分系統的 `reibi_super`。
+FastAPI 已提供 `/api/reibi/artifacts/validate` 預檢與 `/api/reibi/artifacts/import` 正式匯入骨架。JSON 格式、權限及本機啟動方式見 `docs/reibi-local-development.md`。跨組織正式匯入必須使用 Supabase Auth 驗證且 server-side session 有效的 `reibi_super`；身分系統已完成，但第一位正式帳號仍待下一步建立。
 
 ## AI 統一規則
 

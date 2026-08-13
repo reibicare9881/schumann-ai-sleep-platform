@@ -5,6 +5,7 @@ from typing import Callable, Optional
 from fastapi import Depends, HTTPException, status, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from config import settings  # 引入我們之前建立的環境變數設定檔
+from roles import PARTNER_ROLES, TRUSTED_EXCLUSIVE_ROLES, has_permission
 
 # 實例化 HTTPBearer，FastAPI 會自動去抓取 HTTP Header 裡的 Authorization: Bearer <token>
 security = HTTPBearer()
@@ -14,13 +15,21 @@ ALGORITHM = "HS256"
 # 對應你前端 Zero Trust 的 30 分鐘超時設定
 ACCESS_TOKEN_EXPIRE_MINUTES = 30 
 
+_trusted_session_validator: Optional[Callable[[dict], bool]] = None
+# Compatibility alias kept for existing tests and extensions.
 _reibi_super_session_validator: Optional[Callable[[dict], bool]] = None
+
+
+def configure_trusted_session_validator(validator: Callable[[dict], bool]) -> None:
+    """Register the server-side revocation and role-binding check."""
+    global _trusted_session_validator, _reibi_super_session_validator
+    _trusted_session_validator = validator
+    _reibi_super_session_validator = validator
 
 
 def configure_reibi_super_session_validator(validator: Callable[[dict], bool]) -> None:
     """Register the server-side revocation check after Supabase is initialized."""
-    global _reibi_super_session_validator
-    _reibi_super_session_validator = validator
+    configure_trusted_session_validator(validator)
 
 def create_access_token(data: dict) -> str:
     """
@@ -64,11 +73,16 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
         if uid is None or role is None:
             raise credentials_exception
             
-        if role == "reibi_super":
-            if _reibi_super_session_validator is None:
+        requires_trusted_session = (
+            payload.get("auth_source") == "supabase"
+            or role in TRUSTED_EXCLUSIVE_ROLES
+        )
+        if requires_trusted_session:
+            validator = _trusted_session_validator or _reibi_super_session_validator
+            if validator is None:
                 raise credentials_exception
             try:
-                session_is_active = _reibi_super_session_validator(payload)
+                session_is_active = validator(payload)
             except Exception:
                 session_is_active = False
             if not session_is_active:
@@ -114,7 +128,7 @@ def require_member_or_above(current_user: dict = Depends(get_current_user)) -> d
 
 def require_reibi_manager(current_user: dict = Depends(get_current_user)) -> dict:
     """REIBI 管理 API：現有單位管理者或未來的 REIBI 內部超管。"""
-    if current_user.get("role") not in {"admin", "reibi_super"}:
+    if not has_permission(current_user, "manage_reibi"):
         raise HTTPException(status_code=403, detail="權限不足：限 REIBI 管理人員使用")
     return current_user
 
@@ -128,7 +142,7 @@ def require_reibi_super(current_user: dict = Depends(get_current_user)) -> dict:
 
 def require_reibi_partner(current_user: dict = Depends(get_current_user)) -> dict:
     """經銷商入口只接受經銷商角色，不與企業或 REIBI 內部角色混用。"""
-    if current_user.get("role") not in {"partner_primary", "partner_sub"}:
+    if current_user.get("role") not in PARTNER_ROLES:
         raise HTTPException(status_code=403, detail="權限不足：限已驗證的 REIBI 經銷商使用")
     if not (current_user.get("partner_org_code") or current_user.get("org_code")):
         raise HTTPException(status_code=403, detail="經銷商身分缺少 partner_org_code")

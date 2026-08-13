@@ -25,6 +25,10 @@ interface Session {
   name?: string;
   org_code?: string;
   org_name?: string; 
+  dept?: string;
+  department_id?: number;
+  partner_org_code?: string;
+  distributor_id?: number;
 }
 
 // ==========================================
@@ -194,6 +198,66 @@ export const API = {
       this.setSession({ ...sessionData, platform: 'sleep', access_token: accessToken });
     }
     return response;
+  },
+
+  async accountLogin(email: string, password: string, totpCode?: string) {
+    const response = await this.request('/api/auth/account/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, totp_code: totpCode || undefined })
+    });
+    const rawResponse = response as any;
+    const sessionData = rawResponse.data?.session || rawResponse.session;
+    const accessToken = rawResponse.data?.access_token || rawResponse.access_token;
+    if (response.status === 'success' && sessionData && accessToken) {
+      this.setSession({ ...sessionData, platform: 'sleep', access_token: accessToken });
+    }
+    return response;
+  },
+
+  async getIdentityRoles() {
+    return this.request('/api/auth/roles');
+  },
+
+  async listIdentityAccounts() {
+    return this.request('/api/auth/accounts');
+  },
+
+  async getIdentityAccountScopes() {
+    return this.request('/api/auth/account-scopes');
+  },
+
+  async inviteIdentityAccount(payload: Record<string, unknown>) {
+    return this.request('/api/auth/accounts/invite', {
+      method: 'POST', body: JSON.stringify(payload)
+    });
+  },
+
+  async updateIdentityAccount(authUserId: string, payload: Record<string, unknown>) {
+    return this.request(`/api/auth/accounts/${authUserId}`, {
+      method: 'PATCH', body: JSON.stringify(payload)
+    });
+  },
+
+  async revokeIdentitySessions(authUserId: string) {
+    return this.request(`/api/auth/accounts/${authUserId}/revoke-sessions`, { method: 'POST' });
+  },
+
+  async completeIdentityInvite(accessToken: string, password: string) {
+    return this.request('/api/auth/complete-invite', {
+      method: 'POST', body: JSON.stringify({ access_token: accessToken, password })
+    });
+  },
+
+  async enrollIdentityMfa(email: string, password: string) {
+    return this.request('/api/auth/mfa/enroll', {
+      method: 'POST', body: JSON.stringify({ email, password })
+    });
+  },
+
+  async verifyIdentityMfa(email: string, password: string, factorId: string, code: string) {
+    return this.request('/api/auth/mfa/verify-enrollment', {
+      method: 'POST', body: JSON.stringify({ email, password, factor_id: factorId, code })
+    });
   },
   
   async logout() {

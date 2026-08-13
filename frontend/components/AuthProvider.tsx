@@ -16,7 +16,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     // 定義免登入白名單
-    const publicPaths = ['/login', '/reibi-login', '/pain-education', '/sleep-management'];
+    const publicPaths = ['/login', '/reibi-login', '/auth/complete', '/pain-education', '/sleep-management'];
     const isPublicPath = publicPaths.includes(pathname);
 
     // 嚴格使用後端 API Session，不允許退回 LocalStorage
@@ -29,6 +29,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         name: backendSession.name || "使用者", 
         orgCode: backendSession.org_code, 
         orgName: backendSession.org_name || backendSession.org_code,
+        dept: backendSession.dept,
         apiSession: backendSession,
         // 🟢 順便補上防呆機制
         platform: backendSession.platform || "sleep"

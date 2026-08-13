@@ -99,7 +99,7 @@ export default function PrivacyPage() {
           <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5">
             <div className="flex items-center gap-2 font-bold text-emerald-700 mb-4"><Users className="w-4 h-4"/> 角色分層與去識別化</div>
             <ul className="space-y-3 text-xs text-slate-600">
-              <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0"/> 四層嚴密角色：個人/成員/主管/管理</li>
+              <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0"/> 14 種可信角色，依個人、企業、REIBI 內部與經銷商範圍分權</li>
               <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0"/> 管理者首次設定三組相異通行碼</li>
               <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0"/> 去識別化：主管僅見所屬部門數據</li>
               <li className="flex gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0"/> k-匿名性：&lt;{K_MIN}人不顯示KPI統計</li>

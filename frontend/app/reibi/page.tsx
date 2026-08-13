@@ -390,6 +390,7 @@ export default function ReibiManagementPage() {
           <Link href="/reibi/health" className="inline-flex items-center gap-2 rounded-xl bg-rose-700 px-4 py-2 text-sm font-bold text-white"><HeartPulse className="w-4 h-4" /> 健康與職安</Link>
           <Link href="/reibi/analytics" className="inline-flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2 text-sm font-bold text-white"><BarChart3 className="w-4 h-4" /> 組織分析</Link>
           <Link href="/reibi/service" className="inline-flex items-center gap-2 rounded-xl bg-sky-700 px-4 py-2 text-sm font-bold text-white"><Headphones className="w-4 h-4" /> 服務與整合</Link>
+          {["admin", "reibi_super"].includes(session.systemRole) && <Link href="/reibi/accounts" className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white"><Users className="w-4 h-4" /> 身分與角色</Link>}
           <button onClick={loadOverview} disabled={loading} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-600 disabled:opacity-50">
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> 重新整理
           </button>
