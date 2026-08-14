@@ -13,6 +13,7 @@ from reibi_batch_g import (
     MfaSelfEnrollRequest,
     MfaSelfVerifyRequest,
     _fingerprint,
+    create_internal_session_validator,
     create_reibi_batch_g_router,
 )
 
@@ -41,6 +42,35 @@ class ReibiBatchGTests(unittest.TestCase):
 
         auth.configure_reibi_super_session_validator(lambda payload: payload["jti"] == "session-1")
         self.assertEqual(get_current_user(credentials)["role"], "reibi_super")
+
+    def test_internal_session_validator_uses_auth_user_relationship(self):
+        client = MagicMock()
+        builder = MagicMock()
+        builder.select.return_value = builder
+        builder.eq.return_value = builder
+        builder.is_.return_value = builder
+        builder.gt.return_value = builder
+        builder.limit.return_value = builder
+        builder.execute.return_value = SimpleNamespace(data=[{
+            "id": "session-1",
+            "expires_at": "2099-01-01T00:00:00+00:00",
+            "revoked_at": None,
+            "identity": {"is_active": True, "internal_role": "reibi_super"},
+        }])
+        client.table.return_value = builder
+
+        validate = create_internal_session_validator(client)
+
+        self.assertTrue(validate({
+            "jti": "session-1",
+            "auth_user_id": "user-1",
+            "role": "reibi_super",
+        }))
+        builder.select.assert_called_once_with(
+            "id,expires_at,revoked_at,"
+            "identity:reibi_internal_users!reibi_internal_sessions_auth_user_id_fkey"
+            "(is_active,internal_role)"
+        )
 
     def test_login_audit_fingerprint_is_keyed_and_does_not_store_plaintext(self):
         first = _fingerprint("operator@example.com")

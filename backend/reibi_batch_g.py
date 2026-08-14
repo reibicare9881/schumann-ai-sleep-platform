@@ -143,7 +143,11 @@ def create_internal_session_validator(client: Client):
             return False
         rows = _execute(
             client.table("reibi_internal_sessions")
-            .select("id,expires_at,revoked_at,reibi_internal_users!inner(is_active,internal_role)")
+            .select(
+                "id,expires_at,revoked_at,"
+                "identity:reibi_internal_users!reibi_internal_sessions_auth_user_id_fkey"
+                "(is_active,internal_role)"
+            )
             .eq("id", session_id)
             .eq("auth_user_id", auth_user_id)
             .is_("revoked_at", "null")
@@ -153,7 +157,7 @@ def create_internal_session_validator(client: Client):
         )
         if not rows:
             return False
-        identity = rows[0].get("reibi_internal_users") or {}
+        identity = rows[0].get("identity") or {}
         return bool(identity.get("is_active") and identity.get("internal_role") == token_role)
 
     return validate
