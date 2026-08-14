@@ -158,7 +158,7 @@ class ReibiBatchGTests(unittest.TestCase):
         )
         aal2_token = create_access_token({"uid": auth_user_id, "role": "reibi_super", "aal": "aal2"})
         auth_client.auth.mfa.challenge_and_verify.return_value = SimpleNamespace(
-            session=SimpleNamespace(access_token=aal2_token)
+            access_token=aal2_token
         )
         router = create_reibi_batch_g_router(client)
         endpoint = self._endpoint(router, "/api/auth/mfa/self/verify")

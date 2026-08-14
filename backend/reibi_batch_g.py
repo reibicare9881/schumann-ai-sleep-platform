@@ -116,6 +116,16 @@ def _user_value(user: Any, key: str) -> Any:
     return getattr(user, key, None)
 
 
+def _mfa_access_token(response: Any) -> str | None:
+    """Read the upgraded JWT from current and legacy MFA response shapes."""
+    direct_token = getattr(response, "access_token", None)
+    if direct_token:
+        return str(direct_token)
+    session = getattr(response, "session", None)
+    session_token = getattr(session, "access_token", None)
+    return str(session_token) if session_token else None
+
+
 def _normalize_email(email: str) -> str:
     normalized = email.strip().casefold()
     if "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
@@ -325,7 +335,7 @@ def create_reibi_batch_g_router(client: Client) -> APIRouter:
                         "factor_id": verified_totp[0].id,
                         "code": payload.totp_code,
                     })
-                    verified_token = getattr(getattr(verified, "session", None), "access_token", None)
+                    verified_token = _mfa_access_token(verified)
                     if verified_token:
                         auth_claims = jwt.decode(
                             verified_token, options={"verify_signature": False, "verify_aud": False}
@@ -493,7 +503,7 @@ def create_reibi_batch_g_router(client: Client) -> APIRouter:
                 "factor_id": factor_id,
                 "code": code,
             })
-            verified_token = getattr(getattr(verified, "session", None), "access_token", None)
+            verified_token = _mfa_access_token(verified)
             verified_claims = (
                 jwt.decode(verified_token, options={"verify_signature": False, "verify_aud": False})
                 if verified_token
