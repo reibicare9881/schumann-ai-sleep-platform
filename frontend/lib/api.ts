@@ -254,9 +254,21 @@ export const API = {
     });
   },
 
+  async enrollCurrentIdentityMfa(password: string) {
+    return this.request('/api/auth/mfa/self/enroll', {
+      method: 'POST', body: JSON.stringify({ password })
+    });
+  },
+
   async verifyIdentityMfa(email: string, password: string, factorId: string, code: string) {
     return this.request('/api/auth/mfa/verify-enrollment', {
       method: 'POST', body: JSON.stringify({ email, password, factor_id: factorId, code })
+    });
+  },
+
+  async verifyCurrentIdentityMfa(password: string, factorId: string, code: string) {
+    return this.request('/api/auth/mfa/self/verify', {
+      method: 'POST', body: JSON.stringify({ password, factor_id: factorId, code })
     });
   },
   

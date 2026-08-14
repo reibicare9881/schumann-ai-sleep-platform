@@ -1,6 +1,6 @@
 # Supabase 現況盤點
 
-初始盤點：2026-08-10；最近驗證：2026-08-12
+初始盤點：2026-08-10；最近文件校正：2026-08-14
 Project：`Schumann-AI-Platform`  
 Project ref：`wfgqnjupemzfhaosmogx`  
 盤點方式：Supabase MCP 唯讀 metadata 查詢、本機程式碼對照與 Supabase CLI baseline pull
@@ -8,8 +8,8 @@ Project ref：`wfgqnjupemzfhaosmogx`
 ## 摘要
 
 - 專案狀態為 `ACTIVE_HEALTHY`，PostgreSQL 17.6。
-- 初始 `public` schema 有 6 個資料表；Batch A–G migrations 套用後目前有 43 張 public tables。
-- 本機與遠端共有 11 個 migrations，最新為 `20260812145751_reibi_batch_g_secure_import`。
+- 初始 `public` schema 有 6 個資料表；Batch A–H migrations 套用後目前有 44 張 public tables，其中 38 張為 `reibi_*`。
+- 本機與遠端共有 14 個 migrations，最新為 `20260814032823_reibi_mfa_self_enrollment`。
 - 沒有 Edge Functions。
 - 沒有 public views 或一般 table triggers。
 - 已安裝的主要 extension：`pgcrypto`、`uuid-ossp`、`supabase_vault`、`pg_stat_statements`、`plpgsql`。
@@ -83,9 +83,11 @@ Project ref：`wfgqnjupemzfhaosmogx`
 
 ## 資料與遷移結論
 
+2026-08-14 範圍決策：不匯出或匯入舊 Artifact 的 `window.storage`，新 Supabase 業務資料乾淨起始。匯出／匯入架構保留為選用復原能力；詳見 [REIBI 舊 Artifact 資料不搬遷決策](reibi-legacy-data-scope-decision.md)。
+
 - Supabase 目前沒有業務資料，已發布 Artifact 的既有資料並不在這個 project 裡。
 - `reibi` 四個已發布 Claude Artifact 的原始碼未使用 Supabase URL、client 或 `anon`/`authenticated` key；它們使用各 Artifact 隔離的 `window.storage`，所以 database hardening 不會切斷既有 Artifact 資料。
-- Artifact 資料搬移必須走獨立 export/import pipeline，不能假設 `db pull` 會帶回這些資料。
+- 若未來另行核准 Artifact 資料搬移，必須走獨立 export/import pipeline，不能假設 `db pull` 會帶回這些資料。
 - CLI 已完成 `link` 與 `db pull`，baseline 位於 `supabase/migrations/20260810032520_baseline_remote_schema.sql`。
 - baseline 只代表目前 Supabase schema；安全修正與 reibi 擴充必須拆成後續、可審查的 migrations。
 - baseline 保留遠端現況，包括寬鬆 grants、公開可執行的 `SECURITY DEFINER` function，以及移除本機預設 `pg_net`/`pg_graphql` extension 的語句；這些項目應在後續 migration 處理，而不是改寫已記錄為 applied 的 baseline。
@@ -97,18 +99,20 @@ Project ref：`wfgqnjupemzfhaosmogx`
 3. `extend_reibi_domain`：已套用遠端；建立 REIBI 業務、健康與 Artifact 匯入基礎 tables、constraints、FK indexes、RLS 與明確 grants。
 4. Batch B–F：商務閉環、財務夥伴、健康職安、Gemini 組織分析、設定服務及安全索引均已套用遠端。
 5. `reibi_batch_g_secure_import`：已套用遠端；新增內部 Auth 白名單、可撤銷 session、登入稽核與可恢復 Artifact 匯入欄位。
-6. Artifact data import：獨立匯出／預檢／匯入流程，不放入 `seed.sql`；欄位映射見 `docs/reibi-artifact-mapping.md`，正式操作見 `docs/reibi-batch-g-runbook.md`。
+6. Batch H identity roles：兩個 migrations 已套用遠端；完成可信角色 registry、邀請、TOTP 流程與交易式身分更新。
+7. MFA self-enrollment：已套用遠端；只有 Supabase TOTP 驗證達 AAL2 後，才原子要求 MFA、撤銷舊應用 session 並寫入 audit。
+8. Artifact data import：依 2026-08-14 範圍決策不執行；相關資料表維持 0 筆為預期。選用映射見 [Artifact 資料映射](reibi-artifact-mapping.md)，保留操作見 [Batch G 手冊](reibi-batch-g-runbook.md)。
 
 ## 本機驗證紀錄
 
-- 全部 11 個 migrations 可從空白本機 Supabase Postgres 依序成功套用。
-- 所有 Batch A–G 新增 REIBI public tables 均啟用 RLS；`anon`/`authenticated`/`PUBLIC` 沒有直接 table grants，`service_role` 只由 FastAPI 後端使用。
+- 全部 14 個 migrations 可從空白本機 Supabase Postgres 依序成功套用。
+- 所有 Batch A–H 新增 REIBI public tables 均啟用 RLS；`anon`/`authenticated`/`PUBLIC` 沒有直接 table grants，`service_role` 只由 FastAPI 後端使用。
 - `anon`、`authenticated` 對 `public` tables 的直接 grants 數量為 0。
 - `anon`、`authenticated`、`service_role` 均無法直接執行 `public.rls_auto_enable()`。
 - 三個既有 ownership policies 已限定為 `authenticated`，並同時包含快取式 `(select auth.uid())` ownership check 與 `WITH CHECK`。
-- 本機 database lint 無 warning/error，95 個 pgTAP 測試全部通過。
-- 遠端 11 個 migrations 與本機一致；security advisors 只有既有的 leaked-password protection WARN，其他為刻意採 deny-by-default 的 RLS INFO；performance advisors 只有新系統尚無正式流量造成的 unused-index INFO。
-- 原正式 FastAPI Railway 服務因免費試用到期已停止；不阻擋本機開發與 migration，但在選定新後端主機前無法進行正式網路匯入。
+- 本機 database lint 無 warning/error，2026-08-14 驗證為 135 個 pgTAP 測試全部通過。
+- 遠端 14 個 migrations 與本機一致；MFA transaction 已以回滾測試確認 flag、session revocation 與 audit。Security advisors 只有既有的 [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) WARN，其他為刻意採 deny-by-default 的 RLS INFO；performance advisors 只有新系統尚無正式流量造成的 unused-index INFO。
+- Railway Hobby 已建立 staging 後端，供遠端整合測試；舊 Artifact 正式網路匯入因範圍決策不執行。
 
 ## Advisor references
 

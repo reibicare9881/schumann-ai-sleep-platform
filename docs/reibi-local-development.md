@@ -1,13 +1,13 @@
-# REIBI 本機開發與匯入流程
+# REIBI 本機開發與選用匯入流程
 
 ## 現階段環境邊界
 
-- 暫不使用 Railway；這不影響本機開發或 Supabase schema／資料搬移。
+- Railway Hobby 已建立 staging 後端；本機開發仍使用 `http://localhost:8000`，部署環境與本機環境不可混用 secrets。
 - `baseline_remote_schema`、`harden_existing_access` 與 `extend_reibi_domain` 已於 2026-08-12 在本機重播驗證，並套用至已綁定的遠端 Supabase。
-- 遠端已有 20 張 `reibi_*` 資料表，20/20 均啟用 RLS；只有 `postgres` 與 `service_role` 具有表權限。
+- 遠端已有 38 張 `reibi_*` 資料表，均由 migration 建立並採 deny-by-default RLS／grants；應用程式資料存取只經 FastAPI 的 `service_role`。
 - 前端本機 API URL 為 `http://localhost:8000`。
 - FastAPI 持有 `service_role`，前端永遠不可取得該 key，也不直接呼叫 Supabase Data API。
-- 已發布 Artifact 的實際 `window.storage` 資料不在此 repo；必須分別從四個已發布 Artifact 匯出 JSON，才能進行資料搬移。
+- 已發布 Artifact 的實際 `window.storage` 資料不在此 repo；依 [2026-08-14 範圍決策](reibi-legacy-data-scope-decision.md)，不匯出或搬移舊資料，新 Supabase 業務資料乾淨起始。
 
 ## 啟動順序
 
@@ -44,11 +44,15 @@
 | 查看／新增自己企業的報價、合約、工單 | 是 | 是 |
 | 更新自己企業商務文件狀態 | 是 | 是 |
 | Artifact JSON 預檢 | 是 | 是 |
-| Artifact 跨組織正式匯入 | 否 | 是 |
+| Artifact 跨組織匯入技術能力（目前範圍不執行） | 否 | 是 |
 
-受邀的主平台、REIBI 內部與經銷商角色統一使用 `/reibi-login`：Supabase Auth Email／密碼、已驗證 Email、`reibi_internal_users` 可信 registry 與可撤銷的 30 分鐘 server-side session。角色、企業、部門及經銷商範圍均由伺服器載入，瀏覽器不能自行指定。單位共用 PIN 永遠不能取得 L5 或經銷商角色；要求 MFA 的邀請會在 `/auth/complete` 完成 TOTP 設定，後續登入必須達 AAL2。`admin` 與 `reibi_super` 可使用 `/reibi/accounts`，但前者只能管理自己企業且不能授予 `admin`。第一位正式內部帳號的建立與 Artifact 搬移操作見 `docs/reibi-batch-g-runbook.md`。
+受邀的主平台、REIBI 內部與經銷商角色統一使用 `/reibi-login`：Supabase Auth Email／密碼、已驗證 Email、`reibi_internal_users` 可信 registry 與可撤銷的 30 分鐘 server-side session。角色、企業、部門及經銷商範圍均由伺服器載入，瀏覽器不能自行指定。單位共用 PIN 永遠不能取得 L5 或經銷商角色；要求 MFA 的邀請會在 `/auth/complete` 完成 TOTP 設定，後續登入必須達 AAL2。`admin` 與 `reibi_super` 可使用 `/reibi/accounts`，但前者只能管理自己企業且不能授予 `admin`。第一位正式 `reibi_super` 已建立並可登入，目前尚待 TOTP／AAL2 強化；後續帳號與選用匯入操作見 [Batch G 手冊](reibi-batch-g-runbook.md)。
+
+既有可信帳號可在 `/reibi/mfa` 補綁 TOTP。流程會要求再次輸入密碼、顯示 QR Code、驗證六位數代碼；只有 Supabase 回傳 AAL2 後，後端才透過版本化 transaction 設定 `mfa_required=true`，並撤銷所有舊 AAL1 應用工作階段。不得先在 Dashboard 或 SQL Editor 手動開啟該 flag。
 
 ## Artifact JSON 格式
+
+本節只記錄已保留的選用搬遷能力，目前上線流程不要求產生或匯入舊 Artifact JSON。
 
 標準格式（舊格式仍可預檢；正式匯出使用版本化 envelope）：
 
@@ -110,6 +114,6 @@ npx.cmd tsc --noEmit
 npm.cmd run build
 ```
 
-截至 2026-08-12，migration 重播、前端 production build，以及本機／遠端資料表、RLS、權限與 Database Advisors 已完成驗證。遠端 advisor 尚有一項既有警告：Auth 的 leaked-password protection 未啟用；正式上線前應在 Supabase Auth 設定中開啟。
+截至 2026-08-14，migration 重播、前端 production build，以及本機／遠端資料表、RLS、權限與 Database Advisors 已有完整驗證紀錄。遠端 advisor 尚有一項既有警告：Auth 的 leaked-password protection 未啟用；正式上線前應在 Supabase Auth 設定中開啟。
 
-後端 `.venv` 已重新連上 Python 3.11.9；`pip check` 與完整 Python 測試可正常執行。
+後端 `.venv` 已連上可用的 Python 3.11.9；2026-08-14 重新執行 `pip check` 無相依衝突，69 項 Python 後端與 135 項 pgTAP 測試通過。先前「指向不存在 Python 3.11」的判斷是受限環境誤判，不是目前 `.venv` 狀態。

@@ -60,6 +60,15 @@ class MfaVerifyEnrollmentRequest(MfaEnrollRequest):
     code: str = Field(pattern=r"^\d{6}$")
 
 
+class MfaSelfEnrollRequest(StrictModel):
+    password: str = Field(min_length=8, max_length=1024)
+
+
+class MfaSelfVerifyRequest(MfaSelfEnrollRequest):
+    factor_id: str = Field(min_length=10, max_length=200)
+    code: str = Field(pattern=r"^\d{6}$")
+
+
 class AccountInviteRequest(StrictModel):
     email: str = Field(min_length=3, max_length=254)
     display_name: str = Field(min_length=1, max_length=200)
@@ -159,6 +168,11 @@ def create_reibi_batch_g_router(client: Client) -> APIRouter:
             or current_user.get("role") not in {"reibi_super", "admin"}
         ):
             raise HTTPException(status_code=403, detail="此帳號沒有可信身分管理權限")
+        return current_user
+
+    def require_trusted_identity(current_user: dict = Depends(get_current_user)) -> dict:
+        if current_user.get("auth_source") != "supabase" or current_user.get("role") not in ALL_ROLES:
+            raise HTTPException(status_code=403, detail="此帳號不是可信 Supabase 身分")
         return current_user
 
     def audit_login(
@@ -420,7 +434,7 @@ def create_reibi_batch_g_router(client: Client) -> APIRouter:
             factors = auth_client.auth.mfa.list_factors()
             verified = [factor for factor in factors.totp if factor.status == "verified"]
             if verified:
-                return {"already_enrolled": True}
+                return {"already_enrolled": True, "factor_id": verified[0].id}
             enrollment = auth_client.auth.mfa.enroll({
                 "factor_type": "totp",
                 "friendly_name": "SleepM / REIBI",
@@ -439,6 +453,63 @@ def create_reibi_batch_g_router(client: Client) -> APIRouter:
             raise
         except Exception as exc:
             raise HTTPException(status_code=401, detail="Email、密碼或帳號狀態不正確") from exc
+        finally:
+            try:
+                auth_client.auth.sign_out()
+            except Exception:
+                pass
+
+    def verify_totp_and_enable(
+        email: str,
+        password: str,
+        factor_id: str,
+        code: str,
+        *,
+        expected_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        normalized = _normalize_email(email)
+        auth_client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+        try:
+            response = auth_client.auth.sign_in_with_password({"email": normalized, "password": password})
+            user_id = str(_user_value(response.user, "id") or "")
+            if expected_user_id and user_id != expected_user_id:
+                raise HTTPException(status_code=401, detail="Email、密碼或帳號狀態不正確")
+            rows = _execute(
+                client.table("reibi_internal_users")
+                .select("auth_user_id,is_active")
+                .eq("auth_user_id", user_id)
+                .eq("email", normalized)
+                .eq("is_active", True)
+                .limit(1),
+                "驗證 MFA 帳號",
+            )
+            if not rows:
+                raise HTTPException(status_code=401, detail="Email、密碼或帳號狀態不正確")
+            verified = auth_client.auth.mfa.challenge_and_verify({
+                "factor_id": factor_id,
+                "code": code,
+            })
+            verified_token = getattr(getattr(verified, "session", None), "access_token", None)
+            verified_claims = (
+                jwt.decode(verified_token, options={"verify_signature": False, "verify_aud": False})
+                if verified_token
+                else {}
+            )
+            if verified_claims.get("aal") != "aal2":
+                raise HTTPException(status_code=401, detail="MFA 驗證未達 AAL2")
+            _execute(
+                client.rpc("reibi_enable_mfa", {"p_target": user_id}),
+                "啟用 MFA 並撤銷舊工作階段",
+            )
+            return {
+                "status": "success",
+                "message": "MFA 設定完成，請重新登入",
+                "data": {"mfa_required": True, "aal": "aal2", "reauth_required": True},
+            }
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=401, detail="MFA 驗證碼不正確或已失效") from exc
         finally:
             try:
                 auth_client.auth.sign_out()
@@ -492,38 +563,56 @@ def create_reibi_batch_g_router(client: Client) -> APIRouter:
     def enroll_mfa(payload: MfaEnrollRequest):
         return {"status": "success", "data": enroll_totp(payload.email, payload.password)}
 
+    @router.post("/mfa/self/enroll")
+    def enroll_self_mfa(
+        payload: MfaSelfEnrollRequest,
+        current_user: dict = Depends(require_trusted_identity),
+    ):
+        auth_user_id = str(current_user.get("auth_user_id") or current_user.get("uid") or "")
+        rows = _execute(
+            client.table("reibi_internal_users")
+            .select("auth_user_id,email,is_active")
+            .eq("auth_user_id", auth_user_id)
+            .eq("is_active", True)
+            .limit(1),
+            "讀取 MFA 設定帳號",
+        )
+        if not rows:
+            raise HTTPException(status_code=401, detail="帳號不存在或已停用")
+        return {"status": "success", "data": enroll_totp(rows[0]["email"], payload.password)}
+
     @router.post("/mfa/verify-enrollment")
     def verify_mfa_enrollment(payload: MfaVerifyEnrollmentRequest):
-        email = _normalize_email(payload.email)
-        auth_client = create_client(settings.supabase_url, settings.supabase_service_role_key)
-        try:
-            response = auth_client.auth.sign_in_with_password({"email": email, "password": payload.password})
-            user_id = str(_user_value(response.user, "id") or "")
-            rows = _execute(
-                client.table("reibi_internal_users")
-                .select("auth_user_id,is_active")
-                .eq("auth_user_id", user_id)
-                .eq("email", email)
-                .eq("is_active", True)
-                .limit(1),
-                "驗證 MFA 帳號",
-            )
-            if not rows:
-                raise HTTPException(status_code=401, detail="Email、密碼或帳號狀態不正確")
-            auth_client.auth.mfa.challenge_and_verify({
-                "factor_id": payload.factor_id,
-                "code": payload.code,
-            })
-            return {"status": "success", "message": "MFA 設定完成，現在可以登入"}
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(status_code=401, detail="MFA 驗證碼不正確或已失效") from exc
-        finally:
-            try:
-                auth_client.auth.sign_out()
-            except Exception:
-                pass
+        return verify_totp_and_enable(
+            payload.email,
+            payload.password,
+            payload.factor_id,
+            payload.code,
+        )
+
+    @router.post("/mfa/self/verify")
+    def verify_self_mfa(
+        payload: MfaSelfVerifyRequest,
+        current_user: dict = Depends(require_trusted_identity),
+    ):
+        auth_user_id = str(current_user.get("auth_user_id") or current_user.get("uid") or "")
+        rows = _execute(
+            client.table("reibi_internal_users")
+            .select("auth_user_id,email,is_active")
+            .eq("auth_user_id", auth_user_id)
+            .eq("is_active", True)
+            .limit(1),
+            "讀取 MFA 驗證帳號",
+        )
+        if not rows:
+            raise HTTPException(status_code=401, detail="帳號不存在或已停用")
+        return verify_totp_and_enable(
+            rows[0]["email"],
+            payload.password,
+            payload.factor_id,
+            payload.code,
+            expected_user_id=auth_user_id,
+        )
 
     @router.get("/accounts")
     def list_accounts(current_user: dict = Depends(require_identity_admin)):

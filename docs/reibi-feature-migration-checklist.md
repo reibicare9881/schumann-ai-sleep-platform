@@ -1,6 +1,6 @@
 # REIBI 完整功能移植清單
 
-最後盤點日期：2026-08-12
+最後盤點日期：2026-08-14
 工作分支：`codex/reibi-fastapi-merge`
 
 ## 1. 範圍與完成定義
@@ -18,6 +18,9 @@
 - `[-]` 已有骨架或部分功能，尚未達到完整驗收標準
 - `[ ]` 尚未開始
 - `[~]` 刻意延後，依賴外部服務或使用者決策
+- `[N/A]` 經核准的範圍決策明確排除，不列入未完成進度
+
+舊 Artifact 資料搬遷已依 [2026-08-14 範圍決策](reibi-legacy-data-scope-decision.md) 排除：不匯出或匯入既有 `window.storage`，新 Supabase 業務資料乾淨起始；既有匯出／匯入能力保留為選用復原工具。
 
 任何模組只有同時符合以下條件，才可改為 `[x]`：
 
@@ -27,7 +30,7 @@
 4. 前端具備載入中、空狀態、錯誤狀態、成功回饋及手機版可用性。
 5. `service_role` 不出現在前端；瀏覽器不直接操作 REIBI 資料表。
 6. 後端單元／API 測試、前端型別／production build、資料庫 advisor 均通過。
-7. 涉及既有 Artifact 資料時，完成 dry-run、筆數核對、重複匯入與失敗回復測試。
+7. 涉及且已核准搬移既有 Artifact 資料時，完成 dry-run、筆數核對、重複匯入與失敗回復測試；目前舊資料搬遷為 `[N/A]`。
 8. 涉及 AI 時只使用 Gemini，並記錄實際 `ai_model`；歷史文字不得偽標為 Gemini 產出。
 
 ## 2. 目前整體狀態
@@ -37,14 +40,14 @@
 | Draft Pull Request | `[x]` | 已由使用者建立 |
 | Supabase baseline | `[x]` | 本機與遠端 migration 一致 |
 | Database hardening | `[x]` | `anon`／`authenticated` 無 REIBI 表權限 |
-| REIBI domain schema | `[x]` | 20 張 `reibi_*` 表，20/20 啟用 RLS |
-| FastAPI REIBI router | `[-]` | 有企業、報價、合約、工單基礎 API 與 Artifact 預檢／匯入 |
-| Next.js REIBI 管理頁 | `[-]` | 有企業基本資料與 Artifact 預檢；尚無完整業務模組 |
-| Artifact 欄位映射 | `[-]` | 主要 storage keys 已映射；仍需以實際匯出檔驗證 |
-| Python 測試環境 | `[x]` | 工作區 `.venv` 使用 Python 3.11.9；66 項後端與 127 項 pgTAP 測試通過 |
-| 四 Artifact JSON 匯出 | `[ ]` | 尚未加入已發布 Artifact |
-| `reibi_super` 安全登入 | `[x]` | Supabase Auth、邀請、TOTP、可撤銷 session 與管理介面完成；正式帳號數仍為 0 |
-| 既有資料正式匯入 | `[ ]` | 必須等匯出工具與 `reibi_super` 完成 |
+| REIBI domain schema | `[x]` | 38 張 `reibi_*` 表，均由 migration 建立並採 deny-by-default RLS／grants |
+| FastAPI REIBI router | `[-]` | Batch A–H 主要業務與身分 API 已完成；尚待統一 response／稽核、全 endpoint 權限矩陣及 E2E |
+| Next.js REIBI 管理頁 | `[-]` | 主要商務、健康、分析、設定與帳號流程已完成；尚待 L5 總覽／待辦、地圖、部分 UX 與瀏覽器 E2E |
+| Artifact 欄位映射 | `[x]` | 主要 storage keys 與目標表已完成程式對照；因舊資料不搬遷，不要求真實匯出檔驗證 |
+| Python 測試環境 | `[x]` | 工作區 `.venv` 使用 Python 3.11.9；2026-08-14 重驗 `pip check` 正常、69 項後端與 135 項 pgTAP 測試通過 |
+| 四 Artifact JSON 匯出 | `[N/A]` | JSX 已具備匯出工具，但依範圍決策不重新發布、不執行真實匯出 |
+| `reibi_super` 安全登入 | `[x]` | 第一位正式帳號 `reibicare9881@gmail.com`（麗媚AI）已完成 Email、密碼與登入；目前 AAL1，MFA 強化另列待辦 |
+| 既有資料正式匯入 | `[N/A]` | 依範圍決策不搬移舊 `window.storage`；新 Supabase 業務資料乾淨起始 |
 
 ## 3. 全域基礎與資安
 
@@ -69,7 +72,7 @@
 - [x] IAM-02 將 Artifact 的 15 個來源角色正規化為 14 個可信角色，後端 `roles.py` 為權限判定來源；`admin_reibi` 與 L5 `super` 合併為 `reibi_super`。
 - [x] IAM-03 支援 `admin_hr/admin_finance/admin_it/occupational_health` 的 Supabase Auth 可信身分與企業／部門範圍。
 - [x] IAM-04 支援 L5 `reibi_super/reibi_finance/reibi_data/reibi_cs` 與兩種經銷商可信角色；新增角色不能由舊共用 PIN 取得。
-- [-] IAM-05 已完成 Supabase Auth、內部白名單、可撤銷 session、登入限速與選用 AAL2/TOTP；第一位正式 Auth user 仍待使用者提供工作 Email 後建立。
+- [-] IAM-05 已完成 Supabase Auth、內部白名單、可撤銷 session、登入限速、既有帳號 TOTP self-enrollment 與 AAL2 強制流程；第一位正式 `reibi_super` 已建立並可登入，目前尚待本人實際掃描 QR Code 完成 enrollment。
 - [x] IAM-06 `reibi_super` 可跨範圍邀請、停用及撤銷 session；單位 `admin` 只能管理自己企業的非 admin 角色，並防止自我停用與最後一位超管被停用。
 - [-] IAM-07 已有 14 角色、權限、可信 session 與資料庫 scope 測試；全站逐 endpoint 的 401／403 矩陣仍併入 TST-04。
 - [x] IAM-08 五種部門必選角色由 DB constraint、跨表 trigger 與 FastAPI 同時驗證，登入 token 的 `session.dept` 取自伺服器資料。
@@ -140,7 +143,7 @@
 
 - [ ] L5-01A 依角色顯示的總覽與待辦統計。
 - [ ] L5-01B 新案開通流程、流水號與憑證函。
-- [-] L5-01C 企業管理基本資料；目前企業管理者可完整維護自身企業，跨企業總覽須等 `reibi_super` 安全登入完成。
+- [-] L5-01C 企業管理基本資料；企業管理者可完整維護自身企業，`reibi_super` 安全登入已完成，跨企業總覽 UI 與端對端驗收仍待補齊。
 - [x] L5-01D 企業場域、設備、A/B/C/D 四層方案、授權用量、平台帳號核對與合約狀態。
 - [-] L5-01E 服務案件與企業範圍限制已完成；經銷商專屬案件範圍仍待正式角色登入整合。
 - [x] L5-01F 預約管理與組織越權防護。
@@ -163,7 +166,7 @@
 
 ### L5-04 系統與分析
 
-- [-] L5-04A 已完成不保存明文 PIN 的憑證復原／權限申請與人工核驗佇列；正式 `reibi_super` 登入與一次性復原連結歸 Batch G。
+- [-] L5-04A 已完成不保存明文 PIN 的憑證復原／權限申請、人工核驗佇列、正式 `reibi_super` 登入及邀請密碼設定；完整管理者復原情境 E2E 仍待驗收。
 - [-] L5-04B 已完成 LINE 範本、草稿、人工複製、API 發送與失敗記錄；正式上線仍須提供 LINE channel access token 並做端對端驗收。
 - [x] L5-04C 跨企業健康大數據（明確研究同意且每個企業及指標子群均為 k≥5）。
 - [x] L5-04D 報表中心、日期篩選、CSV 與列印／另存 PDF。
@@ -207,6 +210,8 @@
 
 ## 8. Artifact 匯出與既有資料搬移
 
+本節的技術能力已保留，但真實舊資料搬遷依 [範圍決策](reibi-legacy-data-scope-decision.md) 不執行；下列 `[N/A]` 不計入未完成進度。
+
 ### EXP：四個 Artifact 匯出
 
 - [x] EXP-01 定義版本化 JSON envelope、來源版本、匯出時間與 SHA-256。
@@ -214,21 +219,21 @@
 - [x] EXP-03 L5 匯出工具。
 - [x] EXP-04 quote 匯出工具。
 - [x] EXP-05 workorder 匯出工具。
-- [ ] EXP-06 每個 Artifact 重新發布後，以有意義的測試資料驗證匯出。
+- [N/A] EXP-06 不重新發布已發布 Artifact，也不以真實舊資料執行匯出驗收。
 - [x] EXP-07 大資料分批／分檔與 20 MB Artifact 限制處理。
-- [ ] EXP-08 使用者保管原始匯出檔與匯出前筆數截圖，作為核對依據。
+- [N/A] EXP-08 不產生真實舊資料匯出檔與筆數截圖。
 
 ### IMP：預檢與匯入
 
 - [x] IMP-01 JSON schema、10 MB／5,000 entries 限制、敏感欄位移除、SHA-256 驗證與 target planning。
 - [x] IMP-02 import batch／record、SHA-256 去重、失敗摘要與 retry lineage。
-- [ ] IMP-03 真實匯出檔逐 key 預檢與欄位差異報告。
+- [N/A] IMP-03 不取得真實匯出檔，因此不執行逐 key 預檢與差異報告。
 - [x] IMP-04 前端只開放 `reibi_super` 的正式匯入確認流程。
 - [x] IMP-05 匯入前資料庫備份／還原點與操作 runbook。
 - [x] IMP-06 分 Artifact、分批匯入與可重跑策略。
-- [ ] IMP-07 來源筆數、imported/skipped/rejected、目標筆數與關聯完整性核對。
-- [ ] IMP-08 敏感資料、k≥5、舊 activation code、歷史 AI provider 抽樣驗證。
-- [ ] IMP-09 匯入完成簽核與 Artifact 舊系統唯讀／退役決策。
+- [N/A] IMP-07 不執行舊資料來源／目標筆數與關聯核對。
+- [N/A] IMP-08 不執行舊資料匯入抽樣；新資料仍須遵守敏感資料、k≥5、憑證與 Gemini 規則。
+- [N/A] IMP-09 不需要舊資料匯入簽核；舊 Artifact 的唯讀保留／退役日期另依保留需求決定。
 
 ## 9. 測試、品質與發布
 
@@ -238,7 +243,8 @@
 - [x] TST-02 `pip check`、compile、unit test 與 FastAPI TestClient 均通過。
 - [ ] TST-03 對 Supabase client 建立 fake／integration test 分層。
 - [ ] TST-04 每個角色的 401／403、跨組織 IDOR/BOLA 測試。
-- [ ] TST-05 Artifact mapping fixture 與真實匯出樣本回歸測試。
+- [ ] TST-05A Artifact mapping 的合成 fixture 回歸測試。
+- [N/A] TST-05B 真實 Artifact 匯出樣本回歸測試；依範圍決策不取得真實舊資料。
 - [x] TST-06 前端 production build 通過。
 - [ ] TST-07 前端主要流程瀏覽器 smoke test 與手機版檢查。
 - [x] TST-08 migration 從空資料庫重播成功。
@@ -251,8 +257,8 @@
 
 - [ ] REL-01 每一批功能維持 Draft PR，通過測試才標記 ready for review。
 - [ ] REL-02 migration、API、前端與 runbook code review。
-- [ ] REL-03 遠端 schema／資料備份與正式匯入演練。
-- [ ] REL-04 選定 Railway 替代部署平台或恢復付費部署；目前不阻擋本機開發。
+- [ ] REL-03 遠端 schema／新系統資料備份與乾淨起始演練；舊 Artifact 正式匯入演練為 `[N/A]`。
+- [x] REL-04 Railway Hobby staging 後端已建立，可進行遠端整合測試。
 - [ ] REL-05 設定正式 secrets、CORS、網域、HTTPS、監控與錯誤告警。
 - [ ] REL-06 完整驗證後才合併到 `main`。
 
@@ -266,13 +272,13 @@
 
 ## 11. 建議實作批次
 
-1. **Batch A：企業、場域與部門管理** — 租戶範圍功能已完成；L5-01C 的跨企業總覽併入 `reibi_super` 登入批次。
+1. **Batch A：企業、場域與部門管理** — 租戶範圍與 `reibi_super` 登入已完成；L5-01C 的跨企業總覽 UI／E2E 仍待補齊。
 2. **Batch B：報價→合約→工單→驗收閉環** — QT-01、CT-01、WO-01～WO-09。
 3. **Batch C：L5 夥伴與財務** — L5-02、L5-03。
 4. **Batch D：個人健康與職安** — MP-02、MP-03、MP-04。
 5. **Batch E：組織分析與 Gemini 報告** — MP-05、L5-04C～L5-04F。
 6. **Batch F：其餘設定、服務與外部整合介面** — MP-06、L5-04。
-7. **Batch G：Artifact 匯出、`reibi_super`、正式資料匯入** — EXP、IAM-05、IMP。
+7. **Batch G：Artifact 匯出／匯入能力與 `reibi_super`** — EXP、IAM-05、IMP 的技術能力已完成；真實舊資料執行面依 2026-08-14 決策為 `[N/A]`。
 
 第一個實作批次固定以「企業、場域與部門管理」開始，因報價、合約、工單、職安與彙整資料都依賴正確的企業與部門關聯。
 
@@ -291,7 +297,7 @@
 - [x] FIN-C01：依 L5 Artifact 唯一權威 `buildEntPaymentRows` 公式建立 A1–A3、B1–B3、C1–C3、D1–D2 應收時程，保留到期、待確認、部分付款、已付款與通知日期。
 - [x] FIN-C02：匯款申報、人工比對、跨應收項目配置與原子沖帳；重複覆核由 FastAPI 擋下。
 - [x] FIN-C03：發票草稿 CRUD、品項、5% 稅額、受控狀態、匯款與 B2C 訂閱關聯。
-- [x] FIN-C04：個人訂閱審核、到期日與啟用碼重發；新碼只回傳一次，資料庫只保存 SHA-256 與末四碼，舊 Artifact 明碼保留待正式匯入預檢決策。
+- [x] FIN-C04：個人訂閱審核、到期日與啟用碼重發；新碼只回傳一次，資料庫只保存 SHA-256 與末四碼；舊 Artifact 明碼依範圍決策不匯入。
 - [x] PAR-C01：經銷商主／次層級、區域、等級、服務人員、三方合約分配欄位與停用流程。
 - [x] PAR-C02：銀／金／白金／戰略四等級 A/B/C 獨立分潤、LA200 併入 B 層、預設 65% REIBI 保留下限、資料庫觸發器護欄、月結帳冊與年度業績。
 - [x] PAR-C03：合作夥伴／推薦人與 REIBI staff CRUD、預設比例、職稱、啟停用。
@@ -347,7 +353,7 @@
 - [x] IMP-G01：管理頁新增只對 `reibi_super` 顯示的正式匯入確認；完成檔案去重，失敗重跑保留 retry lineage 並跳過先前成功來源記錄。
 - [x] OPS-G01：完成內部帳號 bootstrap、Artifact 重發／匯出、還原點、匯入順序、核對與緊急撤銷 runbook。
 - [x] TST-G01：56 個 Python 測試、95 個 pgTAP 測試、四份 Artifact JSX 語法解析、本機 migration 全量重播與 Next.js production build 通過。
-- [ ] DATA-G01：仍需從四個已發布 Artifact 取得實際 JSON 與來源筆數截圖，才可執行真實資料預檢、正式匯入與簽核；repo 內沒有這些 `window.storage` 資料。
+- [N/A] DATA-G01：專案負責人於 2026-08-14 決定不匯出／匯入四個已發布 Artifact 的既有 `window.storage`；import batches/records 維持 0 筆是預期狀態。
 
 ## 18. Batch H 身分／角色系統（2026-08-13）
 
@@ -356,4 +362,13 @@
 - [x] IAM-H03：完成帳號邀請、邀請密碼設定、TOTP 設定／驗證、可信登入、停用、重新啟用及 session 撤銷 API 與前端頁面。
 - [x] SEC-H01：身分、session 與稽核表維持 RLS；`anon`／`authenticated` 無 table access，瀏覽器不取得 service-role、Supabase access token 或 refresh token。
 - [x] TST-H01：66 個 Python 測試、127 個 pgTAP、全量 migration 重播、database lint、FastAPI 路由 smoke test 與 Next.js production build 通過。
-- [ ] OPS-H01：第一位正式 `reibi_super` 尚未建立；遠端 `reibi_internal_users` 目前為 0 筆，歸下一個獨立步驟。
+- [x] OPS-H01：第一位正式 `reibi_super` `reibicare9881@gmail.com`（麗媚AI）已建立，Email 與密碼設定完成並成功登入。
+- [-] OPS-H02：`/reibi/mfa` self-enrollment、TOTP 驗證、原子設定 `mfa_required=true`、撤銷舊 AAL1 session 與 audit 已完成；尚待正式 `reibi_super` 本人掃描 QR Code，並完成實際 AAL2 重新登入。
+
+## 19. MFA 既有帳號補綁（2026-08-14）
+
+- [x] MFA-I01：新增受可信 session 保護的 `/reibi/mfa`，既有帳號須重新輸入密碼後才取得 TOTP QR Code／設定密鑰。
+- [x] MFA-I02：Supabase `challenge_and_verify` 回傳 AAL2 後，後端才呼叫 `reibi_enable_mfa`；AAL1 或錯誤驗證碼不得啟用要求。
+- [x] MFA-I03：版本化 transaction 會原子設定 `mfa_required=true`、撤銷所有既有應用工作階段並寫入 identity audit；`anon`／`authenticated` 不可執行 RPC。
+- [x] MFA-I04：69 項 Python、135 項 pgTAP、TypeScript 與 Next.js production build 通過；本機／遠端 14 個 migration 版本一致，遠端回滾測試通過。
+- [ ] MFA-I05：由 `reibicare9881@gmail.com` 在 staging 實際掃描 QR Code、驗證六位數代碼，並重新登入確認 token／session 為 AAL2。

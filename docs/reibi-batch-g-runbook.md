@@ -1,5 +1,7 @@
 # REIBI Batch G：Artifact 資料搬移與內部帳號操作手冊
 
+> **範圍狀態（2026-08-14）**：專案已決定不匯出或匯入舊 Artifact 的 `window.storage`，新 Supabase 業務資料乾淨起始。第 3～6 節只保留作為日後另行核准的選用復原流程，目前不得執行。詳見 [範圍決策](reibi-legacy-data-scope-decision.md)。內部帳號與緊急撤銷流程仍有效。
+
 ## 完成範圍
 
 - 四個 Artifact 皆有「匯出搬移資料」按鈕。
@@ -16,6 +18,8 @@
 
 ## 2. 建立第一位 REIBI 內部帳號
 
+目前第一位正式 `reibi_super` 已完成：`reibicare9881@gmail.com`，顯示名稱「麗媚AI」，Email／密碼設定完成並已成功登入。現階段尚未啟用 TOTP，`mfa_required = false`、登入為 AAL1；請登入後前往 `/reibi/mfa`，掃描 QR Code 並驗證六位數代碼。系統只會在驗證達 AAL2 後原子開啟 MFA 並撤銷舊 session。以下步驟保留供後續新增帳號使用。
+
 1. 在 Supabase Dashboard 的 Authentication → Users 建立使用者，使用個人工作 Email，不使用共用信箱。
 2. 確認 Email 已驗證，並複製該 Auth user UUID。
 3. 在 SQL Editor 執行以下內容，替換三個值：
@@ -31,9 +35,9 @@ values
 
 若該 Auth user 已完成 TOTP enrollment，可把 `mfa_required` 改為 `true`。之後登入頁必須同時提供六位數驗證碼，後端驗到 AAL2 才會建立工作階段。尚未 enrollment 時不要先開啟，否則系統會按設計拒絕登入。
 
-## 3. 匯出四個已發布 Artifact
+## 3. 選用：匯出四個已發布 Artifact（目前不執行）
 
-必須重新發布含 Batch G 匯出工具的四個檔案，然後在各自的已發布 Artifact 執行：
+只有日後正式反轉範圍決策，並確認原始已發布 Artifact 仍可存取時，才重新發布含 Batch G 匯出工具的四個檔案並執行：
 
 1. 截圖該 Artifact 主要清單與筆數。
 2. 點右下角「匯出搬移資料」。
@@ -41,11 +45,11 @@ values
 4. 不要編輯 JSON。任何修改都會造成 SHA-256 預檢失敗。
 5. 四個 Artifact 的 storage 彼此隔離，必須各自匯出，不能只匯出其中一個。
 
-## 4. 正式匯入前還原點
+## 4. 選用：正式匯入前還原點（目前不執行）
 
 正式遠端匯入前，先在 Supabase 建立可用的資料庫 backup／PITR 還原點，並記錄：備份時間、操作者、project ref、四個來源版本、各檔 SHA-256、來源筆數截圖。沒有可驗證的還原點時只允許預檢，不執行正式寫入。
 
-## 5. 預檢與匯入
+## 5. 選用：預檢與匯入（目前不執行）
 
 1. 用一般企業 `admin` 可先進管理中心執行預檢，但不可正式匯入。
 2. 以 `/reibi-login` 登入 `reibi_super`。
@@ -55,7 +59,7 @@ values
 6. 每檔完成後記錄 batch id、imported、rejected、resumed 與 target counts。
 7. 若 batch 為 `failed`，修正映射或資料後重送同一份原始檔；系統會建立 retry lineage 並跳過前次成功記錄。
 
-## 6. 完成核對
+## 6. 選用：完成核對（目前不執行）
 
 - 四個來源的匯出筆數與 import batch/record 筆數一致。
 - `rejected_count = 0`；skipped 僅能是已知不搬移或無安全映射項目。

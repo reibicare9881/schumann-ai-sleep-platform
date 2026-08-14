@@ -1,5 +1,7 @@
 # REIBI Artifact 資料映射
 
+> **目前狀態（2026-08-14）**：依 [舊 Artifact 資料不搬遷決策](reibi-legacy-data-scope-decision.md)，本映射保留作為程式對照與選用復原能力；目前不匯出或匯入真實 `window.storage`，新 Supabase 業務資料乾淨起始。
+
 ## 範圍與原則
 
 盤點來源為 `reibi` 內四個已發布 Artifact 的實際 `window.storage` 讀寫程式碼，而非只依畫面或規格文件推測。四個 Artifact 的儲存空間彼此隔離，因此同名或互相引用的 key 不代表資料真的已同步。
@@ -64,7 +66,9 @@
 |---|---|---|
 | `rq_workorders` | 工單號、合約號、客戶／場域、服務人員、施工排程、項目規格與數量、雙方範圍確認、驗收勾選、異常清單、簽名、狀態歷程 | `reibi_work_orders`；項目／驗收／狀態歷程分別存 JSONB 並保留 `source_payload` |
 
-## 匯入流程
+## 保留的選用匯入流程（目前不執行）
+
+只有日後另行核准反轉範圍決策時，才依下列流程執行：
 
 1. 從每個已發布 Artifact 個別匯出其 `window.storage`；四份 export 不可互相替代。
 2. 建立 `reibi_artifact_import_batches`，記錄 Artifact、版本與 export SHA-256。
@@ -72,9 +76,9 @@
 4. 驗證日期、金額、單號與關聯後，再 upsert 到目標表；無法映射的欄位仍留在 raw payload，錯誤列標為 `rejected`。
 5. 比對每個 key 的來源筆數、匯入筆數、拒絕筆數與金額合計；完成後才把 batch 設為 `completed`。
 
-目前 repo 只有 Artifact 原始碼，沒有已發布環境中的 `window.storage` 實際資料，因此 migration 能先完成，真正搬移仍需要四個 Artifact 各自的 export。
+目前 repo 只有 Artifact 原始碼，沒有已發布環境中的 `window.storage` 實際資料。依現行決策不進行真正搬移；若未來重新核准搬遷，才需要從四個原始已發布 Artifact 各自取得 export。
 
-FastAPI 已提供 `/api/reibi/artifacts/validate` 預檢與 `/api/reibi/artifacts/import` 正式匯入骨架。JSON 格式、權限及本機啟動方式見 `docs/reibi-local-development.md`。跨組織正式匯入必須使用 Supabase Auth 驗證且 server-side session 有效的 `reibi_super`；身分系統已完成，但第一位正式帳號仍待下一步建立。
+FastAPI 已提供 `/api/reibi/artifacts/validate` 預檢與 `/api/reibi/artifacts/import` 正式匯入能力。JSON 格式、權限及本機啟動方式見 [本機開發文件](reibi-local-development.md)。第一位正式 `reibi_super` 已建立並可登入；即使具備權限，也不得在沒有新範圍核准、備份與驗收計畫的情況下執行舊資料匯入。
 
 ## AI 統一規則
 
