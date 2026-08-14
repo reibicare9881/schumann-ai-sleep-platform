@@ -101,7 +101,9 @@ Project ref：`wfgqnjupemzfhaosmogx`
 5. `reibi_batch_g_secure_import`：已套用遠端；新增內部 Auth 白名單、可撤銷 session、登入稽核與可恢復 Artifact 匯入欄位。
 6. Batch H identity roles：兩個 migrations 已套用遠端；完成可信角色 registry、邀請、TOTP 流程與交易式身分更新。
 7. MFA self-enrollment：已套用遠端；只有 Supabase TOTP 驗證達 AAL2 後，才原子要求 MFA、撤銷舊應用 session 並寫入 audit。
-8. Artifact data import：依 2026-08-14 範圍決策不執行；相關資料表維持 0 筆為預期。選用映射見 [Artifact 資料映射](reibi-artifact-mapping.md)，保留操作見 [Batch G 手冊](reibi-batch-g-runbook.md)。
+8. 第一位正式 `reibi_super`：`reibicare9881@gmail.com` 已完成 TOTP 綁定；2026-08-14 遠端 Auth log 與可信 session 已確認 AAL2。
+9. L5 總覽、待辦與通知：沿用既有 REIBI 業務 tables 進行 server-side 動態聚合；通知目前不保存已讀狀態，因此不新增 table 或 migration。
+10. Artifact data import：依 2026-08-14 範圍決策不執行；相關資料表維持 0 筆為預期。選用映射見 [Artifact 資料映射](reibi-artifact-mapping.md)，保留操作見 [Batch G 手冊](reibi-batch-g-runbook.md)。
 
 ## 本機驗證紀錄
 

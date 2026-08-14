@@ -46,7 +46,7 @@
 | Artifact JSON 預檢 | 是 | 是 |
 | Artifact 跨組織匯入技術能力（目前範圍不執行） | 否 | 是 |
 
-受邀的主平台、REIBI 內部與經銷商角色統一使用 `/reibi-login`：Supabase Auth Email／密碼、已驗證 Email、`reibi_internal_users` 可信 registry 與可撤銷的 30 分鐘 server-side session。角色、企業、部門及經銷商範圍均由伺服器載入，瀏覽器不能自行指定。單位共用 PIN 永遠不能取得 L5 或經銷商角色；要求 MFA 的邀請會在 `/auth/complete` 完成 TOTP 設定，後續登入必須達 AAL2。`admin` 與 `reibi_super` 可使用 `/reibi/accounts`，但前者只能管理自己企業且不能授予 `admin`。第一位正式 `reibi_super` 已建立並可登入，目前尚待 TOTP／AAL2 強化；後續帳號與選用匯入操作見 [Batch G 手冊](reibi-batch-g-runbook.md)。
+受邀的主平台、REIBI 內部與經銷商角色統一使用 `/reibi-login`：Supabase Auth Email／密碼、已驗證 Email、`reibi_internal_users` 可信 registry 與可撤銷的 30 分鐘 server-side session。角色、企業、部門及經銷商範圍均由伺服器載入，瀏覽器不能自行指定。單位共用 PIN 永遠不能取得 L5 或經銷商角色；要求 MFA 的邀請會在 `/auth/complete` 完成 TOTP 設定，後續登入必須達 AAL2。`admin` 與 `reibi_super` 可使用 `/reibi/accounts`，但前者只能管理自己企業且不能授予 `admin`。第一位正式 `reibi_super` 已完成 TOTP 綁定及 staging AAL2 登入驗證；後續帳號與選用匯入操作見 [Batch G 手冊](reibi-batch-g-runbook.md)。
 
 既有可信帳號可在 `/reibi/mfa` 補綁 TOTP。流程會要求再次輸入密碼、顯示 QR Code、驗證六位數代碼；只有 Supabase 回傳 AAL2 後，後端才透過版本化 transaction 設定 `mfa_required=true`，並撤銷所有舊 AAL1 應用工作階段。不得先在 Dashboard 或 SQL Editor 手動開啟該 flag。
 
@@ -116,4 +116,4 @@ npm.cmd run build
 
 截至 2026-08-14，migration 重播、前端 production build，以及本機／遠端資料表、RLS、權限與 Database Advisors 已有完整驗證紀錄。遠端 advisor 尚有一項既有警告：Auth 的 leaked-password protection 未啟用；正式上線前應在 Supabase Auth 設定中開啟。
 
-後端 `.venv` 已連上可用的 Python 3.11.9；2026-08-14 重新執行 `pip check` 無相依衝突，69 項 Python 後端與 135 項 pgTAP 測試通過。先前「指向不存在 Python 3.11」的判斷是受限環境誤判，不是目前 `.venv` 狀態。
+2026-08-14 已重新安裝 Python 3.11.9 並重建 `backend/.venv`；開發依賴由 `backend/requirements-dev.txt` 引用正式依賴並固定 pytest 8.4.2。最近一次 `pip check` 無相依衝突，76 項 Python 後端與 135 項 pgTAP 測試通過。`.venv` 仍含基底 Python 的絕對路徑；若基底直譯器被移除，應直接依本文件重建，不應搬移或沿用舊環境。

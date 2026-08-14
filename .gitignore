@@ -4,6 +4,7 @@
 backend/venv/
 backend/.venv/
 .venv/
+.venv.broken-*/
 backend/__pycache__/
 backend/**/__pycache__/
 backend/*.py[cod]

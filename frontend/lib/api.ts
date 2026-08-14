@@ -455,6 +455,10 @@ export const API = {
     return this.request('/api/reibi/overview');
   },
 
+  async getReibiL5Overview() {
+    return this.request('/api/reibi/l5/overview');
+  },
+
   async saveReibiEnterprise(payload: Record<string, any>) {
     return this.request('/api/reibi/enterprise', {
       method: 'PUT',

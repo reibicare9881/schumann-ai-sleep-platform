@@ -41,12 +41,12 @@
 | Supabase baseline | `[x]` | 本機與遠端 migration 一致 |
 | Database hardening | `[x]` | `anon`／`authenticated` 無 REIBI 表權限 |
 | REIBI domain schema | `[x]` | 38 張 `reibi_*` 表，均由 migration 建立並採 deny-by-default RLS／grants |
-| FastAPI REIBI router | `[-]` | Batch A–H 主要業務與身分 API 已完成；尚待統一 response／稽核、全 endpoint 權限矩陣及 E2E |
-| Next.js REIBI 管理頁 | `[-]` | 主要商務、健康、分析、設定與帳號流程已完成；尚待 L5 總覽／待辦、地圖、部分 UX 與瀏覽器 E2E |
+| FastAPI REIBI router | `[-]` | 主要業務、身分與 L5 角色化總覽 API 已完成；尚待統一 response／稽核、全 endpoint 權限矩陣及 E2E |
+| Next.js REIBI 管理頁 | `[-]` | 主要商務、健康、分析、設定、帳號及 L5 總覽流程已完成；尚待地圖、部分 UX 與瀏覽器 E2E |
 | Artifact 欄位映射 | `[x]` | 主要 storage keys 與目標表已完成程式對照；因舊資料不搬遷，不要求真實匯出檔驗證 |
-| Python 測試環境 | `[x]` | 工作區 `.venv` 使用 Python 3.11.9；2026-08-14 重驗 `pip check` 正常、69 項後端與 135 項 pgTAP 測試通過 |
+| Python 測試環境 | `[x]` | Python 3.11.9 與 `backend/.venv` 已重建，`requirements-dev.txt` 固定 pytest 8.4.2；2026-08-14 為 76 項後端與 135 項 pgTAP 測試通過 |
 | 四 Artifact JSON 匯出 | `[N/A]` | JSX 已具備匯出工具，但依範圍決策不重新發布、不執行真實匯出 |
-| `reibi_super` 安全登入 | `[x]` | 第一位正式帳號 `reibicare9881@gmail.com`（麗媚AI）已完成 Email、密碼與登入；目前 AAL1，MFA 強化另列待辦 |
+| `reibi_super` 安全登入 | `[x]` | 第一位正式帳號 `reibicare9881@gmail.com`（麗媚AI）已完成 Email、密碼、TOTP 綁定及 staging AAL2 登入驗證 |
 | 既有資料正式匯入 | `[N/A]` | 依範圍決策不搬移舊 `window.storage`；新 Supabase 業務資料乾淨起始 |
 
 ## 3. 全域基礎與資安
@@ -72,7 +72,7 @@
 - [x] IAM-02 將 Artifact 的 15 個來源角色正規化為 14 個可信角色，後端 `roles.py` 為權限判定來源；`admin_reibi` 與 L5 `super` 合併為 `reibi_super`。
 - [x] IAM-03 支援 `admin_hr/admin_finance/admin_it/occupational_health` 的 Supabase Auth 可信身分與企業／部門範圍。
 - [x] IAM-04 支援 L5 `reibi_super/reibi_finance/reibi_data/reibi_cs` 與兩種經銷商可信角色；新增角色不能由舊共用 PIN 取得。
-- [-] IAM-05 已完成 Supabase Auth、內部白名單、可撤銷 session、登入限速、既有帳號 TOTP self-enrollment 與 AAL2 強制流程；第一位正式 `reibi_super` 已建立並可登入，目前尚待本人實際掃描 QR Code 完成 enrollment。
+- [x] IAM-05 已完成 Supabase Auth、內部白名單、可撤銷 session、登入限速、既有帳號 TOTP self-enrollment 與 AAL2 強制流程；第一位正式 `reibi_super` 已完成 QR Code 綁定及 AAL2 登入。
 - [x] IAM-06 `reibi_super` 可跨範圍邀請、停用及撤銷 session；單位 `admin` 只能管理自己企業的非 admin 角色，並防止自我停用與最後一位超管被停用。
 - [-] IAM-07 已有 14 角色、權限、可信 session 與資料庫 scope 測試；全站逐 endpoint 的 401／403 矩陣仍併入 TST-04。
 - [x] IAM-08 五種部門必選角色由 DB constraint、跨表 trigger 與 FastAPI 同時驗證，登入 token 的 `session.dept` 取自伺服器資料。
@@ -141,7 +141,7 @@
 
 ### L5-01 作業
 
-- [ ] L5-01A 依角色顯示的總覽與待辦統計。
+- [x] L5-01A 依角色顯示的總覽、待辦與即時通知；採現有業務 table 動態聚合，不新增通知 table。FastAPI 依四種內部角色與兩種經銷商角色裁切欄位／企業範圍，Next.js 提供 L5 總覽入口。
 - [ ] L5-01B 新案開通流程、流水號與憑證函。
 - [-] L5-01C 企業管理基本資料；企業管理者可完整維護自身企業，`reibi_super` 安全登入已完成，跨企業總覽 UI 與端對端驗收仍待補齊。
 - [x] L5-01D 企業場域、設備、A/B/C/D 四層方案、授權用量、平台帳號核對與合約狀態。
@@ -363,12 +363,20 @@
 - [x] SEC-H01：身分、session 與稽核表維持 RLS；`anon`／`authenticated` 無 table access，瀏覽器不取得 service-role、Supabase access token 或 refresh token。
 - [x] TST-H01：66 個 Python 測試、127 個 pgTAP、全量 migration 重播、database lint、FastAPI 路由 smoke test 與 Next.js production build 通過。
 - [x] OPS-H01：第一位正式 `reibi_super` `reibicare9881@gmail.com`（麗媚AI）已建立，Email 與密碼設定完成並成功登入。
-- [-] OPS-H02：`/reibi/mfa` self-enrollment、TOTP 驗證、原子設定 `mfa_required=true`、撤銷舊 AAL1 session 與 audit 已完成；尚待正式 `reibi_super` 本人掃描 QR Code，並完成實際 AAL2 重新登入。
+- [x] OPS-H02：`/reibi/mfa` self-enrollment、TOTP 驗證、原子設定 `mfa_required=true`、撤銷舊 AAL1 session 與 audit 已完成；正式 `reibi_super` 已完成 QR Code 綁定及實際 AAL2 重新登入。
 
 ## 19. MFA 既有帳號補綁（2026-08-14）
 
 - [x] MFA-I01：新增受可信 session 保護的 `/reibi/mfa`，既有帳號須重新輸入密碼後才取得 TOTP QR Code／設定密鑰。
 - [x] MFA-I02：Supabase `challenge_and_verify` 回傳 AAL2 後，後端才呼叫 `reibi_enable_mfa`；AAL1 或錯誤驗證碼不得啟用要求。
 - [x] MFA-I03：版本化 transaction 會原子設定 `mfa_required=true`、撤銷所有既有應用工作階段並寫入 identity audit；`anon`／`authenticated` 不可執行 RPC。
-- [x] MFA-I04：69 項 Python、135 項 pgTAP、TypeScript 與 Next.js production build 通過；本機／遠端 14 個 migration 版本一致，遠端回滾測試通過。
-- [ ] MFA-I05：由 `reibicare9881@gmail.com` 在 staging 實際掃描 QR Code、驗證六位數代碼，並重新登入確認 token／session 為 AAL2。
+- [x] MFA-I04：70 項 Python、135 項 pgTAP、TypeScript 與 Next.js production build 通過；本機／遠端 14 個 migration 版本一致，遠端回滾測試通過。
+- [x] MFA-I05：`reibicare9881@gmail.com` 已在 staging 掃描 QR Code、驗證六位數代碼並重新登入；2026-08-14 遠端 Auth log 與可信 session 均確認 AAL2。
+
+## 20. Batch J L5 角色化總覽（2026-08-14）
+
+- [x] L5-J01：新增 `/api/reibi/l5/overview`，由現有企業、報價、合約、工單、服務、應收、匯款、訂閱及權限申請資料即時聚合。
+- [x] L5-J02：`reibi_super`、財務、數據、客服及兩種經銷商角色各自只收到所需 KPI、待辦與通知；主經銷商可涵蓋直屬子經銷商，子經銷商只限自身企業。
+- [x] L5-J03：新增 `/reibi/l5` 及 dashboard 入口，包含角色／範圍、KPI、待辦、即時通知、作業流程與真實近 12 月企業趨勢。
+- [x] TST-J01：76 項 Python 測試（含主／子經銷商實際 query scope）、TypeScript no-emit、Next.js production build 與 FastAPI 路由 smoke test 通過。
+- [x] DB-J01：本批未新增 Supabase schema；通知不保存已讀狀態，既有 RLS 與僅由後端 service-role 存取的界線維持不變。
