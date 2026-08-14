@@ -142,7 +142,7 @@
 ### L5-01 作業
 
 - [x] L5-01A 依角色顯示的總覽、待辦與即時通知；採現有業務 table 動態聚合，不新增通知 table。FastAPI 依四種內部角色與兩種經銷商角色裁切欄位／企業範圍，Next.js 提供 L5 總覽入口。
-- [ ] L5-01B 新案開通流程、流水號與憑證函。
+- [x] L5-01B 新案開通三步驟、交易式企業／場域建立、並發安全案件／企業／憑證流水號，以及不含密碼或共用 PIN 的 PDF 憑證函。
 - [-] L5-01C 企業管理基本資料；企業管理者可完整維護自身企業，`reibi_super` 安全登入已完成，跨企業總覽 UI 與端對端驗收仍待補齊。
 - [x] L5-01D 企業場域、設備、A/B/C/D 四層方案、授權用量、平台帳號核對與合約狀態。
 - [-] L5-01E 服務案件與企業範圍限制已完成；經銷商專屬案件範圍仍待正式角色登入整合。
@@ -380,3 +380,12 @@
 - [x] L5-J03：新增 `/reibi/l5` 及 dashboard 入口，包含角色／範圍、KPI、待辦、即時通知、作業流程與真實近 12 月企業趨勢。
 - [x] TST-J01：76 項 Python 測試（含主／子經銷商實際 query scope）、TypeScript no-emit、Next.js production build 與 FastAPI 路由 smoke test 通過。
 - [x] DB-J01：本批未新增 Supabase schema；通知不保存已讀狀態，既有 RLS 與僅由後端 service-role 存取的界線維持不變。
+
+## 21. Batch K L5 新案開通（2026-08-14）
+
+- [x] L5-K01：新增 `/reibi/onboarding` 三步驟開案，涵蓋企業基本資料、方案／授權、B/C/D 層、場域與四層費用確認。
+- [x] L5-K02：`reibi_open_enterprise_case` 以單一 PostgreSQL transaction 建立企業、場域與案件；案件、企業代碼與憑證函各用獨立 sequence，避免並發撞號。
+- [x] L5-K03：憑證函只列案件、組織代碼、管理員 Email 與登入入口；密碼由 Supabase 邀請設定，MFA 依可信帳號政策完成，不移植 Artifact 的共用 PIN／備援碼。
+- [x] L5-K04：商務文件頁新增企業範圍選擇；`reibi_super`／`reibi_finance` 可明確指定 `org_code`，企業 `admin` 仍只能操作 token 內的自身企業。
+- [x] SEC-K01：新表啟用 RLS 並撤銷 browser roles；transaction RPC 與 sequences 只授權後端 `service_role`。
+- [x] TST-K01：82 項 Python 測試、Next.js production build、空白本機 migration 全量重播及可回滾 SQL 交易／權限測試通過。

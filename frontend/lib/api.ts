@@ -38,6 +38,11 @@ interface Session {
 export const API = {
   // 儲存當前會話
   currentSession: null as Session | null,
+  workflowOrgCode: null as string | null,
+
+  setWorkflowOrgCode(orgCode?: string | null) {
+    this.workflowOrgCode = orgCode ? orgCode.toUpperCase() : null;
+  },
   
   // 設置會話
   setSession(session: Session) {
@@ -80,9 +85,14 @@ export const API = {
     let url = `${API_BASE_URL}${endpoint}`;
     
     // 處理查詢參數
-    if (options.query) {
+    const workflowScoped = /^\/api\/reibi\/(business-catalogs|quotes(?:\/|$)|contracts(?:\/|$)|work-orders(?:\/|$))/.test(endpoint)
+      && endpoint !== '/api/reibi/quotes/calculate';
+    const query = workflowScoped && this.workflowOrgCode
+      ? { ...options.query, org_code: this.workflowOrgCode }
+      : options.query;
+    if (query) {
       const params = new URLSearchParams();
-      Object.entries(options.query).forEach(([key, value]) => {
+      Object.entries(query).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
           params.append(key, String(value));
         }
@@ -457,6 +467,39 @@ export const API = {
 
   async getReibiL5Overview() {
     return this.request('/api/reibi/l5/overview');
+  },
+
+  async listReibiOnboardingCases() {
+    return this.request('/api/reibi/onboarding/cases');
+  },
+
+  async createReibiOnboardingCase(payload: Record<string, any>) {
+    return this.request('/api/reibi/onboarding/cases', { method: 'POST', body: JSON.stringify(payload) });
+  },
+
+  async handoffReibiOnboardingCase(caseId: number) {
+    return this.request(`/api/reibi/onboarding/cases/${caseId}/handoff`, { method: 'POST' });
+  },
+
+  async downloadReibiCredentialLetter(caseId: number) {
+    const session = this.getSession();
+    const response = await fetch(`${API_BASE_URL}/api/reibi/onboarding/cases/${caseId}/credential-letter`, {
+      headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.detail || '無法下載憑證函');
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `REIBI-credential-${caseId}.pdf`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   },
 
   async saveReibiEnterprise(payload: Record<string, any>) {

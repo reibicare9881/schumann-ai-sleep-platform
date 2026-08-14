@@ -2,7 +2,7 @@ import jwt
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
-from fastapi import Depends, HTTPException, status, Security
+from fastapi import Depends, HTTPException, Query, status, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from config import settings  # 引入我們之前建立的環境變數設定檔
 from roles import PARTNER_ROLES, TRUSTED_EXCLUSIVE_ROLES, has_permission
@@ -126,10 +126,20 @@ def require_member_or_above(current_user: dict = Depends(get_current_user)) -> d
     return current_user
 
 
-def require_reibi_manager(current_user: dict = Depends(get_current_user)) -> dict:
+def require_reibi_manager(
+    org_code: Optional[str] = Query(default=None),
+    current_user: dict = Depends(get_current_user),
+) -> dict:
     """REIBI 管理 API：現有單位管理者或未來的 REIBI 內部超管。"""
     if not has_permission(current_user, "manage_reibi"):
         raise HTTPException(status_code=403, detail="權限不足：限 REIBI 管理人員使用")
+    requested = str(org_code or "").strip().upper()
+    token_org = str(current_user.get("org_code") or "").strip().upper()
+    if requested:
+        if current_user.get("role") in {"reibi_super", "reibi_finance"}:
+            return {**current_user, "org_code": requested}
+        if requested != token_org:
+            raise HTTPException(status_code=403, detail="不可操作其他組織資料")
     return current_user
 
 

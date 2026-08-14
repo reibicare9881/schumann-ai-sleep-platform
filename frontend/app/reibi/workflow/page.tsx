@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Calculator, CheckCircle2, FileCheck2, FileText, HardHat, Plus, Printer, RefreshCw, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Building2, Calculator, CheckCircle2, FileCheck2, FileText, HardHat, Plus, Printer, RefreshCw, Save, Trash2 } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
 import API from "@/lib/api";
@@ -58,6 +58,8 @@ export default function ReibiWorkflowPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [enterprises, setEnterprises] = useState<Row[]>([]);
+  const [selectedOrgCode, setSelectedOrgCode] = useState("");
 
   const loadRows = async (nextTab: Tab = tab) => {
     if (!allowed) return;
@@ -74,11 +76,27 @@ export default function ReibiWorkflowPage() {
 
   useEffect(() => {
     if (!allowed) return;
+    void API.listReibiOperationEnterprises().then((response: any) => {
+      if (response.status !== "success") { setError(response.message || "無法讀取企業範圍"); return; }
+      const list = response.data || [];
+      setEnterprises(list);
+      const sessionCode = session?.orgCode || "";
+      const requested = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("org_code") || "";
+      setSelectedOrgCode(previous => previous || (list.some((row: Row) => row.org_code === requested) ? requested : list.some((row: Row) => row.org_code === sessionCode) ? sessionCode : list[0]?.org_code || ""));
+    });
+    return () => API.setWorkflowOrgCode(null);
+  }, [allowed, session?.orgCode]);
+
+  useEffect(() => {
+    if (!allowed || !selectedOrgCode) return;
+    API.setWorkflowOrgCode(selectedOrgCode);
+    setSelected(null);
     void loadRows(tab);
     void API.getReibiBusinessCatalogs().then((response: any) => {
       if (response.status === "success") setCatalogs(response.data);
+      else setError(response.message || "無法讀取企業商務目錄");
     });
-  }, [allowed, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [allowed, tab, selectedOrgCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const calculate = async () => {
     setLoading(true); setError("");
@@ -250,7 +268,16 @@ export default function ReibiWorkflowPage() {
 
       {(message || error) && <div className={`print:hidden rounded-xl border px-4 py-3 text-sm ${error ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>{error || message}</div>}
 
-      <nav className="flex flex-wrap gap-2 print:hidden">{([['quotes','報價單',FileText],['contracts','合約',FileCheck2],['work-orders','工單',HardHat]] as const).map(([value,label,Icon]) => <button key={value} onClick={() => { setTab(value); setSelected(null); setStatusFilter(""); }} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold ${tab === value ? "bg-teal-700 text-white" : "border border-slate-200 bg-white text-slate-600"}`}><Icon className="h-4 w-4" />{label}</button>)}</nav>
+      <section className="print:hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <label className="flex flex-col gap-2 text-sm font-bold text-slate-700 md:flex-row md:items-center">
+          <span className="inline-flex items-center gap-2"><Building2 className="h-4 w-4 text-teal-700" />目前操作企業</span>
+          {enterprises.length ? <select value={selectedOrgCode} onChange={event => { setError(""); setSelectedOrgCode(event.target.value); }} className="input md:max-w-md">
+            {enterprises.map(row => <option key={row.id} value={row.org_code}>{row.org_name}（{row.org_code}）</option>)}
+          </select> : <span className="font-normal text-amber-700">尚無企業資料。請先到 <Link className="font-bold underline" href="/reibi/onboarding">新案開通</Link> 建立第一家企業。</span>}
+        </label>
+      </section>
+
+      <nav className="flex flex-wrap gap-2 print:hidden">{([['quotes','報價單',FileText],['contracts','合約',FileCheck2],['work-orders','工單',HardHat]] as const).map(([value,label,Icon]) => <button key={value} disabled={!selectedOrgCode} onClick={() => { setTab(value); setSelected(null); setStatusFilter(""); }} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50 ${tab === value ? "bg-teal-700 text-white" : "border border-slate-200 bg-white text-slate-600"}`}><Icon className="h-4 w-4" />{label}</button>)}</nav>
 
       {tab === "quotes" && <section className="rounded-2xl border border-slate-200 bg-white p-6 print:hidden">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-black text-slate-800">{editingQuoteId ? "編輯報價" : "快速試算與正式報價"}</h2><p className="mt-1 text-xs text-slate-500">計價規則沿用 Artifact；編號由資料庫安全產生。</p></div>{editingQuoteId && <button onClick={() => { setEditingQuoteId(null); setQuote({ ...EMPTY_QUOTE }); setCalculation(null); }} className="text-sm font-bold text-slate-500">取消編輯</button>}</div>

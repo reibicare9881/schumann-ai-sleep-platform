@@ -45,6 +45,7 @@
 | 更新自己企業商務文件狀態 | 是 | 是 |
 | Artifact JSON 預檢 | 是 | 是 |
 | Artifact 跨組織匯入技術能力（目前範圍不執行） | 否 | 是 |
+| L5 新案開通、流水號與安全憑證函 | 否 | 是（`reibi_finance` 亦可） |
 
 受邀的主平台、REIBI 內部與經銷商角色統一使用 `/reibi-login`：Supabase Auth Email／密碼、已驗證 Email、`reibi_internal_users` 可信 registry 與可撤銷的 30 分鐘 server-side session。角色、企業、部門及經銷商範圍均由伺服器載入，瀏覽器不能自行指定。單位共用 PIN 永遠不能取得 L5 或經銷商角色；要求 MFA 的邀請會在 `/auth/complete` 完成 TOTP 設定，後續登入必須達 AAL2。`admin` 與 `reibi_super` 可使用 `/reibi/accounts`，但前者只能管理自己企業且不能授予 `admin`。第一位正式 `reibi_super` 已完成 TOTP 綁定及 staging AAL2 登入驗證；後續帳號與選用匯入操作見 [Batch G 手冊](reibi-batch-g-runbook.md)。
 
@@ -114,6 +115,6 @@ npx.cmd tsc --noEmit
 npm.cmd run build
 ```
 
-截至 2026-08-14，migration 重播、前端 production build，以及本機／遠端資料表、RLS、權限與 Database Advisors 已有完整驗證紀錄。遠端 advisor 尚有一項既有警告：Auth 的 leaked-password protection 未啟用；正式上線前應在 Supabase Auth 設定中開啟。
+截至 2026-08-14，Batch K 的本機 migration 重播、可回滾交易／權限測試、82 項 Python 測試與前端 production build已通過，migration 亦已套用遠端 Supabase。新案開通入口為 `/reibi/onboarding`；成功後可下載不含密碼的 PDF 憑證函，再到 `/reibi/workflow` 選定企業建立報價、合約與工單。遠端 advisor 尚有一項既有警告：Auth 的 leaked-password protection 未啟用；正式上線前應在 Supabase Auth 設定中開啟。
 
-2026-08-14 已重新安裝 Python 3.11.9 並重建 `backend/.venv`；開發依賴由 `backend/requirements-dev.txt` 引用正式依賴並固定 pytest 8.4.2。最近一次 `pip check` 無相依衝突，76 項 Python 後端與 135 項 pgTAP 測試通過。`.venv` 仍含基底 Python 的絕對路徑；若基底直譯器被移除，應直接依本文件重建，不應搬移或沿用舊環境。
+2026-08-14 已重新安裝 Python 3.11.9 並重建 `backend/.venv`；開發依賴由 `backend/requirements-dev.txt` 引用正式依賴並固定 pytest 8.4.2。最近一次 `pip check` 無相依衝突，82 項 Python 後端測試通過。`.venv` 仍含基底 Python 的絕對路徑；若基底直譯器被移除，應直接依本文件重建，不應搬移或沿用舊環境。

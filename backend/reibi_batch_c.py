@@ -344,7 +344,7 @@ def create_reibi_batch_c_router(client: Any) -> APIRouter:
         query = client.table("reibi_enterprises").select(
             "id,org_code,org_name,status,partner_code,plan_code,contract_start,a_layer_fee,b_layer_fee,c_layer_fee,d_layer_fee"
         )
-        if current_user.get("role") != "reibi_super":
+        if current_user.get("role") not in {"reibi_super", "reibi_finance"}:
             query = query.eq("id", _enterprise(client, current_user)["id"])
         rows = _execute(query.order("org_name"), "查詢營運企業")
         return {"status": "success", "data": rows}

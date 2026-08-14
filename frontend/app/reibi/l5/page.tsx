@@ -85,7 +85,7 @@ export default function ReibiL5Page() {
     <main className="mx-auto max-w-7xl px-4 py-8">
       <header className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div><Link href="/dashboard" className="inline-flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-teal-700"><ArrowLeft className="h-4 w-4" /> 返回首頁</Link><h1 className="mt-2 text-3xl font-black text-slate-900">L5 營運總覽</h1><p className="mt-1 text-sm text-slate-600">後端依登入角色與經銷商範圍裁切資料；通知為即時條件，不是永久收件匣。</p></div>
-        <button onClick={() => void load()} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> 重新整理</button>
+        <div className="flex flex-wrap gap-2">{["reibi_super", "reibi_finance"].includes(session.systemRole) && <Link href="/reibi/onboarding" className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white"><ClipboardList className="h-4 w-4" />新案開通</Link>}<button onClick={() => void load()} disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> 重新整理</button></div>
       </header>
       {error && <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-bold text-rose-700">{error}</div>}
       {loading && !dashboard && <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm text-slate-500">正在整理角色化營運資料…</div>}

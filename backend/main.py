@@ -42,6 +42,7 @@ from reibi_batch_e import create_reibi_batch_e_router
 from reibi_batch_f import create_reibi_batch_f_router
 from reibi_batch_g import create_internal_session_validator, create_reibi_batch_g_router
 from reibi_l5 import create_reibi_l5_router
+from reibi_onboarding import create_reibi_onboarding_router
 
 app = FastAPI(
     title="統一多平台 API",
@@ -83,6 +84,7 @@ app.include_router(create_reibi_batch_e_router(supabase))
 app.include_router(create_reibi_batch_f_router(supabase))
 app.include_router(create_reibi_batch_g_router(supabase))
 app.include_router(create_reibi_l5_router(supabase))
+app.include_router(create_reibi_onboarding_router(supabase, frontend_url=settings.frontend_url))
 
 # 建立密碼加密上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
