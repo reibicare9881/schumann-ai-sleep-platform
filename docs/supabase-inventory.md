@@ -104,17 +104,18 @@ Project ref：`wfgqnjupemzfhaosmogx`
 8. 第一位正式 `reibi_super`：`reibicare9881@gmail.com` 已完成 TOTP 綁定；2026-08-14 遠端 Auth log 與可信 session 已確認 AAL2。
 9. L5 總覽、待辦與通知：沿用既有 REIBI 業務 tables 進行 server-side 動態聚合；通知目前不保存已讀狀態，因此不新增 table 或 migration。
 10. `reibi_batch_k_onboarding`：已套用遠端；新增 `reibi_onboarding_cases`、三組 sequence 與只供 `service_role` 執行的 `reibi_open_enterprise_case` transaction。
-11. Artifact data import：依 2026-08-14 範圍決策不執行；相關資料表維持 0 筆為預期。選用映射見 [Artifact 資料映射](reibi-artifact-mapping.md)，保留操作見 [Batch G 手冊](reibi-batch-g-runbook.md)。
+11. `reibi_batch_k_organizations_sync`：已套用遠端；新案企業與名稱更新會同步主平台 `organizations`，並回填 migration 前已建立的企業。舊版必填 PIN 欄位使用不可取得明文的獨立隨機 bcrypt placeholder。
+12. Artifact data import：依 2026-08-14 範圍決策不執行；相關資料表維持 0 筆為預期。選用映射見 [Artifact 資料映射](reibi-artifact-mapping.md)，保留操作見 [Batch G 手冊](reibi-batch-g-runbook.md)。
 
 ## 本機驗證紀錄
 
-- 全部 15 個 migrations 可從空白本機 Supabase Postgres 依序成功套用。
+- 全部 16 個 migrations 可從空白本機 Supabase Postgres 依序成功套用。
 - 所有 Batch A–H 新增 REIBI public tables 均啟用 RLS；`anon`/`authenticated`/`PUBLIC` 沒有直接 table grants，`service_role` 只由 FastAPI 後端使用。
 - `anon`、`authenticated` 對 `public` tables 的直接 grants 數量為 0。
 - `anon`、`authenticated`、`service_role` 均無法直接執行 `public.rls_auto_enable()`。
 - 三個既有 ownership policies 已限定為 `authenticated`，並同時包含快取式 `(select auth.uid())` ownership check 與 `WITH CHECK`。
 - Batch K 可回滾 SQL 測試已確認交易同時建立企業、場域與案件，且 `authenticated` 無 RPC execute、`service_role` 可執行。
-- 遠端 15 個 migrations 與本機一致；Batch K table 與 RPC 權限已以遠端唯讀 SQL 確認。Security advisors 只有既有的 [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) WARN，其他為刻意採 deny-by-default 的 RLS INFO；performance advisors 只有新系統尚無正式流量造成的 unused-index INFO。
+- 遠端 16 個 migrations 與本機一致；Batch K table、RPC 權限、`ORG-TST1-26-000001` organizations 回填與 bcrypt placeholder 已以遠端唯讀 SQL 確認。Security advisors 只有既有的 [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) WARN，其他為刻意採 deny-by-default 的 RLS INFO；performance advisors 只有新系統尚無正式流量造成的 unused-index INFO。
 - Railway Hobby 已建立 staging 後端，供遠端整合測試；舊 Artifact 正式網路匯入因範圍決策不執行。
 
 ## Advisor references

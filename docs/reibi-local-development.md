@@ -115,6 +115,6 @@ npx.cmd tsc --noEmit
 npm.cmd run build
 ```
 
-截至 2026-08-14，Batch K 的本機 migration 重播、可回滾交易／權限測試、82 項 Python 測試與前端 production build已通過，migration 亦已套用遠端 Supabase。新案開通入口為 `/reibi/onboarding`；成功後可下載不含密碼的 PDF 憑證函，再到 `/reibi/workflow` 選定企業建立報價、合約與工單。遠端 advisor 尚有一項既有警告：Auth 的 leaked-password protection 未啟用；正式上線前應在 Supabase Auth 設定中開啟。
+截至 2026-08-14，Batch K 的 16 個本機 migrations 重播、可回滾交易／權限／organizations 同步測試、82 項 Python 測試與前端 production build 已通過，migrations 亦已套用遠端 Supabase。新案開通入口為 `/reibi/onboarding`；成功後可下載不含密碼的 PDF 憑證函，再到 `/reibi/workflow` 選定企業建立報價、合約與工單。新案企業會同步至 `organizations`，因此可直接在 `/reibi/accounts` 邀請該企業的可信帳號。遠端 advisor 尚有一項既有警告：Auth 的 leaked-password protection 未啟用；正式上線前應在 Supabase Auth 設定中開啟。
 
 2026-08-14 已重新安裝 Python 3.11.9 並重建 `backend/.venv`；開發依賴由 `backend/requirements-dev.txt` 引用正式依賴並固定 pytest 8.4.2。最近一次 `pip check` 無相依衝突，82 項 Python 後端測試通過。`.venv` 仍含基底 Python 的絕對路徑；若基底直譯器被移除，應直接依本文件重建，不應搬移或沿用舊環境。

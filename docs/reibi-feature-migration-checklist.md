@@ -387,5 +387,6 @@
 - [x] L5-K02：`reibi_open_enterprise_case` 以單一 PostgreSQL transaction 建立企業、場域與案件；案件、企業代碼與憑證函各用獨立 sequence，避免並發撞號。
 - [x] L5-K03：憑證函只列案件、組織代碼、管理員 Email 與登入入口；密碼由 Supabase 邀請設定，MFA 依可信帳號政策完成，不移植 Artifact 的共用 PIN／備援碼。
 - [x] L5-K04：商務文件頁新增企業範圍選擇；`reibi_super`／`reibi_finance` 可明確指定 `org_code`，企業 `admin` 仍只能操作 token 內的自身企業。
+- [x] L5-K05：新案企業會在同一 transaction 同步至主平台 `organizations`；已回填既有測試企業，企業名稱後續更新亦同步。舊版三個 NOT NULL PIN 欄位只保存彼此獨立、明文從未保存的隨機 bcrypt placeholder，不恢復共用 PIN。
 - [x] SEC-K01：新表啟用 RLS 並撤銷 browser roles；transaction RPC 與 sequences 只授權後端 `service_role`。
-- [x] TST-K01：82 項 Python 測試、Next.js production build、空白本機 migration 全量重播及可回滾 SQL 交易／權限測試通過。
+- [x] TST-K01：82 項 Python 測試、Next.js production build、16 個空白本機 migrations 全量重播及可回滾 SQL 交易／權限／organizations 同步測試通過。
