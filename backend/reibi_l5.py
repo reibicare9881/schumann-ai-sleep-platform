@@ -232,6 +232,7 @@ def build_l5_dashboard(
         kpis.extend([
             _item("active_contract_total", "執行中合約", contract_active, href="/reibi/workflow"),
             _item("open_payment_total", "未結清應收", payment_open, href="/reibi/operations"),
+            _item("pending_ticket_total", "待處理服務案件", ticket_pending, href="/reibi/service"),
         ])
 
     todos: list[dict[str, Any]] = []
@@ -253,6 +254,8 @@ def build_l5_dashboard(
             _todo("work_acceptance", "工單", "待驗收工單", work_pending, "medium", "/reibi/workflow"),
             _todo("access_request", "權限", "待驗證權限申請", access_pending, "high", "/reibi/service"),
         ])
+    elif partner:
+        todos.append(_todo("service_ticket", "服務", "待處理服務案件", ticket_pending, "high", "/reibi/service"))
     if data and role != "reibi_super":
         todos.append(_todo("data_contract_review", "資料", "30 天內到期企業資料", len(expiring_30), "medium", "/reibi/analytics"))
 
@@ -267,6 +270,8 @@ def build_l5_dashboard(
             _notification("ticket_pending", "info", "服務案件等待處理", ticket_pending, "/reibi/service"),
             _notification("work_anomaly", "critical", "工單驗收異常", work_anomaly, "/reibi/workflow"),
         ])
+    elif partner:
+        notifications.append(_notification("ticket_pending", "info", "服務案件等待處理", ticket_pending, "/reibi/service"))
     notifications = [item for item in notifications if item["count"] > 0]
     todos = [item for item in todos if item["count"] > 0]
 
@@ -285,6 +290,7 @@ def build_l5_dashboard(
         })
     if service or partner or role == "reibi_super":
         workflow["work_orders"] = {"pending_acceptance": work_pending, "anomaly": work_anomaly, "total": len(work_orders)}
+        workflow["service_tickets"] = {"pending": ticket_pending, "total": len(tickets)}
 
     definition = ROLE_DEFINITIONS[role]
     return {
@@ -305,8 +311,9 @@ def build_l5_dashboard(
     }
 
 
-def _partner_scope(client: Any, current_user: dict[str, Any]) -> list[str]:
-    code = str(current_user.get("partner_org_code") or current_user.get("org_code") or "").strip()
+def partner_scope_codes(client: Any, current_user: dict[str, Any]) -> list[str]:
+    """Return the server-authoritative distributor codes visible to a partner."""
+    code = str(current_user.get("partner_org_code") or current_user.get("org_code") or "").strip().upper()
     if not code:
         raise HTTPException(status_code=403, detail="經銷商帳號缺少 partner_org_code")
     own = _rows(
@@ -319,7 +326,7 @@ def _partner_scope(client: Any, current_user: dict[str, Any]) -> list[str]:
             _limited(client.table("reibi_distributors").select("org_code").eq("parent_id", own[0]["id"])),
             "查詢下層經銷商範圍",
         )
-        codes.extend(str(row["org_code"]) for row in children if row.get("org_code"))
+        codes.extend(str(row["org_code"]).upper() for row in children if row.get("org_code"))
     return list(dict.fromkeys(codes))
 
 
@@ -343,7 +350,7 @@ def fetch_l5_datasets(client: Any, current_user: dict[str, Any]) -> tuple[dict[s
         "a_layer_fee,b_layer_fee,c_layer_fee,d_layer_fee,created_at"
     )
     if role in PARTNER_ROLES:
-        partner_codes = _partner_scope(client, current_user)
+        partner_codes = partner_scope_codes(client, current_user)
         enterprise_query = enterprise_query.in_("partner_code", partner_codes)
     enterprises = _rows(_limited(enterprise_query), "讀取 L5 企業總覽")
     enterprise_ids = [int(row["id"]) for row in enterprises if row.get("id") is not None]
@@ -356,8 +363,11 @@ def fetch_l5_datasets(client: Any, current_user: dict[str, Any]) -> tuple[dict[s
         datasets["payments"] = _table_rows(client, "reibi_payment_schedules", "id,status,enterprise_id,due_date,amount,paid_amount", scoped_ids)
     if role in {"reibi_super", "reibi_cs", "partner_primary", "partner_sub"}:
         datasets["work_orders"] = _table_rows(client, "reibi_work_orders", "id,status,enterprise_id,created_at", scoped_ids)
+    if role in {"reibi_super", "reibi_cs", "partner_primary", "partner_sub"}:
+        datasets["tickets"] = _table_rows(
+            client, "reibi_service_tickets", "id,status,enterprise_id,priority,created_at", scoped_ids
+        )
     if role in {"reibi_super", "reibi_cs"}:
-        datasets["tickets"] = _table_rows(client, "reibi_service_tickets", "id,status,enterprise_id,priority,created_at", None)
         datasets["access_requests"] = _rows(
             _limited(client.table("reibi_access_requests").select("id,status,created_at")),
             "讀取權限申請",

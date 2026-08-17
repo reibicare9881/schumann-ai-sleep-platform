@@ -145,7 +145,7 @@
 - [x] L5-01B 新案開通三步驟、交易式企業／場域建立、並發安全案件／企業／憑證流水號，以及不含密碼或共用 PIN 的 PDF 憑證函。
 - [x] L5-01C 企業管理基本資料；企業管理者只能維護自身企業，`reibi_super`／`reibi_finance` 可在跨企業目錄搜尋、篩選及選定企業，再管理基本資料、授權、場域與部門。所有讀寫仍由 FastAPI 逐次驗證 `org_code`。
 - [x] L5-01D 企業場域、設備、A/B/C/D 四層方案、授權用量、平台帳號核對與合約狀態。
-- [-] L5-01E 服務案件與企業範圍限制已完成；經銷商專屬案件範圍仍待正式角色登入整合。
+- [x] L5-01E 服務案件與企業範圍限制完成；主經銷商可查看及選擇自身與直屬子經銷商企業，次級經銷商只限自身企業。案件清單、建立案件與 L5 統計均由 FastAPI 重新驗證可信角色範圍。
 - [x] L5-01F 預約管理與組織越權防護。
 - [ ] L5-01G 點線面地圖／區域視圖。
 
@@ -397,3 +397,12 @@
 - [x] L5-L02：選定企業後，基本資料、方案、授權、合約、場域與四層部門 API 全部明確帶入 `org_code`；商務文件入口沿用相同企業範圍。
 - [x] SEC-L01：跨企業選擇只顯示給 `reibi_super`／`reibi_finance`；後端 `require_reibi_manager` 仍是權限來源，企業 `admin` 指定其他組織會回傳 403，瀏覽器不取得 Supabase service role。
 - [x] TST-L01：84 項 Python 測試（含跨企業目錄與企業管理員自身範圍）、TypeScript no-emit、Next.js production build、FastAPI 企業路由 smoke test 與 16 個 migration 歷史核對通過；全 14 角色瀏覽器 E2E 仍列於 TST-04／TST-11。
+
+## 23. Batch M 經銷商服務案件整合（2026-08-17）
+
+- [x] L5-M01：主經銷商服務範圍包含自己與直屬子經銷商，次級經銷商只包含自身；經銷商入口企業清單亦使用同一個 server-side 範圍函式。
+- [x] L5-M02：`/reibi/service` 依可信角色提供企業選擇，建立案件時重新驗證 `enterprise_id`；案件清單不接受瀏覽器自訂範圍，避免 IDOR／BOLA。
+- [x] L5-M03：`reibi_cs` 可查看及處理全域服務案件；經銷商可查看與建立自己服務企業的案件，但不能自行結案。
+- [x] L5-M04：L5 經銷商總覽加入服務案件 KPI、待辦、通知及流程統計，且只聚合授權企業的案件。
+- [x] SEC-M01：沿用既有 RLS、撤銷 browser table grants 與 FastAPI server-side Supabase client；不新增 table 或 migration，遠端 16 個 migration 歷史維持一致。
+- [x] TST-M01：87 項 Python 測試（含主／次經銷商企業與案件 scope）、TypeScript no-emit、Next.js production build、FastAPI 路由 smoke test 及遠端 schema／RLS／migration 核對通過。

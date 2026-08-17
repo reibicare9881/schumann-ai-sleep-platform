@@ -19,6 +19,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from auth import get_current_user, require_reibi_manager, require_reibi_super
 from config import settings
+from reibi_l5 import partner_scope_codes
+from roles import PARTNER_ROLES, has_permission
 
 
 GEMINI_MODEL = "gemini-2.5-flash"
@@ -170,6 +172,58 @@ def _enterprise(client: Any, user: dict[str, Any], requested_id: Optional[int] =
     return rows[0]
 
 
+def service_scope_enterprises(client: Any, user: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Resolve selectable service enterprises without trusting browser scope values."""
+    role = str(user.get("role") or "")
+    columns = "id,org_code,org_name,status,partner_code"
+    if role in PARTNER_ROLES:
+        partner_codes = partner_scope_codes(client, user)
+        rows = _execute(
+            client.table("reibi_enterprises").select(columns).in_("partner_code", partner_codes).order("org_name"),
+            "查詢經銷商服務企業",
+        )
+        return rows, partner_codes
+    if role in {"reibi_super", "reibi_cs"}:
+        rows = _execute(
+            client.table("reibi_enterprises").select(columns).order("org_name").limit(5_000),
+            "查詢服務企業",
+        )
+        return rows, []
+    if user.get("org_code"):
+        return [_enterprise(client, user)], []
+    return [], []
+
+
+def resolve_ticket_enterprise(client: Any, user: dict[str, Any], requested_id: Optional[int]) -> dict[str, Any] | None:
+    role = str(user.get("role") or "")
+    if role in PARTNER_ROLES or role in {"reibi_super", "reibi_cs"}:
+        if requested_id is None:
+            raise HTTPException(status_code=422, detail="建立服務案件必須指定 enterprise_id")
+        enterprises, _ = service_scope_enterprises(client, user)
+        match = next((row for row in enterprises if int(row["id"]) == requested_id), None)
+        if not match:
+            raise HTTPException(status_code=403, detail="不可為權限範圍外的企業建立案件")
+        return match
+    if user.get("org_code"):
+        return _enterprise(client, user, requested_id)
+    if requested_id is not None:
+        raise HTTPException(status_code=403, detail="個人帳號不可指定企業")
+    return None
+
+
+def scope_ticket_query(client: Any, query: Any, user: dict[str, Any]) -> Any | None:
+    role = str(user.get("role") or "")
+    if role in {"reibi_super", "reibi_cs"}:
+        return query
+    if role == "admin":
+        return query.eq("enterprise_id", _enterprise(client, user)["id"])
+    if role in PARTNER_ROLES:
+        enterprises, _ = service_scope_enterprises(client, user)
+        enterprise_ids = [int(row["id"]) for row in enterprises]
+        return query.in_("enterprise_id", enterprise_ids) if enterprise_ids else None
+    return query.eq("requester_profile_id", user.get("uid"))
+
+
 def _audit(client: Any, user: dict[str, Any], action: str, detail: str) -> None:
     try:
         client.table("audit_logs").insert({
@@ -293,7 +347,7 @@ def create_reibi_batch_f_router(client: Any) -> APIRouter:
         return {"status": "success", "data": {
             "ticket_types": sorted(TICKET_TYPES), "ticket_priorities": ["緊急", "一般", "低優先"],
             "announcement_templates": ANNOUNCEMENT_TEMPLATES, "message_templates": MESSAGE_TEMPLATES,
-            "version": {"api": "2.1.0", "batch": "F", "artifact_main": "v10.3.34", "artifact_l5": "v2.14"},
+            "version": {"api": "2.2.0", "batch": "M", "artifact_main": "v10.3.34", "artifact_l5": "v2.14"},
             "security": {"credential_recovery": "人工身分核驗後，由 REIBI 內部人員處理；不傳送、不保存明文 PIN。",
                          "line_delivery": "未設定 LINE 憑證時只建立人工複製記錄，不標記為已送達。"},
         }}
@@ -337,34 +391,46 @@ def create_reibi_batch_f_router(client: Any) -> APIRouter:
     @router.get("/service/tickets")
     def list_tickets(ticket_status: Optional[str] = Query(default=None, alias="status"), user: dict = Depends(get_current_user)):
         query = client.table("reibi_service_tickets").select("*,reibi_enterprises(org_code,org_name)")
-        if user.get("role") == "reibi_super":
-            pass
-        elif user.get("role") == "admin":
-            query = query.eq("enterprise_id", _enterprise(client, user)["id"])
-        else:
-            query = query.eq("requester_profile_id", user.get("uid"))
+        query = scope_ticket_query(client, query, user)
+        if query is None:
+            return {"status": "success", "data": []}
         if ticket_status:
             query = query.eq("status", ticket_status)
         rows = _execute(query.order("created_at", desc=True).limit(500), "查詢服務案件")
         return {"status": "success", "data": rows}
 
+    @router.get("/service/scope")
+    def service_scope(user: dict = Depends(get_current_user)):
+        if not (has_permission(user, "service_center") or has_permission(user, "service_manage")):
+            raise HTTPException(status_code=403, detail="此帳號沒有服務中心權限")
+        enterprises, partner_codes = service_scope_enterprises(client, user)
+        return {"status": "success", "data": {
+            "role": user.get("role"),
+            "requires_enterprise": user.get("role") in PARTNER_ROLES | {"reibi_super", "reibi_cs"},
+            "partner_codes": partner_codes,
+            "enterprises": enterprises,
+        }}
+
     @router.post("/service/tickets", status_code=status.HTTP_201_CREATED)
     def create_ticket(payload: TicketWrite, user: dict = Depends(get_current_user)):
-        enterprise = None
-        if user.get("role") == "reibi_super" or user.get("org_code"):
-            enterprise = _enterprise(client, user, payload.enterprise_id)
+        if not (has_permission(user, "service_center") or has_permission(user, "service_manage")):
+            raise HTTPException(status_code=403, detail="此帳號沒有建立服務案件的權限")
+        enterprise = resolve_ticket_enterprise(client, user, payload.enterprise_id)
+        requester_org_code = user.get("partner_org_code") or user.get("org_code")
         values = payload.model_dump(mode="json", exclude={"enterprise_id"})
         values.update({"enterprise_id": enterprise.get("id") if enterprise else None,
-                       "requester_profile_id": user.get("uid"), "requester_org_code": user.get("org_code"),
+                       "requester_profile_id": user.get("uid"), "requester_org_code": requester_org_code,
                        "status": "待處理", "created_by": user.get("name") or user.get("uid"),
                        "status_history": [{"status": "待處理", "at": _now(), "by": user.get("name") or user.get("uid")}],
-                       "source_payload": {}})
+                       "source_payload": {"requester_role": user.get("role"), "requester_scope": requester_org_code}})
         rows = _execute(client.table("reibi_service_tickets").insert(values), "建立服務案件")
         _audit(client, user, "reibi_ticket_create", f"ticket={rows[0]['id']}")
         return {"status": "success", "data": rows[0]}
 
     @router.patch("/service/tickets/{ticket_id}")
-    def update_ticket(ticket_id: int, payload: TicketUpdate, user: dict = Depends(require_reibi_super)):
+    def update_ticket(ticket_id: int, payload: TicketUpdate, user: dict = Depends(get_current_user)):
+        if not has_permission(user, "service_manage"):
+            raise HTTPException(status_code=403, detail="權限不足：限 REIBI 服務管理人員更新案件")
         rows = _execute(client.table("reibi_service_tickets").select("*").eq("id", ticket_id).limit(1), "查詢服務案件")
         if not rows:
             raise HTTPException(status_code=404, detail="找不到服務案件")

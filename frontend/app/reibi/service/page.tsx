@@ -24,15 +24,18 @@ function unwrap(response: any, fallback: string) {
 export default function ReibiServicePage() {
   const { session } = useAuth();
   const isSuper = session?.systemRole === "reibi_super";
+  const isServiceManager = ["reibi_super", "reibi_cs"].includes(session?.systemRole || "");
+  const isPartner = ["partner_primary", "partner_sub"].includes(session?.systemRole || "");
   const isManager = ["admin", "reibi_super"].includes(session?.systemRole || "");
-  const allowed = Boolean(session && can(session.systemRole, "service_center"));
+  const allowed = Boolean(session && (isServiceManager || can(session.systemRole, "service_center")));
   const [tab, setTab] = useState<Tab>("tickets");
   const [catalog, setCatalog] = useState<Row>({});
   const [tickets, setTickets] = useState<Row[]>([]);
+  const [serviceScope, setServiceScope] = useState<Row>({ enterprises: [], partner_codes: [] });
   const [announcements, setAnnouncements] = useState<Row[]>([]);
   const [messages, setMessages] = useState<Row[]>([]);
   const [accessRequests, setAccessRequests] = useState<Row[]>([]);
-  const [ticket, setTicket] = useState({ ticket_type: "服務申請", priority: "一般", preferred_date: "", note: "", contact_email: "" });
+  const [ticket, setTicket] = useState({ enterprise_id: "", ticket_type: "服務申請", priority: "一般", preferred_date: "", note: "", contact_email: "" });
   const [announcement, setAnnouncement] = useState({ title: "", body: "", event_date: "", quota: "", status: "draft", template_code: "" });
   const [messageDraft, setMessageDraft] = useState({ target_type: "specific", target_artifact_id: "", target_name: "", template_code: "custom", message: "", delivery_mode: "manual" });
   const [accessDraft, setAccessDraft] = useState({ requester_name: "", requester_email: "", request_type: "credential_recovery", requested_role: "", reason: "" });
@@ -53,10 +56,15 @@ export default function ReibiServicePage() {
   const load = useCallback(async () => {
     if (!allowed) return;
     await run(async () => {
-      const [catalogResponse, ticketsResponse, announcementsResponse] = await Promise.all([
-        API.getReibiServiceCatalog(), API.listReibiServiceTickets(), API.listReibiAnnouncements(),
+      const [catalogResponse, scopeResponse, ticketsResponse, announcementsResponse] = await Promise.all([
+        API.getReibiServiceCatalog(), API.getReibiServiceScope(), API.listReibiServiceTickets(), API.listReibiAnnouncements(),
       ]);
       setCatalog(unwrap(catalogResponse, "無法讀取服務設定"));
+      const nextScope = unwrap(scopeResponse, "無法讀取服務企業範圍") || { enterprises: [], partner_codes: [] };
+      setServiceScope(nextScope);
+      if (nextScope.requires_enterprise && nextScope.enterprises?.length === 1) {
+        setTicket(current => ({ ...current, enterprise_id: String(nextScope.enterprises[0].id) }));
+      }
       setTickets(unwrap(ticketsResponse, "無法讀取服務案件") || []);
       setAnnouncements(unwrap(announcementsResponse, "無法讀取公告") || []);
       if (isManager) setArchitecture(unwrap(await API.getReibiArchitecture(), "無法讀取部門架構"));
@@ -72,8 +80,8 @@ export default function ReibiServicePage() {
   if (!allowed) return <div className="mx-auto max-w-3xl p-8"><div className={card}>此帳號沒有服務中心權限。</div></div>;
 
   const submitTicket = () => run(async () => {
-    unwrap(await API.createReibiServiceTicket({ ...ticket, preferred_date: ticket.preferred_date || null, contact_email: ticket.contact_email || null }), "無法建立服務案件");
-    setTicket({ ticket_type: "服務申請", priority: "一般", preferred_date: "", note: "", contact_email: "" }); await load();
+    unwrap(await API.createReibiServiceTicket({ ...ticket, enterprise_id: ticket.enterprise_id ? Number(ticket.enterprise_id) : null, preferred_date: ticket.preferred_date || null, contact_email: ticket.contact_email || null }), "無法建立服務案件");
+    setTicket({ enterprise_id: "", ticket_type: "服務申請", priority: "一般", preferred_date: "", note: "", contact_email: "" }); await load();
   }, "服務案件已送出，REIBI 會在兩個工作天內回覆。");
 
   const tabs: Array<[Tab, string]> = [["tickets", "服務案件"], ["announcements", "公告與報名"],
@@ -92,14 +100,16 @@ export default function ReibiServicePage() {
 
     {tab === "tickets" && <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
       <form className={card} onSubmit={event => { event.preventDefault(); void submitTicket(); }}><h2 className="flex items-center gap-2 font-black"><ClipboardList className="h-5 w-5 text-sky-700" />新增服務案件</h2>
+        {serviceScope.requires_enterprise && <label className="mt-4 block text-xs font-bold">服務企業<select required className={input} value={ticket.enterprise_id} onChange={e => setTicket({ ...ticket, enterprise_id: e.target.value })}><option value="">請選擇企業</option>{(serviceScope.enterprises || []).map((row: Row) => <option key={row.id} value={row.id}>{row.org_name}（{row.org_code}）</option>)}</select></label>}
+        {isPartner && <div className="mt-3 rounded-xl bg-sky-50 p-3 text-xs text-sky-800">可服務範圍：{(serviceScope.partner_codes || []).join("、") || "尚未取得經銷商範圍"}。案件企業由伺服器再次驗證。</div>}
         <label className="mt-4 block text-xs font-bold">類型<select className={input} value={ticket.ticket_type} onChange={e => setTicket({ ...ticket, ticket_type: e.target.value })}>{(catalog.ticket_types || []).map((value: string) => <option key={value}>{value}</option>)}</select></label>
         <label className="mt-3 block text-xs font-bold">優先級<select className={input} value={ticket.priority} onChange={e => setTicket({ ...ticket, priority: e.target.value })}>{(catalog.ticket_priorities || []).map((value: string) => <option key={value}>{value}</option>)}</select></label>
         <label className="mt-3 block text-xs font-bold">希望日期<input type="date" className={input} value={ticket.preferred_date} onChange={e => setTicket({ ...ticket, preferred_date: e.target.value })} /></label>
         <label className="mt-3 block text-xs font-bold">聯絡 Email<input type="email" className={input} value={ticket.contact_email} onChange={e => setTicket({ ...ticket, contact_email: e.target.value })} /></label>
         <label className="mt-3 block text-xs font-bold">需求說明<textarea required rows={5} className={input} value={ticket.note} onChange={e => setTicket({ ...ticket, note: e.target.value })} /></label>
-        <button className={`${primary} mt-4 w-full`} disabled={loading}>送出案件</button>
+        <button className={`${primary} mt-4 w-full`} disabled={loading || (serviceScope.requires_enterprise && !ticket.enterprise_id)}>送出案件</button>
       </form>
-      <div className="space-y-3">{tickets.map(row => <div key={row.id} className={card}><div className="flex justify-between gap-3"><div><b>{row.ticket_type}</b><div className="mt-1 text-xs text-slate-500">{row.preferred_date || "未指定日期"} · {row.priority}</div></div><span className="h-fit rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-800">{row.status}</span></div><p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{row.note}</p>{row.response_note && <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm">回覆：{row.response_note}</div>}{isSuper && !["已完成", "已關閉"].includes(row.status) && <div className="mt-3 flex gap-2"><button className={secondary} onClick={() => void run(async () => { unwrap(await API.updateReibiServiceTicket(row.id, { status: "處理中" }), "更新失敗"); await load(); }, "案件已開始處理")}>開始處理</button><button className={primary} onClick={() => void run(async () => { unwrap(await API.updateReibiServiceTicket(row.id, { status: "已完成" }), "更新失敗"); await load(); }, "案件已完成")}>完成</button></div>}</div>)}{!tickets.length && <div className={card}>目前沒有服務案件。</div>}</div>
+      <div className="space-y-3">{tickets.map(row => <div key={row.id} className={card}><div className="flex justify-between gap-3"><div><b>{row.ticket_type}</b><div className="mt-1 text-xs text-slate-500">{row.reibi_enterprises?.org_name ? `${row.reibi_enterprises.org_name} · ` : ""}{row.preferred_date || "未指定日期"} · {row.priority}</div></div><span className="h-fit rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-800">{row.status}</span></div><p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{row.note}</p>{row.response_note && <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm">回覆：{row.response_note}</div>}{isServiceManager && !["已完成", "已關閉"].includes(row.status) && <div className="mt-3 flex gap-2"><button className={secondary} onClick={() => void run(async () => { unwrap(await API.updateReibiServiceTicket(row.id, { status: "處理中" }), "更新失敗"); await load(); }, "案件已開始處理")}>開始處理</button><button className={primary} onClick={() => void run(async () => { unwrap(await API.updateReibiServiceTicket(row.id, { status: "已完成" }), "更新失敗"); await load(); }, "案件已完成")}>完成</button></div>}</div>)}{!tickets.length && <div className={card}>目前沒有服務案件。</div>}</div>
     </div>}
 
     {tab === "announcements" && <div className="grid gap-5 lg:grid-cols-[360px_1fr]">

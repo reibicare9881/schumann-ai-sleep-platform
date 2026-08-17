@@ -115,6 +115,6 @@ npx.cmd tsc --noEmit
 npm.cmd run build
 ```
 
-截至 2026-08-17，Batch L 的 84 項 Python 測試、TypeScript no-emit、前端 production build、FastAPI 企業路由 smoke test 與本機 16 個 migration 歷史核對已通過。`reibi_super`／`reibi_finance` 可在 `/reibi` 跨企業總覽選定企業，再管理基本資料、方案、授權、場域與部門；企業 `admin` 仍只限登入 token 內的自身企業。新案開通入口為 `/reibi/onboarding`；成功後可下載不含密碼的 PDF 憑證函，再到 `/reibi/workflow` 建立報價、合約與工單。新案企業會同步至 `organizations`，因此可直接在 `/reibi/accounts` 邀請該企業的可信帳號。遠端 advisor 尚有一項既有警告：Auth 的 leaked-password protection 未啟用；正式上線前應在 Supabase Auth 設定中開啟。
+截至 2026-08-17，Batch M 的 87 項 Python 測試、TypeScript no-emit、前端 production build、FastAPI 路由 smoke test 與遠端 16 個 migration 歷史核對已通過。`reibi_super`／`reibi_finance` 可在 `/reibi` 跨企業總覽選定企業，再管理基本資料、方案、授權、場域與部門；企業 `admin` 仍只限登入 token 內的自身企業。主經銷商在 `/reibi/service` 可選擇自身與直屬子經銷商企業，次級經銷商只限自身；案件清單、建立與 L5 聚合都由後端重新驗證。新案開通入口為 `/reibi/onboarding`；成功後可下載不含密碼的 PDF 憑證函，再到 `/reibi/workflow` 建立報價、合約與工單。新案企業會同步至 `organizations`，因此可直接在 `/reibi/accounts` 邀請該企業的可信帳號。遠端 advisor 尚有一項既有警告：Auth 的 leaked-password protection 未啟用；正式上線前應在 Supabase Auth 設定中開啟。
 
-2026-08-14 已重新安裝 Python 3.11.9 並重建 `backend/.venv`；開發依賴由 `backend/requirements-dev.txt` 引用正式依賴並固定 pytest 8.4.2。2026-08-17 最近一次 `pip check` 無相依衝突，84 項 Python 後端測試通過。`.venv` 仍含基底 Python 的絕對路徑；若基底直譯器被移除，應直接依本文件重建，不應搬移或沿用舊環境。
+2026-08-14 已重新安裝 Python 3.11.9 並重建 `backend/.venv`；開發依賴由 `backend/requirements-dev.txt` 引用正式依賴並固定 pytest 8.4.2。2026-08-17 最近一次 `pip check` 無相依衝突，87 項 Python 後端測試通過。`.venv` 仍含基底 Python 的絕對路徑；若基底直譯器被移除，應直接依本文件重建，不應搬移或沿用舊環境。

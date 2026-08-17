@@ -10,6 +10,8 @@ from typing import Any, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from reibi_l5 import partner_scope_codes
+
 from auth import require_reibi_manager, require_reibi_partner, require_reibi_super
 
 
@@ -353,6 +355,7 @@ def create_reibi_batch_c_router(client: Any) -> APIRouter:
     @router.get("/partner-portal/summary")
     def partner_portal_summary(current_user: dict = Depends(require_reibi_partner)):
         partner_code = str(current_user.get("partner_org_code") or current_user.get("org_code") or "").upper()
+        scoped_partner_codes = partner_scope_codes(client, current_user)
         distributors = _execute(
             client.table("reibi_distributors").select("id,parent_id,org_code,distributor_type,name,alias,status,region,level_code")
             .eq("org_code", partner_code).limit(1), "查詢經銷商入口",
@@ -367,8 +370,8 @@ def create_reibi_batch_c_router(client: Any) -> APIRouter:
                 .eq("parent_id", distributor["id"]).order("name"), "查詢次級經銷商",
             ))
         enterprises = _execute(
-            client.table("reibi_enterprises").select("id,org_code,org_name,status,plan_code,contract_start,contract_end,a_layer_fee,b_layer_fee,c_layer_fee,d_layer_fee")
-            .eq("partner_code", partner_code).order("org_name"), "查詢經銷商企業",
+            client.table("reibi_enterprises").select("id,org_code,org_name,status,partner_code,plan_code,contract_start,contract_end,a_layer_fee,b_layer_fee,c_layer_fee,d_layer_fee")
+            .in_("partner_code", scoped_partner_codes).order("org_name"), "查詢經銷商企業",
         )
         enterprise_ids = [row["id"] for row in enterprises]
         payments: list[dict[str, Any]] = []

@@ -819,6 +819,7 @@ export const API = {
     return this.request('/api/reibi/enterprise/departments/import', { method: 'POST', body: JSON.stringify({ csv_text: csvText }) });
   },
   async getReibiArchitecture() { return this.request('/api/reibi/enterprise/architecture'); },
+  async getReibiServiceScope() { return this.request('/api/reibi/service/scope'); },
   async listReibiServiceTickets(status?: string) { return this.request('/api/reibi/service/tickets', { query: { status } }); },
   async createReibiServiceTicket(payload: Record<string, any>) {
     return this.request('/api/reibi/service/tickets', { method: 'POST', body: JSON.stringify(payload) });

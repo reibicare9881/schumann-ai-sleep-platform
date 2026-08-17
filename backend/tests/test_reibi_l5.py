@@ -143,11 +143,12 @@ class ReibiL5Tests(unittest.TestCase):
             "reibi_contracts": [{"id": 1, "enterprise_id": 2}, {"id": 2, "enterprise_id": 3}],
             "reibi_payment_schedules": [{"id": 1, "enterprise_id": 1}, {"id": 2, "enterprise_id": 3}],
             "reibi_work_orders": [{"id": 1, "enterprise_id": 2}, {"id": 2, "enterprise_id": 3}],
+            "reibi_service_tickets": [{"id": 1, "enterprise_id": 1}, {"id": 2, "enterprise_id": 3}],
         })
         datasets, codes = fetch_l5_datasets(client, {"role": "partner_primary", "partner_org_code": "P-01"})
         self.assertEqual(codes, ["P-01", "P-01-SUB"])
         self.assertEqual({row["id"] for row in datasets["enterprises"]}, {1, 2})
-        for name in ("quotes", "contracts", "payments", "work_orders"):
+        for name in ("quotes", "contracts", "payments", "work_orders", "tickets"):
             self.assertTrue(all(row["enterprise_id"] in {1, 2} for row in datasets[name]))
 
 
