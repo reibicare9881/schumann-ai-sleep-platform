@@ -6,7 +6,7 @@
 
 目前開發分支：`codex/reibi-fastapi-merge`
 
-本文件記錄的功能基準提交：`12f7806 fix: render l5 service ticket workflow`
+本文件記錄的功能基準提交：`b62fa47 feat: honour the role registry in batch d and e guards`
 
 正式部署分支：`main`（目前尚未將本次移植分支合併到 `main`）
 
@@ -67,37 +67,45 @@
 
 | 狀態 | 數量 | 說明 |
 |---|---:|---|
-| `[x]` 完成 | 191 | 已實作且有對應驗證紀錄 |
-| `[-]` 部分完成 | 10 | 已有功能，但仍缺完整 UX、權限矩陣或 E2E |
-| `[ ]` 待完成 | 21 | 主要是共用工程品質、完整 E2E、地圖與發布作業 |
+| `[x]` 完成 | 246 | 已實作且有對應驗證紀錄 |
+| `[-]` 部分完成 | 10 | 已有功能，但仍缺完整 UX 或部分角色 E2E |
+| `[ ]` 待完成 | 24 | 主要是共用工程品質、未實作的 registry 權限與發布作業 |
 | `[~]` 外部依賴／延後 | 8 | leaked-password、LINE、金流、發票等 |
 | `[N/A]` 不適用 | 8 | 主要為已決定不執行的舊 Artifact 資料搬遷 |
 
-以「完成／（完成＋部分＋待完成）」計算，完整完成約 **86%**。這是清單完成率，不代表正式上線風險已完成 86%；正式上線仍受完整角色 E2E、監控、備份與安全設定影響。
+以「完成／（完成＋部分＋待完成）」計算，完整完成約 **88%**。這是清單完成率，不代表正式上線風險已完成 88%；正式上線仍受監控、備份與安全設定影響。
 
 ### 2.3 最近驗證結果
 
-- 後端：`89 passed`，另有 1 個 Pydantic V2 deprecation warning。
-- Python 相依性：`pip check` 無衝突。
-- 前端：TypeScript `--noEmit` 通過。
-- 前端：Next.js production build 通過，共 29 個 route。
-- Git：提交 `12f7806` 已推到 `origin/codex/reibi-fastapi-merge`。
-- Vercel：該提交部署成功。
-- Railway staging：該提交部署成功。
-- 遠端瀏覽器：`/reibi/l5` 已實測顯示「服務案件／待處理／全部」卡片。
-- Supabase：`Schumann-AI-Platform` 為 `ACTIVE_HEALTHY`，16 個遠端 migration 與 repo 一致。
+2026-08-17 於本機實測：
+
+| 關卡 | 結果 |
+|---|---|
+| Python 測試 | `3275 passed`（無 warning） |
+| `pip check` | 無衝突 |
+| pgTAP（`npm run db:test`） | `146 passed`，`Result: PASS` |
+| Database lint | `No schema errors found` |
+| 16 個 migration 空庫重播 | 全數成功 |
+| TypeScript `--noEmit` | 通過 |
+| Next.js production build | 通過 |
+| Playwright E2E（`npm run e2e`） | `24 passed`（18 desktop + 6 mobile） |
+
+- Git：提交 `b62fa47` 已推到 `origin/codex/reibi-fastapi-merge`。
+- Supabase 遠端：`Schumann-AI-Platform` 為 `ACTIVE_HEALTHY`，16 個 migration 與 repo 一致；本次移植未新增 schema。
+- Docker Desktop 與 CLI 在本次工作階段可用（Server 29.6.2）。
+
+> 兩個測試基礎建設的重要修正：後端測試原本讀 `backend/.env` 執行，等同指向**正式** Supabase 專案（現已釘死為假值）；`supabase test db` 原本一直回傳 FAIL，Batch K 的斷言從未被計入先前宣稱的「135 項 pgTAP 通過」。詳見 checklist §28。
 
 ### 2.4 下一個主要里程碑
 
-下一步不是再搬舊 `window.storage`，而是：
+功能移植、權限矩陣與 E2E 已完成，剩下的是**只能由專案負責人執行**的發布作業。完整清單見 [reibi-release-checklist.md](reibi-release-checklist.md)：
 
-1. 建立 14 個角色的安全測試帳號與測試資料矩陣。
-2. 完成每個 endpoint 的 401／403、跨組織 IDOR/BOLA 測試。
-3. 完成瀏覽器 E2E：登入 → 新案 → 邀請 → 報價 → 合約 → 工單 → 驗收。
-4. 補主要頁面的手機版與錯誤／空狀態驗收。
-5. 啟用 Supabase leaked-password protection。
-6. 完成備份、監控、正式 secrets／CORS／網域檢查。
-7. PR code review 通過後才合併 `main`。
+1. 啟用 Supabase leaked-password protection（目前 advisor 唯一 WARN）。
+2. 備份確認與還原演練。
+3. 設定監控與錯誤告警。
+4. 正式 secrets／CORS／網域／HTTPS 核對。
+5. 開 Draft PR（`gh` CLI 未安裝，需用網頁；標題與內文已備妥於 [reibi-pull-request.md](reibi-pull-request.md)）。
+6. Code review 通過後合併 `main`，再執行正式 smoke test。
 
 ---
 
@@ -172,6 +180,8 @@ C:\sleepm_merge
 關鍵文件：
 
 - [完整功能移植清單](reibi-feature-migration-checklist.md)
+- [合併前發布檢查清單](reibi-release-checklist.md)　←　**接手發布作業從這裡開始**
+- [PR 標題與內文](reibi-pull-request.md)
 - [本機開發流程](reibi-local-development.md)
 - [Supabase 現況盤點](supabase-inventory.md)
 - [Artifact 欄位映射](reibi-artifact-mapping.md)
@@ -197,7 +207,7 @@ C:\sleepm_merge
 | Next.js | 14.2.x（lockfile 為準） |
 | FastAPI | 0.136.1 |
 
-2026-08-17 這個 PowerShell 找不到 `docker` 指令。接手者應先確認 Docker Desktop Engine running，並重新開 PowerShell；若仍找不到，檢查 Docker Desktop 安裝或 CLI PATH。不要因為 GUI 可開啟就假設 CLI 一定可用。
+2026-08-17 後續工作階段已確認 Docker Desktop 與 CLI 均可用（`docker version` 回報 Server 29.6.2），本機 Supabase、pgTAP 與 Playwright E2E 都已在該環境實跑通過。若換機後找不到 `docker` 指令，先確認 Docker Desktop Engine running 並重新開 PowerShell；不要因為 GUI 可開啟就假設 CLI 一定可用。
 
 ### 5.2 首次安裝或重新建置
 
@@ -702,7 +712,9 @@ Set-Location C:\sleepm_merge\backend
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-2026-08-17：`89 passed, 1 warning in 5.69s`。warning 是 `config.py` 的 class-based Pydantic `Config` 將在 V3 移除，尚不影響運作，但應列入技術債。
+2026-08-17：`3275 passed`，無 warning（`config.py` 已改用 `SettingsConfigDict`，並在 `pytest.ini` 將該 deprecation 升為 error 防止回歸）。
+
+測試套件在載入 `config` 前會把 Supabase URL、service role key、JWT secret 與 Gemini key 全部釘死為假值，並在 `import main` 之前把 `supabase.create_client` 換成記憶體替身。**任何測試都不會連到遠端 Supabase**；若你新增的測試需要資料，請 seed `fake_supabase` fixture，不要改這層保護。
 
 ### 11.2 前端
 
@@ -721,12 +733,34 @@ Docker／本機 Supabase 可用時：
 ```powershell
 Set-Location C:\sleepm_merge
 npm.cmd run supabase -- start
-npm.cmd run supabase -- db reset --local --no-seed
+npm.cmd run db:reset
+npm.cmd run db:test
+npm.cmd run db:lint
 ```
 
-再執行 `supabase/tests` 中的 pgTAP 測試。MFA 批次最近完整紀錄為 135 項 pgTAP 通過；Batch L/M 沒有 schema 變更，因此 migration 仍為 16 個。重新宣稱 pgTAP 通過前，必須在本機 Docker 可用的當次工作階段重新跑過。
+2026-08-17 實跑：16 個 migration 空庫重播成功、**146 項 pgTAP 通過且 `Result: PASS`**、lint 回報 `No schema errors found`，並連續執行兩次確認可重複。
 
-### 11.4 遠端 smoke test
+先前文件記載的「135 項」不含 Batch K —— 那個檔案不是 pgTAP 格式，pg_prove 計 0 項並讓整個 `supabase test db` 以 FAIL 收場。已改寫為正規 pgTAP，該指令現在可以當驗收關卡使用。重新宣稱 pgTAP 通過前，仍必須在當次工作階段重新跑過。
+
+### 11.4 瀏覽器 E2E
+
+```powershell
+Set-Location C:\sleepm_merge\frontend
+npm.cmd run e2e
+```
+
+前置條件（依序）：
+
+1. Docker Desktop Engine running。
+2. `npm run supabase -- start`（repo 根目錄）。
+3. `npm run db:reset`。
+4. `backend\.venv\Scripts\python.exe tests\e2e_seed.py` —— 建立四個本機可信帳號。
+
+Playwright 會自行拉起後端（port 8001）與前端 production build（port 3001），兩者都指向**本機** Supabase。種子腳本硬性拒絕非 `127.0.0.1:54321` 的目標，所以 E2E 不會寫入 staging／正式共用的專案。
+
+2026-08-17 實跑：24 項通過（18 desktop + 6 mobile），涵蓋登入契約、新案開通、報價→合約→工單→驗收全閉環、L5 角色裁切、空狀態與 API 失敗、五個頁面的手機版無水平溢出。
+
+### 11.5 遠端 smoke test
 
 至少驗證：
 
@@ -739,30 +773,50 @@ npm.cmd run supabase -- db reset --local --no-seed
 7. 未登入 API 收到 401。
 8. Vercel 前端確實連到 staging Railway，而不是 localhost 或舊 backend。
 
-### 11.5 完整 E2E 尚待完成
+### 11.6 測試涵蓋現況
 
-待建立矩陣：
+已完成：
 
-- 14 角色 × 核心頁面 × 允許／拒絕結果。
-- 401：無 token、過期 token、錯誤簽章。
-- 403：錯誤角色、跨企業 `org_code`、錯誤 department／distributor。
-- IDOR/BOLA：以合法帳號猜測其他企業的 ID。
-- 邀請、MFA、session 撤銷、停用帳號。
-- 新案 → 帳號 → 報價 → 合約 → 工單 → 驗收。
-- 手機版、重新整理、空狀態、API 失敗、重複送出與並發。
+| 項目 | 涵蓋方式 |
+|---|---|
+| 401：無 token、格式錯誤、過期、簽章偽造、可信 session 未註冊／已撤銷 | 166 條受保護路由 × 6 種情境，路由表由 `main.app` 自動讀取 |
+| 公開路由 | 10 條明文允許清單；新增未登記的公開端點會讓測試失敗 |
+| 403：14 角色 × 具名守門 | 守門宣告表，放行集合必須等於持有對應權限的角色集合 |
+| 403：handler 內授權的路由 | `test_inline_authorization.py` |
+| IDOR/BOLA：個人健康紀錄 | 9 條路由 × 5 種越權身分 |
+| 跨企業 `org_code` 越權 | 已涵蓋 |
+| 全業務閉環 | Playwright：新案 → 報價 → 合約 → 工單 → 驗收 |
+| 手機版、空狀態、API 失敗 | Playwright |
+
+尚待補：
+
+- 企業 `admin`、`occupational_health`、兩種經銷商角色的**瀏覽器** E2E；其權限已由 Python 矩陣完整覆蓋（TST-Q10）。
+- 邀請 → 設密碼 → MFA 綁定的瀏覽器全流程（本機 Mailpit 已可自動收信，尚未串接）。
+- 效能、大資料、分頁與併發測試（TST-12）。
 
 ---
 
 ## 12. 已知問題、限制與技術債
 
-### 必須在合併 `main` 前處理
+### 必須在合併 `main` 前處理（全部只能由專案負責人執行）
 
-- 尚未完成 14 角色全 endpoint 的 401／403／IDOR/BOLA E2E。
-- 尚未完成全流程瀏覽器 E2E 與手機版驗收。
-- Supabase leaked-password protection 尚未啟用。
+完整步驟見 [reibi-release-checklist.md](reibi-release-checklist.md)。
+
+- Supabase leaked-password protection 尚未啟用（遠端 advisor 唯一 WARN）。
 - 正式備份／還原演練、監控與錯誤告警尚未完成。
 - 正式 CORS、正式網域、HTTPS 與 secrets 最終核對尚未簽核。
-- PR 仍需 code review 並由 Draft 轉 ready。
+- PR 尚未建立（`gh` CLI 未安裝，需用網頁；內容已備妥於 [reibi-pull-request.md](reibi-pull-request.md)），仍需 code review 並由 Draft 轉 ready。
+
+401／403／IDOR/BOLA 與全流程瀏覽器 E2E **已於 2026-08-17 完成**，見 §11.6。
+
+### 未實作的 registry 權限（IAM-R04）
+
+`roles.py` 定義 26 個權限字串，目前只有 6 個會被後端查詢。以下角色可登入但職掌未實作：
+
+- `admin_it` 的 `security_audit` —— 尚無稽核端點，該角色目前只有服務中心可用。
+- `reibi_finance` 的 `distributor_manage`／`finance_manage` —— 經銷商、staff、訂閱仍為 `require_reibi_super`；付款、匯款、發票可用。
+
+邀請這些角色的帳號前請先知悉此限制。另注意 `reibi_internal_users.permission_overrides` 只對會被查詢的權限有效。
 
 ### 功能與 UX 待補
 
@@ -772,9 +826,8 @@ npm.cmd run supabase -- db reset --local --no-seed
 - 共用 API response schema、錯誤碼、correlation ID。
 - 統一分頁、排序、搜尋、日期參數。
 - 共用 REIBI layout、權限式選單、breadcrumb 與表格／表單元件。
-- PII／健康資料 log redaction 與錯誤訊息脫敏。
+- PII／健康資料 log redaction 與錯誤訊息脫敏（部分端點仍把原始例外字串放進 response detail）。
 - 檔案上傳 MIME／雜湊／大小／惡意內容防護。
-- Supabase client fake／integration test 分層。
 - 效能、大資料、分頁與併發測試。
 
 ### 外部服務，核心移植不因此阻擋
@@ -787,11 +840,12 @@ npm.cmd run supabase -- db reset --local --no-seed
 
 ### 目前環境注意
 
-- 本次 PowerShell 找不到 Docker CLI；本機 Supabase 尚未在重開機後重新驗證。
+- Docker Desktop 與 CLI 已確認可用（Server 29.6.2）；本機 Supabase、pgTAP 與 Playwright 均實跑通過。
 - Supabase CLI 在受限環境可能因 telemetry 檔寫入權限報錯。
 - `backend/.venv` 可用，但仍依賴固定基底 Python 3.11.9 路徑。
-- `backend/config.py` 有 Pydantic V2 deprecated Config warning。
-- staging 與正式方向目前共用同一 Supabase；測試寫入要特別保守。
+- staging 與正式方向目前共用同一 Supabase。**所有自動化測試已改為只寫入本機 Supabase**，但手動測試寫入前仍請先確認資料內容與清理方式。
+- `reibi/` 目錄含 15,322 行原始 Artifact 素材，佔本分支插入行數約 44%。要不要讓它們進 `main` 尚未決定；不影響任何功能，但會大幅影響 PR 可讀性。
+- 工作區長期存在三個與移植無關的使用者變更（`.gitignore` 與兩個 `.pyc`），全程未觸碰。
 
 ---
 
@@ -872,22 +926,24 @@ CLI 使用 JSON output 時不能互動提示。依 `--help` 補齊所有必要 f
 6. 唯讀確認 Supabase project healthy、16 migrations 與 advisor。
 7. 確認 Vercel／Railway 最新部署指向同一 feature commit。
 
-### 第二階段：建立 E2E 測試規格
+### 第二階段：跑一次完整驗證
 
-1. 建立 14 角色矩陣，不立即建立所有帳號。
-2. 定義每個角色需要的 org、department、distributor fixture。
-3. 定義可回收的 staging 測試資料命名。
-4. 先完成 `reibi_super`、企業 admin、`reibi_cs`、主／次經銷商五條高風險路徑。
-5. 再擴展至其餘角色。
+依 [reibi-release-checklist.md](reibi-release-checklist.md) §1 的四道關卡逐一執行，確認本機仍是綠燈。
 
-### 第三階段：安全與發布
+### 第三階段：發布（專案負責人）
 
 1. 啟用 leaked-password protection 並回歸邀請與登入。
 2. 完成備份／還原演練。
 3. 設定監控與錯誤告警。
 4. 檢查正式 CORS、網域與 secrets。
-5. PR code review。
-6. 完整驗收後才合併 `main`。
+5. 用網頁開 Draft PR，內容取自 [reibi-pull-request.md](reibi-pull-request.md)。
+6. PR code review。
+7. 完整驗收後才合併 `main`，再執行 §11.5 的正式 smoke test。
+
+### 尚待決定
+
+1. `reibi/` 的 15,322 行原始 Artifact 素材要留在 `main` 或移到封存分支。
+2. 未實作的 registry 權限（IAM-R04）要補端點，或把那些權限標為保留並修正角色說明。
 
 ---
 
@@ -898,19 +954,28 @@ CLI 使用 JSON output 時不能互動提示。依 `--help` 補齊所有必要 f
 
 請先完整閱讀：
 1. docs/reibi-merge-master-handoff.md
-2. docs/reibi-feature-migration-checklist.md
-3. docs/reibi-local-development.md
-4. docs/supabase-inventory.md
+2. docs/reibi-release-checklist.md
+3. docs/reibi-feature-migration-checklist.md
+4. docs/reibi-local-development.md
 
 目前開發分支是 codex/reibi-fastapi-merge，正式部署分支是 main。
 不要覆蓋或提交既有的 .gitignore 與兩個 backend/modules/__pycache__ 變更。
-每完成一個 batch，必須執行後端測試、TypeScript、Next production build，更新文件，commit 並 push 到 codex/reibi-fastapi-merge。
-專案使用 FastAPI + Next.js + Supabase，AI 一律 Gemini。
-service role 只能在後端。
-舊 Artifact window.storage 已決定不搬遷。
-staging 與正式方向共用現有 Supabase，因此任何測試寫入前先告訴我資料內容與清理方式。
 
-請先只讀確認工作區、Git、Python、Node、Docker、Supabase、Railway 與 Vercel 狀態，再告訴我檢查結果；不要立刻修改程式或資料。
+功能移植、14 角色權限矩陣與瀏覽器 E2E 已完成；剩下的是需要 Supabase Dashboard
+與 GitHub 權限的發布作業，那些由我執行，不要嘗試代做。
+
+每完成一個 batch，必須跑四道關卡（後端 pytest + pip check、TypeScript --noEmit、
+Next production build、pgTAP db:test），更新文件，commit 並 push 到 feature branch。
+需要動到 UI 或業務流程時，另外跑 frontend 的 npm run e2e。
+
+專案使用 FastAPI + Next.js + Supabase，AI 一律 Gemini，service role 只能在後端。
+舊 Artifact window.storage 已決定不搬遷。
+自動化測試一律只寫入本機 Supabase；staging 與正式共用同一個遠端專案，
+任何手動測試寫入前先告訴我資料內容與清理方式。
+roles.py 是授權的唯一權威 —— 新增守門請用 has_permission()，不要寫死角色名稱集合。
+
+請先只讀確認工作區、Git、Python、Node、Docker 與 Supabase 狀態，再告訴我檢查結果；
+不要立刻修改程式或資料。
 ```
 
 ---
@@ -919,17 +984,19 @@ staging 與正式方向共用現有 Supabase，因此任何測試寫入前先告
 
 只有同時達成以下條件，才可宣稱「REIBI 移植與正式上線完成」：
 
-- 核心功能與核准差異都已記錄。
-- 所有 schema 變更都有版本化 migration。
-- FastAPI 的輸入、權限與 tenant scope 完整。
-- 前端載入、空、錯誤、成功與手機版可用。
-- service role 未外洩，RLS／grants／RPC 經過安全 review。
-- 14 角色 401／403／IDOR/BOLA 測試完成。
-- 登入、新案、帳號、報價、合約、工單、驗收 E2E 完成。
-- Gemini、PDF、Storage 與外部整合有真實失敗處理。
-- Supabase leaked-password protection 已啟用。
-- 備份、還原、監控、告警、正式 CORS／網域／secrets 已驗證。
-- PR review 通過並合併 `main`。
-- 合併後 production smoke test 通過。
+| 條件 | 狀態 |
+|---|---|
+| 核心功能與核准差異都已記錄 | ✅ |
+| 所有 schema 變更都有版本化 migration | ✅ 16 個，空庫重播通過 |
+| FastAPI 的輸入、權限與 tenant scope 完整 | ✅ |
+| 前端載入、空、錯誤、成功與手機版可用 | ✅ Playwright 驗證 |
+| service role 未外洩，RLS／grants／RPC 經過安全 review | ✅ E2E 驗證瀏覽器端無 service role |
+| 14 角色 401／403／IDOR/BOLA 測試完成 | ✅ 見 §11.6 |
+| 登入、新案、帳號、報價、合約、工單、驗收 E2E 完成 | ✅ 帳號邀請流程僅 API 層覆蓋 |
+| Gemini、PDF、Storage 與外部整合有真實失敗處理 | ✅ |
+| Supabase leaked-password protection 已啟用 | ⬜ **專案負責人** |
+| 備份、還原、監控、告警、正式 CORS／網域／secrets 已驗證 | ⬜ **專案負責人** |
+| PR review 通過並合併 `main` | ⬜ **專案負責人** |
+| 合併後 production smoke test 通過 | ⬜ **專案負責人** |
 
-在此之前，較準確的描述是：**主要功能移植已完成，現在進入完整權限、E2E、安全與正式發布驗收階段。**
+在此之前，較準確的描述是：**功能移植、權限矩陣與端對端測試已完成，剩下的全部是需要 Dashboard／GitHub 權限的發布作業。**
