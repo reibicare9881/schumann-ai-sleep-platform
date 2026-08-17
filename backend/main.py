@@ -1168,9 +1168,9 @@ async def generate_ai_trend_analysis(
     platform: str = "sleep", 
     current_user: dict = Depends(get_current_user)
 ):
-    # 1. 權限防護
-    if current_user.get("uid") != user_id and current_user.get("role") not in ["admin", "dept_head"]:
-        raise HTTPException(status_code=403, detail="越權存取")
+    # 1. 權限防護：本人或同單位管理者。
+    #    舊版只比對角色，任一單位的 admin／dept_head 都能對任何人的健康資料產生 AI 分析。
+    assert_can_read_user_records(current_user, user_id)
 
     history_text = []
     prompt = ""

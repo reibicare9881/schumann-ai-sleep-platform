@@ -441,5 +441,14 @@
 - [x] TST-O09：測試替身補上 `not_` 否定過濾（`reibi_batch_e` 的部門清單查詢使用 `not_.is_(...)`）。
 - [x] SEC-O06：修正 `GET /api/reibi/finance/settings` 在設定列不存在時直接對空清單取 `[0]`，造成 IndexError → 500。改為 404 並附明確訊息；不憑空補一組預設分潤上限。
 - [ ] SEC-O07：`roles.py` 被文件列為唯一權威，但 Batch D／E router 自行寫死角色集合，與 registry 不一致。`admin_hr` 在 registry 持有 `org_analytics` 與 `ohs_manage`、`admin_finance` 持有 `org_analytics`，實際上所有相關路由都回 403，這三個細分企業管理角色目前無法執行文件所述職掌。屬 fail-closed（過度拒絕），非資料外洩。現行行為已由 `TestPermissionRegistryDivergence` 固定下來以免無聲改變；是否放寬需產品決策。
-- [ ] TST-O10：33 條授權寫在 handler 內的路由中，仍有 24 條待逐條判讀與宣告（其餘 9 條個人紀錄路由已於 Batch O1 覆蓋）。
 - [x] TST-O11：3070 項 Python 測試通過，`pip check` 無衝突，TypeScript no-emit 與 Next.js production build 通過。
+
+## 27. Batch O3 內嵌授權路由（2026-08-17）
+
+- [x] TST-O10：守門偵測改為收集路由上所有依賴 callable，不再只比對 `require_` 前綴。`reibi_onboarding` 的守門叫 `_actor`，前綴規則會讓那 5 條新案開通路由完全沒被測到；改版後具名守門路由由 133 條增為 138 條。
+- [x] SEC-O08：修正 `POST /api/ai-trend/{user_id}` 只比對角色不比對組織的跨租戶問題。此端點會讀取指定使用者的睡眠與疼痛歷史並送進 Gemini 產生分析，原本任一單位的 `admin`／`dept_head` 都能對任何人執行。改用 `assert_can_read_user_records`。
+- [x] TST-O12：新增 `tests/test_inline_authorization.py`，涵蓋授權寫在 handler 內、無法由矩陣自動產生的 19 條路由。包含兩種契約：明確拒絕（服務案件結案、L5 總覽、個人帳號公告報名、代他人提交評估／預約／切換平台）與範圍裁切（經銷商案件清單不含其他經銷商企業、個人帳號取得空清單）。
+- [x] SEC-O09：驗證經銷商可建立案件但不可更新或結案（`partner_primary`／`partner_sub` 對 `PATCH /service/tickets/{id}` 一律 403），符合 Batch M 的設計；`service_manage` 僅 `reibi_cs` 與 `reibi_super` 持有。
+- [x] SEC-O10：驗證取消公告報名只影響呼叫者自己的報名列；以他人 `profile_id` 的報名列測試回傳 404 且資料未被修改。
+- [x] TST-O13：3192 項 Python 測試通過，`pip check` 無衝突，TypeScript no-emit 與 Next.js production build 通過。
+- [ ] TST-O14：`GET /api/reibi/service/tickets` 與 `GET /api/reibi/announcements` 未做權限檢查而改以範圍裁切回應，與同模組 `/service/scope` 要求 `service_center` 權限的作法不一致。目前不造成越權（超出範圍者得到空清單），但行為契約應統一。

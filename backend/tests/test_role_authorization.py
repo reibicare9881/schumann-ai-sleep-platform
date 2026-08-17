@@ -59,6 +59,9 @@ GUARD_ALLOWED_ROLES: dict[str, set[str]] = {
     "require_ohs_manager": {"admin", "reibi_super"},
     "require_occupational": {"admin", "reibi_super", "occupational_health"},
     "require_aggregate_viewer": {"dept_head", "admin", "reibi_super"},
+    # --- reibi_onboarding.py -----------------------------------------------
+    # has_permission("enterprise_manage"): reibi_finance, plus reibi_super via "all"
+    "_actor": {"reibi_super", "reibi_finance"},
     # --- reibi_batch_e.py --------------------------------------------------
     "require_org_analytics": {"admin", "dept_head"},
     "require_org_report": {"admin"},
@@ -67,18 +70,30 @@ GUARD_ALLOWED_ROLES: dict[str, set[str]] = {
 }
 
 
-def _guards(dependant, seen: set[int] | None = None) -> set[str]:
+# Dependencies that authenticate rather than authorize; they carry no role set.
+NON_GUARD_DEPENDENCIES = {"get_current_user", "HTTPBearer", "Security"}
+
+
+def _guards(dependant, seen: set[int] | None = None, *, top: bool = True) -> set[str]:
+    """Every dependency callable on a route, not only ``require_*`` names.
+
+    Guards are not required to follow a naming convention — the onboarding
+    router calls its own ``_actor`` — so matching on a prefix silently leaves
+    routes untested.  Collecting every dependency instead makes an undeclared
+    guard fail loudly.
+    """
     if seen is None:
         seen = set()
     found: set[str] = set()
-    name = getattr(getattr(dependant, "call", None), "__name__", None)
-    if name and name.startswith("require_"):
-        found.add(name)
+    if not top:
+        name = getattr(getattr(dependant, "call", None), "__name__", None)
+        if name and name not in NON_GUARD_DEPENDENCIES:
+            found.add(name)
     for sub in dependant.dependencies:
         if id(sub) in seen:
             continue
         seen.add(id(sub))
-        found |= _guards(sub, seen)
+        found |= _guards(sub, seen, top=False)
     return found
 
 
