@@ -461,3 +461,16 @@
 - [x] TST-P04：`organizations` 同步經直接查詢確認正常運作（`reibi_enterprises` 與 `organizations` 皆有對應列），先前的失敗來自測試寫法而非產品缺陷。
 - [x] TST-08／TST-09：146 項 pgTAP 全數通過且 `supabase test db` 回傳 `Result: PASS`；`supabase db lint --level warning` 回報 `No schema errors found`。
 - [x] TST-P05：新增 `npm run db:reset`／`db:test`／`db:lint` 便捷指令，讓資料庫回歸與後端、前端檢查一樣可一行執行。
+
+## 29. Batch Q 瀏覽器 E2E（2026-08-17）
+
+- [x] TST-Q01：導入 Playwright。`playwright.config.ts` 自行拉起後端（port 8001）與前端（port 3001），全部指向本機 Supabase，不碰 staging／正式共用專案；port 與開發者自己的 dev server 不衝突。
+- [x] TST-Q02：E2E 跑 Next.js production build 而非 `next dev`。`next dev` 在首次請求才編譯路由，導致第一個抵達冷路由的測試逾時、單獨重跑卻通過；改用 production build 後穩定且更接近實際部署產物。
+- [x] TST-Q03：`backend/tests/e2e_seed.py` 建立四個可信帳號（super／finance／cs／data）。腳本硬性檢查目標必須是 `http://127.0.0.1:54321`，指向其他專案時直接拒絕執行。
+- [x] TST-07／TST-Q04：登入情境 6 項 —— 正確憑證、錯誤密碼、未註冊 Email 不洩漏帳號是否存在、未登入導回、登出後失效，以及驗證 localStorage 不含 service role 或 refresh token。
+- [x] TST-11／TST-Q05：完整業務閉環 1 項 —— 新案開通 → 報價建立 → 已發送 → 已確認 → 轉合約 → 簽署／用印／執行快照 → 建立施工工單 → 五段狀態流轉 → 驗收簽署 → 驗收完成，全程由 UI 點擊驅動。
+- [x] TST-Q06：新案開通 5 項 —— 三步驟建立、案件／組織／憑證函編號格式、必填欄位阻擋、憑證函 PDF 下載、新企業出現在 `/reibi` 清單。
+- [x] TST-Q07：L5 角色裁切 5 項 —— super 看到完整流程卡與趨勢、`reibi_data` 看不到財務數字與作業流程、`reibi_finance` 看不到權限申請待辦、空狀態不是崩潰、後端 500 時頁面不是空白畫面。
+- [x] TST-Q08：手機版 6 項（Pixel 5 視窗）—— L5、跨企業管理、新案開通、服務中心、商務文件五個頁面均無水平溢出，登入表單在窄視窗仍可完整操作。
+- [x] TST-Q09：24 項 E2E 全數通過（18 desktop + 6 mobile）。新增 `npm run e2e`／`e2e:desktop`／`e2e:mobile`／`e2e:report`。
+- [ ] TST-Q10：企業 `admin`、`occupational_health` 與兩種經銷商角色的瀏覽器 E2E 尚未建立；這些角色需要先透過邀請流程建立帳號（Mailpit 已可自動收信），目前其權限已由 Python 矩陣完整覆蓋。

@@ -1,0 +1,6 @@
+# Playwright end-to-end artifacts. Kept in a frontend-scoped file so the repo
+# root .gitignore, which carries unrelated uncommitted changes, is left alone.
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
