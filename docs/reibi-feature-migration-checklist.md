@@ -432,4 +432,14 @@
 - [x] TST-O02：新增 `tests/test_object_authorization.py`，涵蓋 9 條個人紀錄路由 × 5 種越權身分（個人、他單位成員、他單位 admin、他單位 dept_head、REIBI 跨企業分析角色），並驗證本人與同單位 admin 的正常存取未被過度阻擋。
 - [x] TST-O03：測試替身補上 PostgREST 的型別轉換語意（`.eq("id", "501")` 需匹配整數 501），避免測試因替身過嚴而產生真實資料庫不會出現的失敗。
 - [x] TST-O04：1200 項 Python 測試通過，`pip check` 無衝突，TypeScript no-emit 與 Next.js production build 通過。
-- [ ] TST-O05：REIBI 業務路由（71 條授權寫在 handler 內的端點）的角色與跨企業 403 矩陣仍待完成，併入 TST-04。
+## 26. Batch O2 角色授權矩陣（2026-08-17）
+
+- [x] TST-O05：新增 `tests/test_role_authorization.py`。守門由路由表推導而非人工列舉，因此新端點掛在既有守門下即自動納入涵蓋；出現新守門時 `test_every_guard_in_use_is_declared` 會失敗直到補上允許角色，守門被移除時另一項測試會提醒清除宣告。
+- [x] TST-O06：133 條具名守門路由 × 14 角色的完整矩陣。不在允許集合內的角色一律驗證回傳 403；允許集合內的角色驗證「未被授權層拒絕」（後續 404／422 屬 handler 對空資料庫的正常回應，不在本測試範圍）。
+- [x] TST-O07：測試 token 補上真實登入會簽發的 `dept` claim。Batch D／E 的部門範圍檢查比對的是部門名稱而非 `department_id`，缺這個 claim 會讓 `dept_head` 的正常路徑被誤判為權限問題。
+- [x] TST-O08：跨企業角色（`reibi_super`／`reibi_finance`）在矩陣中一律明確帶 `org_code`，與 UI 行為一致；`{org_code}` 路徑參數使用該角色實際有權的代碼，避免用佔位符觸發合法的跨組織 403 而遮蔽守門本身的結果。
+- [x] TST-O09：測試替身補上 `not_` 否定過濾（`reibi_batch_e` 的部門清單查詢使用 `not_.is_(...)`）。
+- [x] SEC-O06：修正 `GET /api/reibi/finance/settings` 在設定列不存在時直接對空清單取 `[0]`，造成 IndexError → 500。改為 404 並附明確訊息；不憑空補一組預設分潤上限。
+- [ ] SEC-O07：`roles.py` 被文件列為唯一權威，但 Batch D／E router 自行寫死角色集合，與 registry 不一致。`admin_hr` 在 registry 持有 `org_analytics` 與 `ohs_manage`、`admin_finance` 持有 `org_analytics`，實際上所有相關路由都回 403，這三個細分企業管理角色目前無法執行文件所述職掌。屬 fail-closed（過度拒絕），非資料外洩。現行行為已由 `TestPermissionRegistryDivergence` 固定下來以免無聲改變；是否放寬需產品決策。
+- [ ] TST-O10：33 條授權寫在 handler 內的路由中，仍有 24 條待逐條判讀與宣告（其餘 9 條個人紀錄路由已於 Batch O1 覆蓋）。
+- [x] TST-O11：3070 項 Python 測試通過，`pip check` 無衝突，TypeScript no-emit 與 Next.js production build 通過。

@@ -27,6 +27,11 @@ PRIMARY_ORG_ID = 9001
 OTHER_ORG_ID = 9002
 PRIMARY_DEPARTMENT_ID = 9101
 OTHER_DEPARTMENT_ID = 9102
+# Department scope is matched on the department *name*: both login paths sign a
+# "dept" claim (main.py token_payload, reibi_batch_g session) and the Batch D/E
+# routers compare against it, not against department_id.
+PRIMARY_DEPARTMENT_NAME = "測試部門"
+OTHER_DEPARTMENT_NAME = "其他部門"
 PRIMARY_DISTRIBUTOR_ID = 9201
 CHILD_DISTRIBUTOR_ID = 9202
 OTHER_DISTRIBUTOR_ID = 9203
@@ -125,6 +130,7 @@ class TokenFactory:
             payload["org_id"] = OTHER_ORG_ID if is_other else PRIMARY_ORG_ID
         if definition.requires_department:
             payload["department_id"] = OTHER_DEPARTMENT_ID if is_other else PRIMARY_DEPARTMENT_ID
+            payload["dept"] = OTHER_DEPARTMENT_NAME if is_other else PRIMARY_DEPARTMENT_NAME
         if definition.requires_distributor:
             payload["distributor_id"] = OTHER_DISTRIBUTOR_ID if is_other else PRIMARY_DISTRIBUTOR_ID
             payload["partner_org_code"] = OTHER_PARTNER_CODE if is_other else PRIMARY_PARTNER_CODE

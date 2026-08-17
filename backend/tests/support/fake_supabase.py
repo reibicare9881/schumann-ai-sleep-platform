@@ -154,6 +154,11 @@ class FakeQuery:
         self._filters.append(lambda row: bool(regex.match(str(row.get(key) or ""))))
         return self
 
+    @property
+    def not_(self) -> "_NegatedFilters":
+        """Support ``query.not_.is_("department", "null")`` as PostgREST does."""
+        return _NegatedFilters(self)
+
     def or_(self, expression: str) -> "FakeQuery":
         """Support the ``col.op.value,col.op.value`` form used by the routers."""
         clauses: list[Callable[[dict], bool]] = []
@@ -257,6 +262,26 @@ class FakeQuery:
                 raise FakeSupabaseError("no rows returned for single()")
             return SimpleNamespace(data=data[0] if data else None, count=total)
         return SimpleNamespace(data=data, count=total)
+
+
+class _NegatedFilters:
+    """Applies the next filter call and stores its inverse on the parent query."""
+
+    def __init__(self, query: FakeQuery):
+        self._query = query
+
+    def __getattr__(self, name: str) -> Callable[..., FakeQuery]:
+        method = getattr(self._query, name)
+
+        def negated(*args: Any, **kwargs: Any) -> FakeQuery:
+            before = len(self._query._filters)
+            method(*args, **kwargs)
+            added = self._query._filters[before:]
+            del self._query._filters[before:]
+            self._query._filters.append(lambda row: not all(check(row) for check in added))
+            return self._query
+
+        return negated
 
 
 class FakeSupabaseError(RuntimeError):

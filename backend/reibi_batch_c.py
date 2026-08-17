@@ -575,6 +575,9 @@ def create_reibi_batch_c_router(client: Any) -> APIRouter:
     @router.get("/finance/settings")
     def finance_settings(_: dict = Depends(require_reibi_super)):
         rows = _execute(client.table("reibi_finance_settings").select("*").eq("id", 1).limit(1), "查詢財務設定")
+        if not rows:
+            # 沒有設定列時回報缺漏，不要以索引錯誤變成 500，也不要憑空補一組預設分潤上限
+            raise HTTPException(status_code=404, detail="尚未建立財務設定")
         return {"status": "success", "data": rows[0]}
 
     @router.patch("/finance/settings")
