@@ -452,3 +452,12 @@
 - [x] SEC-O10：驗證取消公告報名只影響呼叫者自己的報名列；以他人 `profile_id` 的報名列測試回傳 404 且資料未被修改。
 - [x] TST-O13：3192 項 Python 測試通過，`pip check` 無衝突，TypeScript no-emit 與 Next.js production build 通過。
 - [ ] TST-O14：`GET /api/reibi/service/tickets` 與 `GET /api/reibi/announcements` 未做權限檢查而改以範圍裁切回應，與同模組 `/service/scope` 要求 `service_center` 權限的作法不一致。目前不造成越權（超出範圍者得到空清單），但行為契約應統一。
+
+## 28. Batch P 本機資料庫回歸（2026-08-17）
+
+- [x] TST-P01：Docker Desktop 與 CLI 在本次工作階段確認可用（Server 29.6.2），推翻交接手冊 §12「本次 PowerShell 找不到 Docker CLI」的紀錄。本機 Supabase 已啟動並完成 16 個 migration 於空資料庫全量重播。
+- [x] TST-P02：修正 `supabase/tests/reibi_batch_k_onboarding.sql` 不是 pgTAP 格式的問題。該檔以 `raise exception` 做斷言且沒有 `plan()`，pg_prove 回報 `No plan found in TAP output`、計 0 項測試，並讓整個 `supabase test db` 以 FAIL 收場 —— 也就是 Batch K 的資料庫斷言從未被計入「135 項 pgTAP 通過」，而且這個指令本身無法當作驗收關卡。改寫為正規 pgTAP 後更名為 `reibi_batch_k_onboarding.test.sql`。
+- [x] TST-P03：改寫後立即發現原斷言把企業代碼流水號寫死為 `ORG-MTST-26-000001`。PostgreSQL sequence 不隨 `rollback` 回退，該斷言只在資料庫重置後第一次執行成立，之後每次重跑都會誤報同步失敗。改為由實際產生的 `org_code` 反查，並加上代碼格式斷言；連續執行兩次均 PASS。
+- [x] TST-P04：`organizations` 同步經直接查詢確認正常運作（`reibi_enterprises` 與 `organizations` 皆有對應列），先前的失敗來自測試寫法而非產品缺陷。
+- [x] TST-08／TST-09：146 項 pgTAP 全數通過且 `supabase test db` 回傳 `Result: PASS`；`supabase db lint --level warning` 回報 `No schema errors found`。
+- [x] TST-P05：新增 `npm run db:reset`／`db:test`／`db:lint` 便捷指令，讓資料庫回歸與後端、前端檢查一樣可一行執行。

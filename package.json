@@ -2,7 +2,10 @@
   "name": "sleepm-merge-tooling",
   "private": true,
   "scripts": {
-    "supabase": "supabase"
+    "supabase": "supabase",
+    "db:reset": "supabase db reset --local --no-seed",
+    "db:test": "supabase test db",
+    "db:lint": "supabase db lint --level warning"
   },
   "devDependencies": {
     "supabase": "2.113.0"
