@@ -362,11 +362,15 @@ def create_reibi_batch_f_router(client: Any) -> APIRouter:
         return {"status": "success", "data": parse_department_csv(payload.csv_text)}
 
     @router.post("/enterprise/departments/import")
-    def department_import(payload: DepartmentCsvRequest, user: dict = Depends(require_reibi_manager)):
+    def department_import(
+        payload: DepartmentCsvRequest,
+        enterprise_id: Optional[int] = Query(default=None, ge=1),
+        user: dict = Depends(require_reibi_manager),
+    ):
         result = parse_department_csv(payload.csv_text)
         if not result["valid"]:
             raise HTTPException(status_code=422, detail={"message": "部門 CSV 預檢失敗", **result})
-        enterprise = _enterprise(client, user)
+        enterprise = _enterprise(client, user, enterprise_id)
         try:
             response = client.rpc("reibi_replace_departments", {
                 "p_enterprise_id": enterprise["id"], "p_rows": result["rows"],
@@ -377,8 +381,11 @@ def create_reibi_batch_f_router(client: Any) -> APIRouter:
         return {"status": "success", "data": {**result, "inserted": response.data}}
 
     @router.get("/enterprise/architecture")
-    def architecture(user: dict = Depends(require_reibi_manager)):
-        enterprise = _enterprise(client, user)
+    def architecture(
+        enterprise_id: Optional[int] = Query(default=None, ge=1),
+        user: dict = Depends(require_reibi_manager),
+    ):
+        enterprise = _enterprise(client, user, enterprise_id)
         departments = _execute(client.table("reibi_departments").select("*").eq("enterprise_id", enterprise["id"]).order("hierarchy_level").order("sort_order"), "查詢部門架構")
         profiles = _execute(client.table("profiles").select("department").eq("org_code", enterprise["org_code"]), "統計企業人數")
         counts: dict[str, int] = {}

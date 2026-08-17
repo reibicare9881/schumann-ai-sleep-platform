@@ -405,4 +405,5 @@
 - [x] L5-M03：`reibi_cs` 可查看及處理全域服務案件；經銷商可查看與建立自己服務企業的案件，但不能自行結案。
 - [x] L5-M04：L5 經銷商總覽加入服務案件 KPI、待辦、通知及流程統計，且只聚合授權企業的案件。
 - [x] SEC-M01：沿用既有 RLS、撤銷 browser table grants 與 FastAPI server-side Supabase client；不新增 table 或 migration，遠端 16 個 migration 歷史維持一致。
-- [x] TST-M01：87 項 Python 測試（含主／次經銷商企業與案件 scope）、TypeScript no-emit、Next.js production build、FastAPI 路由 smoke test 及遠端 schema／RLS／migration 核對通過。
+- [x] L5-M05：遠端驗收修正 `reibi_super` 服務中心部門架構未帶 `enterprise_id` 的問題；架構讀取與 CSV 匯入均沿用已選服務企業，企業管理員仍不能指定其他企業。
+- [x] TST-M01：89 項 Python 測試（含主／次經銷商企業、案件 scope 及部門跨企業防護）、TypeScript no-emit、Next.js production build、FastAPI 路由 smoke test 及遠端 schema／RLS／migration 核對通過。

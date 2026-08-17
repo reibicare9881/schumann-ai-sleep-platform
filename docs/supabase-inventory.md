@@ -119,6 +119,7 @@ Project ref：`wfgqnjupemzfhaosmogx`
 - Batch K 可回滾 SQL 測試已確認交易同時建立企業、場域與案件，且 `authenticated` 無 RPC execute、`service_role` 可執行。
 - Batch L 未新增 migration；本機 16 個 migration 歷史仍與遠端一致，跨企業管理只透過既有 FastAPI 權限與 server-side Supabase client。
 - Batch M 未新增 migration；遠端已確認三個關聯 table 欄位存在且 RLS 啟用，經銷商案件讀取、建立及 L5 聚合均套用 server-side 企業範圍。
+- Batch M 遠端驗收後，服務中心的部門架構讀取與 CSV 匯入會明確傳入已選 `enterprise_id`；只修正 FastAPI 參數與前端傳遞，沒有修改 Supabase schema 或 grants。
 - 遠端 16 個 migrations 與本機一致；Batch K table、RPC 權限、`ORG-TST1-26-000001` organizations 回填與 bcrypt placeholder 已以遠端唯讀 SQL 確認。Security advisors 只有既有的 [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) WARN，其他為刻意採 deny-by-default 的 RLS INFO；performance advisors 只有新系統尚無正式流量造成的 unused-index INFO。
 - Railway Hobby 已建立 staging 後端，供遠端整合測試；舊 Artifact 正式網路匯入因範圍決策不執行。
 

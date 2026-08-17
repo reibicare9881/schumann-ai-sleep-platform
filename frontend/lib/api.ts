@@ -815,10 +815,10 @@ export const API = {
   async preflightReibiDepartments(csvText: string) {
     return this.request('/api/reibi/enterprise/departments/preflight', { method: 'POST', body: JSON.stringify({ csv_text: csvText }) });
   },
-  async importReibiDepartments(csvText: string) {
-    return this.request('/api/reibi/enterprise/departments/import', { method: 'POST', body: JSON.stringify({ csv_text: csvText }) });
+  async importReibiDepartments(csvText: string, enterpriseId?: number) {
+    return this.request('/api/reibi/enterprise/departments/import', { method: 'POST', query: { enterprise_id: enterpriseId }, body: JSON.stringify({ csv_text: csvText }) });
   },
-  async getReibiArchitecture() { return this.request('/api/reibi/enterprise/architecture'); },
+  async getReibiArchitecture(enterpriseId?: number) { return this.request('/api/reibi/enterprise/architecture', { query: { enterprise_id: enterpriseId } }); },
   async getReibiServiceScope() { return this.request('/api/reibi/service/scope'); },
   async listReibiServiceTickets(status?: string) { return this.request('/api/reibi/service/tickets', { query: { status } }); },
   async createReibiServiceTicket(payload: Record<string, any>) {

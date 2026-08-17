@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from reibi_batch_f import (
     RemittanceOcrRequest,
+    _enterprise,
     analyze_remittance_document,
     decode_receipt,
     parse_department_csv,
@@ -117,6 +118,22 @@ class ReibiBatchFTests(unittest.TestCase):
         query = FakeQuery([{"id": 1}, {"id": 2}])
         scoped = scope_ticket_query(FakeClient({}), query, {"role": "reibi_cs"})
         self.assertIs(scoped, query)
+
+    def test_super_department_scope_requires_and_accepts_explicit_enterprise(self):
+        client = FakeClient({"reibi_enterprises": [
+            {"id": 1, "org_code": "ORG-1"},
+            {"id": 2, "org_code": "ORG-2"},
+        ]})
+        with self.assertRaises(HTTPException) as caught:
+            _enterprise(client, {"role": "reibi_super"})
+        self.assertEqual(caught.exception.status_code, 422)
+        self.assertEqual(_enterprise(client, {"role": "reibi_super"}, 2)["org_code"], "ORG-2")
+
+    def test_org_admin_cannot_select_another_department_enterprise(self):
+        client = FakeClient({"reibi_enterprises": [{"id": 1, "org_code": "ORG-1"}]})
+        with self.assertRaises(HTTPException) as caught:
+            _enterprise(client, {"role": "admin", "org_code": "ORG-1"}, 2)
+        self.assertEqual(caught.exception.status_code, 403)
 
 
 if __name__ == "__main__":
