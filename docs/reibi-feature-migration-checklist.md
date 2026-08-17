@@ -1,6 +1,8 @@
 # REIBI 完整功能移植清單
 
-最後盤點日期：2026-08-14
+專案環境、部署、操作與接手流程請見 [完整建置、進度與操作交接手冊](reibi-merge-master-handoff.md)。
+
+最後盤點日期：2026-08-17
 工作分支：`codex/reibi-fastapi-merge`
 
 ## 1. 範圍與完成定義

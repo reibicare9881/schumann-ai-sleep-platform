@@ -1,5 +1,7 @@
 # REIBI 本機開發與選用匯入流程
 
+新對話或新環境接手，請先閱讀 [完整建置、進度與操作交接手冊](reibi-merge-master-handoff.md)。
+
 ## 現階段環境邊界
 
 - Railway Hobby 已建立 staging 後端；本機開發仍使用 `http://localhost:8000`，部署環境與本機環境不可混用 secrets。
