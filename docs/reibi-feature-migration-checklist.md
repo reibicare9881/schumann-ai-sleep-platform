@@ -243,7 +243,7 @@
 
 - [x] TST-01 安裝 Python 3.11.9，重建工作區 `.venv`。
 - [x] TST-02 `pip check`、compile、unit test 與 FastAPI TestClient 均通過。
-- [ ] TST-03 對 Supabase client 建立 fake／integration test 分層。
+- [x] TST-03 對 Supabase client 建立 fake／integration test 分層。
 - [ ] TST-04 每個角色的 401／403、跨組織 IDOR/BOLA 測試。
 - [ ] TST-05A Artifact mapping 的合成 fixture 回歸測試。
 - [N/A] TST-05B 真實 Artifact 匯出樣本回歸測試；依範圍決策不取得真實舊資料。
@@ -410,3 +410,13 @@
 - [x] L5-M05：遠端驗收修正 `reibi_super` 服務中心部門架構未帶 `enterprise_id` 的問題；架構讀取與 CSV 匯入均沿用已選服務企業，企業管理員仍不能指定其他企業。
 - [x] L5-M06：L5 前端補齊服務案件流程卡片，顯示待處理與全部案件數並連往 `/reibi/service`；四個流程卡片採自適應版面。
 - [x] TST-M01：89 項 Python 測試（含主／次經銷商企業、案件 scope 及部門跨企業防護）、TypeScript no-emit、Next.js production build、FastAPI 路由 smoke test 及遠端 schema／RLS／migration 核對通過。
+
+## 24. Batch N 測試地基（2026-08-17）
+
+- [x] TST-N01：新增 `backend/tests/conftest.py`，在載入 `config` 前把 Supabase URL、service role key、JWT secret 與 Gemini key 全部釘死為假值。先前測試是讀 `backend/.env` 執行，等同指向正式 Supabase 專案；現在即使誤寫會連線的測試也打不到正式庫。
+- [x] TST-N02：`supabase.create_client` 在 `import main` 之前換成 `FakeSupabaseClient`。REIBI 各 router 在建立時就把 client 收進 closure，因此替換必須早於 main 匯入。
+- [x] TST-03／TST-N03：`tests/support/fake_supabase.py` 實作後端實際使用的 PostgREST 介面（`eq`／`neq`／`gt`／`gte`／`lt`／`lte`／`in_`／`is_`／`like`／`ilike`／`or_`／`order`／`limit`／`range`／`single`／`maybe_single`／`insert`／`update`／`upsert`／`delete`／`rpc`／storage），讀取回傳深拷貝，未註冊的 RPC 會明確失敗而非靜默回空值。
+- [x] TST-N04：`tests/support/identities.py` 提供 14 角色 token 工廠與可信 session registry。範圍宣告直接由 `roles.ROLE_DEFINITIONS` 推導，角色 registry 變更時測試 token 會自動跟著變，不會與後端權威來源脫節。
+- [x] TST-N05：可信 session registry 支援 revoke／deactivate／expire，讓 401 情境（未註冊 session、已撤銷、帳號停用、逾期）成為可測狀態而非只能靠遠端手測。
+- [x] TST-N06：`backend/config.py` 改用 `SettingsConfigDict`，移除 Pydantic V2 class-based `Config` deprecation warning；`pytest.ini` 將該 warning 升為 error，避免再度回歸。
+- [x] TST-N07：149 項 Python 測試通過（原 89 項全數維持綠燈，新增 60 項 harness 測試），`pip check` 無衝突，TypeScript no-emit 與 Next.js production build 通過。測試執行時間由 5.7 秒降至 1.0 秒。
