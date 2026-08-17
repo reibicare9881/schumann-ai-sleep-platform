@@ -743,12 +743,30 @@ async def analyze_schumann_report(
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
 
+def assert_can_read_user_records(current_user: dict, user_id: str) -> None:
+    """個人紀錄的統一存取規則：本人，或同單位的平台管理者。
+
+    JWT 只帶 uid/role/org_code（見 /api/auth/login 的 token_payload），沒有
+    system_role 或 id；早期用那兩個 key 判斷的守門形同虛設或直接崩潰。
+    """
+    if current_user.get("uid") == user_id:
+        return
+
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="越權存取：您只能查詢自己的紀錄")
+
+    target = supabase.table("profiles").select("org_code").eq("id", user_id).limit(1).execute()
+    if not target.data:
+        raise HTTPException(status_code=404, detail="找不到該用戶")
+    if current_user.get("org_code") != target.data[0].get("org_code"):
+        raise HTTPException(status_code=403, detail="越權存取：您只能查詢自己或同單位成員的紀錄")
+
+
 @app.get("/api/schumann/trend/{user_id}")
 async def get_schumann_trend(user_id: str, current_user: dict = Depends(get_current_user)):
+    # 1. 確保只能看自己的，或是同單位管理員才能看別人的 (權限防護)
+    assert_can_read_user_records(current_user, user_id)
     try:
-        # 1. 確保只能看自己的，或是管理員/主管才能看別人的 (權限防護)
-        if current_user["system_role"] == "individual" and current_user["id"] != user_id:
-            raise HTTPException(status_code=403, detail="權限不足")
 
         # 2. 從 Supabase 撈取該使用者的所有舒曼紀錄，並按時間排序 (舊到新)
         res = supabase.table("records") \
@@ -796,13 +814,10 @@ async def list_schumann_reports(
     current_user: dict = Depends(get_current_user)
 ):
     """獲取用戶舒曼報告列表 (連接 Supabase)"""
-    # 權限驗證：只能看自己的，或者是管理員看同單位的
-    is_owner = str(current_user.get("uid")) == user_id
-    is_admin = current_user.get("role") in ["admin", "dept_head"]
-    
-    if not is_owner and not is_admin:
-        raise HTTPException(status_code=403, detail="越權存取：無權查看此列表")
-        
+    # 權限驗證：只能看自己的，或者是「同單位」管理員看單位成員的。
+    # 舊版只檢查角色不檢查組織，任一單位的 admin／dept_head 都能列出任何人的報告。
+    assert_can_read_user_records(current_user, user_id)
+
     # 從 analysis_records 資料表撈取舒曼報告
     res = supabase.table("analysis_records").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
     
@@ -821,13 +836,17 @@ async def get_merged_pdf(record_id: str, current_user: dict = Depends(get_curren
     3. 下載儲存在 Storage 的原始 PDF
     4. 使用 PyMuPDF 縫合兩者並回傳
     """
+    # 1. 抓取資料庫紀錄並確認存取權。
+    #    這段刻意放在 try 之外：下方的 except Exception 會把 403／404 轉成 500，
+    #    授權結果不能被那個攔截器吃掉。
+    res = supabase.table("analysis_records").select("*").eq("id", record_id).limit(1).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="找不到分析紀錄")
+
+    record_data = res.data[0]
+    assert_can_read_user_records(current_user, record_data.get("user_id"))
+
     try:
-        # 1. 抓取資料庫紀錄
-        res = supabase.table("analysis_records").select("*").eq("id", record_id).execute()
-        if not res.data:
-            raise HTTPException(status_code=404, detail="找不到分析紀錄")
-        
-        record_data = res.data[0]
         # 解析 AI 摘要內容 (原本存的是字串)
         ai_summary_dict = json.loads(record_data.get("ai_summary", "{}"))
         report_url = record_data.get("report_url")
@@ -887,14 +906,12 @@ async def get_schumann_report(
         raise HTTPException(status_code=404, detail="舒曼報告不存在")
         
     report = res.data[0]
-    
-    # 權限驗證
-    is_owner = report.get("user_id") == current_user.get("uid")
-    # 如果有 org_code 關聯，這裡也可以加入管理員判斷
-    
-    if not is_owner and current_user.get("role") not in ["admin", "dept_head"]:
-        raise HTTPException(status_code=403, detail="越權存取：您無權查看此份報告")
-        
+
+    # 權限驗證：本人或同單位管理者。
+    # 舊版只要角色是 admin／dept_head 就放行，不論報告屬於哪個單位。
+    assert_can_read_user_records(current_user, report.get("user_id"))
+
+
     return {
         "status": "success",
         "platform": "schumann",
@@ -1047,15 +1064,8 @@ async def get_sleep_analysis(
     current_user: dict = Depends(get_current_user)
 ):
     """獲取睡眠趨勢分析"""
-    # 💡 修正：權限隔離邏輯與 list_sleep_reports 相同
-    target_user_res = supabase.table("profiles").select("org_code").eq("id", user_id).execute()
-    if not target_user_res.data:
-        raise HTTPException(status_code=404, detail="找不到該用戶")
-    target_org_code = target_user_res.data[0].get("org_code")
-
-    if current_user.get("uid") != user_id:
-        if current_user.get("role") != "admin" or current_user.get("org_code") != target_org_code:
-            raise HTTPException(status_code=403, detail="越權存取：您只能查詢自己或同單位成員的分析")
+    # 權限隔離邏輯與其他個人紀錄端點共用同一份規則
+    assert_can_read_user_records(current_user, user_id)
 
     # 💡 修正：改從 Supabase 讀取
     res = supabase.table("sleep_reports").select("*").eq("user_id", user_id).execute()
@@ -1092,11 +1102,10 @@ async def get_sleep_analysis(
 # ==========================================
 @app.get("/api/history/{user_id}")
 async def get_user_history(user_id: str, current_user: dict = Depends(get_current_user)):
-    try:
-        # 權限防護：個人用戶只能看自己的，管理員/主管可以看轄下員工的
-        if current_user["system_role"] == "individual" and current_user["id"] != user_id:
-            raise HTTPException(status_code=403, detail="權限不足，無法存取他人歷史紀錄")
+    # 權限防護：只能看自己的，同單位管理者可以看轄下員工的
+    assert_can_read_user_records(current_user, user_id)
 
+    try:
         # 從 Supabase 撈取該使用者的所有紀錄，不分平台，依時間由新到舊排序
         res = supabase.table("records") \
             .select("*") \
@@ -1115,10 +1124,9 @@ async def get_user_history(user_id: str, current_user: dict = Depends(get_curren
 
 @app.get("/api/sleep/latest-profile/{user_id}")
 async def get_latest_profile(user_id: str, current_user: dict = Depends(get_current_user)):
-    # 安全檢查：確保個人用戶只能存取自己的資料
-    if current_user.get("system_role") == "individual" and current_user.get("id") != user_id:
-        raise HTTPException(status_code=403, detail="權限不足")
-        
+    # 安全檢查：確保只能存取自己或同單位成員的資料
+    assert_can_read_user_records(current_user, user_id)
+
     try:
         # 撈取該使用者最新的一筆報告紀錄
         res = supabase.table("sleep_reports") \

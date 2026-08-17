@@ -23,6 +23,23 @@ from typing import Any, Callable, Iterable
 _UNSET = object()
 
 
+def _loose_equal(actual: Any, expected: Any) -> bool:
+    """Compare the way PostgREST does, not the way Python does.
+
+    A filter value arrives from the URL as text and is cast to the column type
+    before comparison, so ``.eq("id", "501")`` matches an integer 501.  Keeping
+    Python's stricter rules here would make tests fail for a reason the real
+    database never produces.
+    """
+    if actual is None or expected is None:
+        return actual is expected
+    if isinstance(actual, bool) or isinstance(expected, bool):
+        return actual is expected
+    if type(actual) is type(expected):
+        return actual == expected
+    return str(actual) == str(expected)
+
+
 def _matches(row: dict, key: str, expected: Any, comparator: Callable[[Any, Any], bool]) -> bool:
     try:
         return comparator(row.get(key), expected)
@@ -84,11 +101,11 @@ class FakeQuery:
 
     # ---- filters --------------------------------------------------------
     def eq(self, key: str, value: Any) -> "FakeQuery":
-        self._filters.append(lambda row: _matches(row, key, value, lambda a, b: a == b))
+        self._filters.append(lambda row: _matches(row, key, value, _loose_equal))
         return self
 
     def neq(self, key: str, value: Any) -> "FakeQuery":
-        self._filters.append(lambda row: _matches(row, key, value, lambda a, b: a != b))
+        self._filters.append(lambda row: _matches(row, key, value, lambda a, b: not _loose_equal(a, b)))
         return self
 
     def gt(self, key: str, value: Any) -> "FakeQuery":
@@ -109,7 +126,9 @@ class FakeQuery:
 
     def in_(self, key: str, values: Iterable[Any]) -> "FakeQuery":
         allowed = list(values)
-        self._filters.append(lambda row: row.get(key) in allowed)
+        self._filters.append(
+            lambda row: any(_loose_equal(row.get(key), candidate) for candidate in allowed)
+        )
         return self
 
     def is_(self, key: str, value: Any) -> "FakeQuery":

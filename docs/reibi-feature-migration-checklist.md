@@ -420,3 +420,16 @@
 - [x] TST-N05：可信 session registry 支援 revoke／deactivate／expire，讓 401 情境（未註冊 session、已撤銷、帳號停用、逾期）成為可測狀態而非只能靠遠端手測。
 - [x] TST-N06：`backend/config.py` 改用 `SettingsConfigDict`，移除 Pydantic V2 class-based `Config` deprecation warning；`pytest.ini` 將該 warning 升為 error，避免再度回歸。
 - [x] TST-N07：149 項 Python 測試通過（原 89 項全數維持綠燈，新增 60 項 harness 測試），`pip check` 無衝突，TypeScript no-emit 與 Next.js production build 通過。測試執行時間由 5.7 秒降至 1.0 秒。
+
+## 25. Batch O1 認證邊界與個人紀錄授權（2026-08-17）
+
+- [x] SEC-O01：修正 `GET /api/sleep/latest-profile/{user_id}` 的 IDOR。守門條件寫成 `current_user.get("system_role") == "individual"`，但 JWT 從未簽發 `system_role`（見 `main.py` 的 `token_payload`），條件恆為 false，任何已登入帳號都能讀取他人最新睡眠 profile。
+- [x] SEC-O02：修正 `GET /api/history/{user_id}` 與 `GET /api/schumann/trend/{user_id}`。兩者用 `current_user["system_role"]` 取值，實際會拋 KeyError 並被外層 `except Exception` 轉成 500，端點對所有使用者皆不可用，且把原始例外字串回傳給前端。
+- [x] SEC-O03：修正 `GET /api/pdf/{record_id}` 完全沒有擁有者檢查的 BOLA；任何已登入帳號可用流水號下載他人分析報告 PDF。查詢與授權移出 `try`，避免 403／404 被 `except Exception` 轉成 500。
+- [x] SEC-O04：修正 `GET /api/schumann/reports` 與 `GET /api/schumann/reports/{report_id}` 只檢查角色不檢查組織的跨租戶洩漏；任一單位的 `admin`／`dept_head` 原本可讀取任何單位任何人的報告。
+- [x] SEC-O05：個人紀錄存取規則統一為 `assert_can_read_user_records()`（本人，或同單位 `admin`），與既有 `/api/sleep/reports` 一致。此變更移除了 `dept_head` 的跨使用者讀取；前端所有呼叫端只傳自身 `session.uid`，無既有流程受影響。若日後需要部門主管檢視部門成員，應另行加入部門範圍條件，不應退回只檢查角色。
+- [x] TST-O01：新增 `tests/test_permission_matrix.py`。路由表直接由 `main.app` 讀取，新端點掛載即納入涵蓋；公開路由改為明文允許清單，任何新增的未驗證端點會讓測試失敗。166 條受保護路由 × 6 種無效憑證情境（無 header、格式錯誤、過期、簽章偽造、可信 session 未註冊、session 已撤銷）全數回傳 401。
+- [x] TST-O02：新增 `tests/test_object_authorization.py`，涵蓋 9 條個人紀錄路由 × 5 種越權身分（個人、他單位成員、他單位 admin、他單位 dept_head、REIBI 跨企業分析角色），並驗證本人與同單位 admin 的正常存取未被過度阻擋。
+- [x] TST-O03：測試替身補上 PostgREST 的型別轉換語意（`.eq("id", "501")` 需匹配整數 501），避免測試因替身過嚴而產生真實資料庫不會出現的失敗。
+- [x] TST-O04：1200 項 Python 測試通過，`pip check` 無衝突，TypeScript no-emit 與 Next.js production build 通過。
+- [ ] TST-O05：REIBI 業務路由（71 條授權寫在 handler 內的端點）的角色與跨企業 403 矩陣仍待完成，併入 TST-04。
