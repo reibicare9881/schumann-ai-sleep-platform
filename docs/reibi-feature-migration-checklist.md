@@ -473,4 +473,20 @@
 - [x] TST-Q07：L5 角色裁切 5 項 —— super 看到完整流程卡與趨勢、`reibi_data` 看不到財務數字與作業流程、`reibi_finance` 看不到權限申請待辦、空狀態不是崩潰、後端 500 時頁面不是空白畫面。
 - [x] TST-Q08：手機版 6 項（Pixel 5 視窗）—— L5、跨企業管理、新案開通、服務中心、商務文件五個頁面均無水平溢出，登入表單在窄視窗仍可完整操作。
 - [x] TST-Q09：24 項 E2E 全數通過（18 desktop + 6 mobile）。新增 `npm run e2e`／`e2e:desktop`／`e2e:mobile`／`e2e:report`。
+## 30. Batch R1 讓 registry 成為 Batch D／E 的授權來源（2026-08-17）
+
+背景：`roles.py` 定義 26 個權限字串，但後端只查詢其中 4 個（`manage_reibi`、`service_center`／`service_manage`、`enterprise_manage`），其餘 22 個從未被引用。實際授權靠 Batch D／E 各自寫死的角色集合，而那些集合成形於 14 角色 registry 之前。本批依 2026-08-17 決策只修 `admin_hr` 與 `reibi_data`。
+
+- [x] IAM-R01：`reibi_batch_d.py` 的 `require_ohs_manager`、`require_occupational`、`require_aggregate_viewer` 改由 `has_permission()` 推導。`admin_hr` 取得職安管理與組織彙整存取，符合 §9 職掌；`admin_finance` 因 registry 持有 `org_analytics` 一併取得彙整檢視。
+- [x] IAM-R02：`reibi_batch_e.py` 的 `require_org_analytics`、`require_org_report` 同步改為權限推導。`org_reports` 只有 `admin` 持有，故 AI 組織報告產生範圍不變（`reibi_super` 因 `all` 亦可）。
+- [x] IAM-R03：新增 `require_cross_org_analytics`，`/analytics/cross-org` 與 `/analytics/cross-org/reports` 改用之，`reibi_data` 得以執行其定義職掌「跨企業去識別分析」。
+- [x] SEC-R01：`/analytics/directory` **維持 `reibi_super` 限定**，不隨 `cross_org_analytics` 開放。該端點回傳 `contact_name`、`phone`、`email` 與四層費用，是客戶聯絡資料與定價，不是去識別分析。
+- [x] SEC-R02：`/analytics/cross-org` 對沒有財務職掌的角色遮蔽金額（`contracted_revenue`、各經銷商 `revenue`、`goals.annual_revenue`），並回傳 `financials_redacted: true`。Batch J 已決定 `reibi_data` 在 L5 看不到合約費用與訂閱營收；若此端點照原樣回傳，同一份數字換個路徑就取得得到。樣本數、企業數、授權人數與健康彙整均保留。
+- [x] SEC-R03：跨企業 AI 報告產生（`POST /analytics/reports` 的 `cross_org`）維持 `reibi_super` 限定。閱讀分析與產生報告是不同性質的行為，後者會呼叫 Gemini 並寫入紀錄。
+- [x] SEC-R04：確認保護機制都在守門下方而非守門本身 —— k≥5 由 SQL 強制（`reibi_three_highs_aggregate` 等在 `v_n < 5` 時抑制）、OHS 寫入會剝除 `employee_name`／`name` 只留去識別員工代碼、`_org_code()`／`_org_scope()` 仍鎖租戶。放行角色不會削弱這三項。
+- [x] TST-R01：新增 `tests/test_registry_backed_authorization.py`（81 項）。以參數化方式斷言每個守門放行的角色集合**恰好等於**持有對應權限的角色集合，並涵蓋不得連帶放行的角色、`/directory` 仍限 super、以及跨企業回應在真實請求下確實不含任何金額欄位。
+- [x] TST-R02：更新 `test_role_authorization.py` 的守門宣告表。原本記錄落差的 `TestPermissionRegistryDivergence` 改寫為 `TestRegistryIsHonouredOverTheWire`，改為驗證 registry 已被遵守。
+- [x] TST-R03：3275 項 Python 測試通過，`pip check` 無衝突，TypeScript no-emit 與 Next.js production build 通過。
+- [ ] IAM-R04：`admin_it` 的 `security_audit` 尚無任何端點會查詢，該角色目前仍只有服務中心可用；`reibi_finance` 的 `distributor_manage`／`finance_manage` 亦然（經銷商、staff、訂閱仍為 `require_reibi_super`）。其餘 20 個未實作的 registry 權限一併列此。
+
 - [ ] TST-Q10：企業 `admin`、`occupational_health` 與兩種經銷商角色的瀏覽器 E2E 尚未建立；這些角色需要先透過邀請流程建立帳號（Mailpit 已可自動收信），目前其權限已由 Python 矩陣完整覆蓋。

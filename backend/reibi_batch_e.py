@@ -14,10 +14,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from auth import get_current_user
 from config import settings
+from roles import has_permission
 
 
-ORG_ANALYTICS_ROLES = {"admin", "dept_head"}
-ORG_REPORT_ROLES = {"admin"}
+# 組織分析與報告改由 roles.py 的權限推導；跨企業名冊與 AI 報告產生仍限 reibi_super。
 SUPER_ROLE = "reibi_super"
 PERSONAL_ROLES = {"individual", "member", "dept_head"}
 REPORT_TYPES = {"esg", "okr", "highrisk", "kpi", "roi", "plan888", "gri", "ohs", "cross_org"}
@@ -104,16 +104,33 @@ def _require(user: dict[str, Any], roles: set[str], detail: str) -> dict[str, An
     return user
 
 
+def _require_any_permission(user: dict[str, Any], permissions: tuple[str, ...], detail: str) -> dict[str, Any]:
+    if not any(has_permission(user, permission) for permission in permissions):
+        raise HTTPException(status_code=403, detail=detail)
+    return user
+
+
+def can_view_financial_figures(user: dict[str, Any]) -> bool:
+    """跨企業彙整裡的金額只給具備財務職掌的角色，與 L5 總覽的裁切一致。"""
+    return has_permission(user, "org_finance") or has_permission(user, "finance_manage")
+
+
 def require_org_analytics(user: dict = Depends(get_current_user)) -> dict:
-    return _require(user, ORG_ANALYTICS_ROLES, "限單位管理者或部門主管查閱組織分析")
+    return _require_any_permission(
+        user, ("org_analytics", "department_analytics"), "沒有組織分析權限"
+    )
 
 
 def require_org_report(user: dict = Depends(get_current_user)) -> dict:
-    return _require(user, ORG_REPORT_ROLES, "限單位平台管理者產生 AI 組織報告")
+    return _require_any_permission(user, ("org_reports",), "限具備組織報告權限的帳號產生 AI 組織報告")
 
 
 def require_super(user: dict = Depends(get_current_user)) -> dict:
     return _require(user, {SUPER_ROLE}, "限 REIBI 內部超級管理者")
+
+
+def require_cross_org_analytics(user: dict = Depends(get_current_user)) -> dict:
+    return _require_any_permission(user, ("cross_org_analytics",), "沒有跨企業分析權限")
 
 
 def require_personal(user: dict = Depends(get_current_user)) -> dict:
@@ -427,7 +444,7 @@ def create_reibi_batch_e_router(
             org, scope, department = None, "ALL", None
             title = "REIBI 跨企業健康與策略報告"
         else:
-            _require(current_user, ORG_REPORT_ROLES, "限單位平台管理者產生 AI 組織報告")
+            _require_any_permission(current_user, ("org_reports",), "限具備組織報告權限的帳號產生 AI 組織報告")
             org = _org_scope(current_user)
             overview_data = build_overview(org, payload.period_start, payload.period_end, payload.department_key)
             snapshot = overview_data["snapshot"]
@@ -464,11 +481,15 @@ def create_reibi_batch_e_router(
         return {"health": health, "strategy": calculate_strategy(enterprises, distributors), "privacy": "只納入明確研究同意者；每個企業樣本均需 k≥5。"}
 
     @router.get("/cross-org")
-    def cross_org(period_start: Optional[date] = None, period_end: Optional[date] = None, current_user: dict = Depends(require_super)):
-        return {"status": "success", "data": build_cross_org(period_start, period_end)}
+    def cross_org(period_start: Optional[date] = None, period_end: Optional[date] = None,
+                  current_user: dict = Depends(require_cross_org_analytics)):
+        data = build_cross_org(period_start, period_end)
+        if not can_view_financial_figures(current_user):
+            data = redact_financial_figures(data)
+        return {"status": "success", "data": data}
 
     @router.get("/cross-org/reports")
-    def cross_reports(current_user: dict = Depends(require_super)):
+    def cross_reports(current_user: dict = Depends(require_cross_org_analytics)):
         rows = _execute(client.table("reibi_generated_reports").select("*").eq("scope_code", "ALL").order("created_at", desc=True).limit(100), "無法讀取跨企業報告")
         return {"status": "success", "data": rows}
 
@@ -532,6 +553,24 @@ def calculate_strategy(enterprises: list[dict[str, Any]], distributors: list[dic
         "nps_follow_up_org_codes": nps_due,
         "goals": {"annual_enterprises": 100, "annual_revenue": 30000000, "plan888_rate": 80},
     }
+
+
+def redact_financial_figures(data: dict[str, Any]) -> dict[str, Any]:
+    """移除跨企業彙整中的金額，保留樣本數與健康指標。
+
+    Batch J 已決定 `reibi_data` 在 L5 看不到合約費用與訂閱營收；跨企業彙整走同一條線，
+    否則同一份數字換個端點就取得得到。
+    """
+    strategy = dict(data.get("strategy") or {})
+    strategy.pop("contracted_revenue", None)
+    strategy["by_partner"] = {
+        partner: {key: value for key, value in (metrics or {}).items() if key != "revenue"}
+        for partner, metrics in (strategy.get("by_partner") or {}).items()
+    }
+    goals = dict(strategy.get("goals") or {})
+    goals.pop("annual_revenue", None)
+    strategy["goals"] = goals
+    return {**data, "strategy": strategy, "financials_redacted": True}
 
 
 def _nps_due(contract_start: Any, today: date) -> bool:

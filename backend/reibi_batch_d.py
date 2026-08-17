@@ -10,12 +10,12 @@ from passlib.context import CryptContext
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from auth import get_current_user
+from roles import has_permission
 
 
+# 個人健康端點只寫入登入者自己的 profile，維持角色列舉即可；
+# 其餘守門改由 roles.py 的權限推導，避免 registry 與實際授權脫節。
 PERSONAL_ROLES = {"individual", "member", "dept_head"}
-OHS_MANAGER_ROLES = {"admin", "reibi_super"}
-OCCUPATIONAL_ROLES = OHS_MANAGER_ROLES | {"occupational_health"}
-AGGREGATE_ROLES = {"dept_head", "admin", "reibi_super"}
 ASSESSMENT_POINTS = {"phq4": 5, "pss4": 10, "mind3": 5, "ow": 10, "msk": 10, "bsrs5": 10, "violence": 10}
 
 ACTION_CATEGORIES: dict[str, list[tuple[str, str]]] = {
@@ -61,20 +61,31 @@ def _require_role(user: dict[str, Any], roles: set[str], detail: str) -> dict[st
     return user
 
 
+def _require_any_permission(user: dict[str, Any], permissions: tuple[str, ...], detail: str) -> dict[str, Any]:
+    if not any(has_permission(user, permission) for permission in permissions):
+        raise HTTPException(status_code=403, detail=detail)
+    return user
+
+
 def require_personal_health(user: dict = Depends(get_current_user)) -> dict:
     return _require_role(user, PERSONAL_ROLES, "此功能僅限個人、單位成員或部門主管使用")
 
 
 def require_ohs_manager(user: dict = Depends(get_current_user)) -> dict:
-    return _require_role(user, OHS_MANAGER_ROLES, "此功能僅限單位管理者或 REIBI 管理者使用")
+    return _require_any_permission(user, ("ohs_manage",), "此功能僅限具備職安管理權限的帳號使用")
 
 
 def require_occupational(user: dict = Depends(get_current_user)) -> dict:
-    return _require_role(user, OCCUPATIONAL_ROLES, "此功能僅限臨場醫護或單位管理者使用")
+    return _require_any_permission(
+        user, ("ohs_manage", "oh_interview"), "此功能僅限臨場醫護或具備職安管理權限的帳號使用"
+    )
 
 
 def require_aggregate_viewer(user: dict = Depends(get_current_user)) -> dict:
-    return _require_role(user, AGGREGATE_ROLES, "沒有組織彙整資料權限")
+    # 彙整資料的 k≥5 與單位範圍由 SQL 與 _org_code() 保障，守門只決定「誰有資格看彙整」。
+    return _require_any_permission(
+        user, ("org_analytics", "department_analytics"), "沒有組織彙整資料權限"
+    )
 
 
 def _profile_id(user: dict[str, Any]) -> str:

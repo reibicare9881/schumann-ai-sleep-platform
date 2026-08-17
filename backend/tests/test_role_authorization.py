@@ -55,17 +55,27 @@ GUARD_ALLOWED_ROLES: dict[str, set[str]] = {
     "require_identity_admin": {"reibi_super"},
     "require_trusted_identity": set(TRUSTED_EXCLUSIVE_ROLES),
     # --- reibi_batch_d.py --------------------------------------------------
+    # Personal health writes to the caller's own profile, so it stays a role
+    # list; the rest are derived from roles.py permissions.
     "require_personal_health": {"individual", "member", "dept_head"},
-    "require_ohs_manager": {"admin", "reibi_super"},
-    "require_occupational": {"admin", "reibi_super", "occupational_health"},
-    "require_aggregate_viewer": {"dept_head", "admin", "reibi_super"},
+    # has_permission("ohs_manage"): admin, admin_hr, plus reibi_super via "all"
+    "require_ohs_manager": {"admin", "admin_hr", "reibi_super"},
+    # ohs_manage or oh_interview
+    "require_occupational": {"admin", "admin_hr", "reibi_super", "occupational_health"},
+    # org_analytics (admin, admin_hr, admin_finance) or department_analytics (dept_head)
+    "require_aggregate_viewer": {"admin", "admin_hr", "admin_finance", "dept_head", "reibi_super"},
     # --- reibi_onboarding.py -----------------------------------------------
     # has_permission("enterprise_manage"): reibi_finance, plus reibi_super via "all"
     "_actor": {"reibi_super", "reibi_finance"},
     # --- reibi_batch_e.py --------------------------------------------------
-    "require_org_analytics": {"admin", "dept_head"},
-    "require_org_report": {"admin"},
+    "require_org_analytics": {"admin", "admin_hr", "admin_finance", "dept_head", "reibi_super"},
+    # has_permission("org_reports"): admin only, plus reibi_super via "all"
+    "require_org_report": {"admin", "reibi_super"},
+    # Cross-enterprise directory carries contact details and layer pricing, so
+    # it stays reibi_super rather than following cross_org_analytics.
     "require_super": {"reibi_super"},
+    # has_permission("cross_org_analytics"): reibi_data, plus reibi_super via "all"
+    "require_cross_org_analytics": {"reibi_data", "reibi_super"},
     "require_personal": {"individual", "member", "dept_head"},
 }
 
@@ -194,37 +204,50 @@ def test_role_inside_the_guard_passes_authorization(client, tokens, method, path
     )
 
 
-class TestPermissionRegistryDivergence:
-    """Records where module guards are stricter than ``roles.py``.
+class TestRegistryIsHonouredOverTheWire:
+    """The Batch D/E guards now agree with ``roles.py`` on a live request.
 
-    ``roles.py`` is documented as the single backend authority, but the Batch D
-    and Batch E routers hardcode their own role sets.  Three roles hold a
-    permission in the registry that no route will honour.  These assertions
-    pin the current fail-closed behaviour so the gap stays visible and cannot
-    change silently; whether to widen the guards is a product decision, not a
-    test fix.
+    ``test_registry_backed_authorization.py`` checks the guard functions in
+    isolation; these go through the mounted app so a route wired to the wrong
+    guard is caught too. 403 is the only failure this asserts against —
+    anything past authorization may still fail on an empty database.
     """
 
     ANALYTICS_ROUTE = ("GET", "/api/reibi/analytics/overview")
     OHS_ROUTE = ("GET", "/api/reibi/health/ohs")
+    CROSS_ORG_ROUTE = ("GET", "/api/reibi/analytics/cross-org")
+    DIRECTORY_ROUTE = ("GET", "/api/reibi/analytics/directory")
 
-    def test_admin_hr_holds_org_analytics_in_the_registry(self):
+    def test_admin_hr_reaches_org_analytics_it_holds_in_the_registry(self, client, tokens):
         from roles import has_permission
 
         assert has_permission({"role": "admin_hr"}, "org_analytics")
-        assert has_permission({"role": "admin_hr"}, "ohs_manage")
-
-    def test_but_admin_hr_is_denied_org_analytics_by_the_route_guard(self, client, tokens):
         method, path = self.ANALYTICS_ROUTE
-        assert _call(client, tokens, method, path, "admin_hr").status_code == 403
+        assert _call(client, tokens, method, path, "admin_hr").status_code != 403
 
-    def test_but_admin_hr_is_denied_ohs_by_the_route_guard(self, client, tokens):
-        method, path = self.OHS_ROUTE
-        assert _call(client, tokens, method, path, "admin_hr").status_code == 403
-
-    def test_admin_finance_is_denied_org_analytics_despite_the_registry(self, client, tokens):
+    def test_admin_hr_reaches_occupational_health(self, client, tokens):
         from roles import has_permission
 
-        assert has_permission({"role": "admin_finance"}, "org_analytics")
+        assert has_permission({"role": "admin_hr"}, "ohs_manage")
+        method, path = self.OHS_ROUTE
+        assert _call(client, tokens, method, path, "admin_hr").status_code != 403
+
+    def test_admin_finance_reaches_org_analytics_it_holds_in_the_registry(self, client, tokens):
         method, path = self.ANALYTICS_ROUTE
-        assert _call(client, tokens, method, path, "admin_finance").status_code == 403
+        assert _call(client, tokens, method, path, "admin_finance").status_code != 403
+
+    def test_reibi_data_reaches_cross_enterprise_analytics(self, client, tokens):
+        method, path = self.CROSS_ORG_ROUTE
+        assert _call(client, tokens, method, path, "reibi_data").status_code != 403
+
+    def test_admin_it_stays_out_of_health_and_analytics(self, client, tokens):
+        """admin_it holds only security_audit, which no route consults yet."""
+        for method, path in (self.ANALYTICS_ROUTE, self.OHS_ROUTE, self.CROSS_ORG_ROUTE):
+            assert _call(client, tokens, method, path, "admin_it").status_code == 403
+
+    def test_cross_enterprise_directory_stays_super_only(self, client, tokens):
+        """The directory carries contact details and layer pricing, not
+        de-identified analytics, so cross_org_analytics does not open it."""
+        method, path = self.DIRECTORY_ROUTE
+        assert _call(client, tokens, method, path, "reibi_data").status_code == 403
+        assert _call(client, tokens, method, path, "reibi_finance").status_code == 403
