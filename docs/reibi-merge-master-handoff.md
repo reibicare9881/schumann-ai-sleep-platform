@@ -410,11 +410,14 @@ npm.cmd run dev
 
 | 用途 | 位置 |
 |---|---|
-| Railway staging backend | `https://schumann-ai-sleep-platform-staging.up.railway.app` |
-| Vercel feature preview | `https://schumann-ai-sleep-platform-git-c-1719da-reibicare9881s-projects.vercel.app` |
+| Railway **staging** backend（實際服務中） | `https://schumann-ai-sleep-platform-staging.up.railway.app` |
+| Vercel **Preview** frontend（實際服務中） | `https://schumann-ai-sleep-platform-git-c-1719da-reibicare9881s-projects.vercel.app` |
 | Supabase | `Schumann-AI-Platform`／`wfgqnjupemzfhaosmogx` |
+| Railway project | `08448f6e-4e89-41b2-842c-0c6073d59565` |
 
 Vercel preview URL 可能因 deployment alias 改變；應以 Vercel 當次 deployment 或 GitHub commit status 顯示的網址為準。
+
+**重要：目前是以 staging／Preview 環境充當正式環境。** Railway 的 `production` 環境自 2026-06-02 起連續三次部署失敗且未再嘗試；Vercel `Production` 停在 `main` 的 `b1e7af3`（2026-06-05），其後端不通。合併 `main` 前必須先處理，見 [reibi-release-checklist.md](reibi-release-checklist.md) §2.3。
 
 ### 7.2 分支規則
 

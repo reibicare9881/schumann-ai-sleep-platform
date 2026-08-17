@@ -93,6 +93,33 @@ Vercel 前端必須有：`NEXT_PUBLIC_API_URL` 指向正式 backend。
 
 ---
 
+## 2.3 ⚠️ Railway production 環境自 2026-06-02 起部署失敗（專案負責人）
+
+2026-08-17 以 GitHub deployment 紀錄查證：
+
+| 環境 | 分支／commit | 最後狀態 |
+|---|---|---|
+| Railway `staging` | `codex/reibi-fastapi-merge`（最新 `220e41d`） | 正常，**這是實際在服務的後端** |
+| Vercel `Preview` | `codex/reibi-fastapi-merge`（最新 `220e41d`） | 正常，**這是實際在使用的前端** |
+| Railway `production` | — | **連續三次 failure**（2026-06-02 ×2、2026-06-05），之後未再嘗試 |
+| Vercel `Production` | `main` `b1e7af3`（2026-06-05） | 部署成功但其後端不通 |
+
+也就是說目前**以 staging 環境充當正式環境**，而 Railway 的 production 環境是壞的。
+
+這對合併 `main` 有直接影響 —— 合併會觸發 production 部署，而該環境自 6 月起未曾成功。合併前必須先決定：
+
+- [ ] **選項 A**：修好 Railway production 環境（找出 6/2 起的失敗原因、補齊 §2.2 的所有環境變數），合併後才有可用的正式站。
+- [ ] **選項 B**：正式承認 staging 環境就是正式環境，更新本文件與交接手冊的用語，並確認其環境變數符合 §2.2 的正式要求（特別是 `DEBUG=false`）。
+- [ ] **選項 C**：合併前先停用 production 環境的自動部署，避免合併後出現一個壞掉的正式站。
+
+無論選哪一個，都要確認 Vercel `Production` 的 `NEXT_PUBLIC_API_URL` 指向實際可用的後端；目前它指向的後端不通。
+
+### 這與資安無關
+
+`main`（`b1e7af3`）確實仍含 §2 記錄的個人健康紀錄 IDOR／BOLA，但因其後端未在運行，**這些漏洞未暴露在任何可運作的系統上**。實際服務的 staging + Preview 跑的是已修正的 feature branch。合併後漏洞即隨程式碼一併修補。
+
+---
+
 ## 3. 資料庫與備份（專案負責人）
 
 | 項目 | 說明 |
