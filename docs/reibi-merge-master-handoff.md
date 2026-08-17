@@ -1,9 +1,13 @@
 # SleepM × REIBI 移植專案：完整建置、進度與操作交接手冊
 
-最後核對日期：2026-08-17（Asia/Taipei）  
-工作區：`C:\sleepm_merge`  
-目前開發分支：`codex/reibi-fastapi-merge`  
-目前提交：`12f7806 fix: render l5 service ticket workflow`  
+最後核對日期：2026-08-17（Asia/Taipei）
+
+工作區：`C:\sleepm_merge`
+
+目前開發分支：`codex/reibi-fastapi-merge`
+
+本文件記錄的功能基準提交：`12f7806 fix: render l5 service ticket workflow`
+
 正式部署分支：`main`（目前尚未將本次移植分支合併到 `main`）
 
 > 本文件是新對話、新開發者或新電腦接手時的主要入口。若本文件與程式碼不一致，以已提交的 migration、後端 `roles.py`、FastAPI 路由及當下測試結果為準；再同步修正文件。
