@@ -105,7 +105,8 @@ Project ref：`wfgqnjupemzfhaosmogx`
 9. L5 總覽、待辦與通知：沿用既有 REIBI 業務 tables 進行 server-side 動態聚合；通知目前不保存已讀狀態，因此不新增 table 或 migration。
 10. `reibi_batch_k_onboarding`：已套用遠端；新增 `reibi_onboarding_cases`、三組 sequence 與只供 `service_role` 執行的 `reibi_open_enterprise_case` transaction。
 11. `reibi_batch_k_organizations_sync`：已套用遠端；新案企業與名稱更新會同步主平台 `organizations`，並回填 migration 前已建立的企業。舊版必填 PIN 欄位使用不可取得明文的獨立隨機 bcrypt placeholder。
-12. Artifact data import：依 2026-08-14 範圍決策不執行；相關資料表維持 0 筆為預期。選用映射見 [Artifact 資料映射](reibi-artifact-mapping.md)，保留操作見 [Batch G 手冊](reibi-batch-g-runbook.md)。
+12. Batch L 跨企業管理：沿用既有 tables 與 FastAPI service-role 存取層，不新增 schema；`reibi_super`／`reibi_finance` 的 `org_code` 選擇由後端重新驗證，企業 `admin` 仍固定為 token 中的自身企業。
+13. Artifact data import：依 2026-08-14 範圍決策不執行；相關資料表維持 0 筆為預期。選用映射見 [Artifact 資料映射](reibi-artifact-mapping.md)，保留操作見 [Batch G 手冊](reibi-batch-g-runbook.md)。
 
 ## 本機驗證紀錄
 
@@ -115,6 +116,7 @@ Project ref：`wfgqnjupemzfhaosmogx`
 - `anon`、`authenticated`、`service_role` 均無法直接執行 `public.rls_auto_enable()`。
 - 三個既有 ownership policies 已限定為 `authenticated`，並同時包含快取式 `(select auth.uid())` ownership check 與 `WITH CHECK`。
 - Batch K 可回滾 SQL 測試已確認交易同時建立企業、場域與案件，且 `authenticated` 無 RPC execute、`service_role` 可執行。
+- Batch L 未新增 migration；本機 16 個 migration 歷史仍與遠端一致，跨企業管理只透過既有 FastAPI 權限與 server-side Supabase client。
 - 遠端 16 個 migrations 與本機一致；Batch K table、RPC 權限、`ORG-TST1-26-000001` organizations 回填與 bcrypt placeholder 已以遠端唯讀 SQL 確認。Security advisors 只有既有的 [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) WARN，其他為刻意採 deny-by-default 的 RLS INFO；performance advisors 只有新系統尚無正式流量造成的 unused-index INFO。
 - Railway Hobby 已建立 staging 後端，供遠端整合測試；舊 Artifact 正式網路匯入因範圍決策不執行。
 

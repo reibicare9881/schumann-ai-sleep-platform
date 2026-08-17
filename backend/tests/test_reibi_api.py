@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
@@ -6,8 +7,42 @@ from fastapi import HTTPException
 import main
 from auth import create_access_token, require_reibi_manager, require_reibi_partner
 from reibi_api import QuoteCalculationRequest, _assert_lifecycle_transition, calculate_quote_fees
-from reibi_batch_c import build_payment_schedule, calculate_distributor_commission
+from reibi_batch_c import build_payment_schedule, calculate_distributor_commission, create_reibi_batch_c_router
 from decimal import Decimal
+
+
+class EnterpriseQuery:
+    def __init__(self, rows):
+        self.rows = list(rows)
+        self.limit_value = None
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, key, value):
+        self.rows = [row for row in self.rows if row.get(key) == value]
+        return self
+
+    def limit(self, value):
+        self.limit_value = value
+        return self
+
+    def order(self, key, **_kwargs):
+        self.rows.sort(key=lambda row: str(row.get(key) or ""))
+        return self
+
+    def execute(self):
+        rows = self.rows[:self.limit_value] if self.limit_value is not None else self.rows
+        return SimpleNamespace(data=rows)
+
+
+class EnterpriseClient:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def table(self, name):
+        assert name == "reibi_enterprises"
+        return EnterpriseQuery(self.rows)
 
 
 class ReibiApiTests(unittest.TestCase):
@@ -153,6 +188,30 @@ class ReibiApiTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as caught:
             require_reibi_partner({"role": "partner_primary"})
         self.assertIn("partner_org_code", caught.exception.detail)
+
+    def test_cross_enterprise_directory_is_available_to_internal_manager(self):
+        router = create_reibi_batch_c_router(EnterpriseClient([
+            {"id": 1, "org_code": "ORG-A", "org_name": "甲企業", "member_limit": 100, "used_count": 20},
+            {"id": 2, "org_code": "ORG-B", "org_name": "乙企業", "member_limit": 200, "used_count": 180},
+        ]))
+        endpoint = next(route.endpoint for route in router.routes if route.path == "/api/reibi/operations/enterprises")
+
+        response = endpoint(current_user={"role": "reibi_super"})
+
+        by_code = {row["org_code"]: row for row in response["data"]}
+        self.assertEqual(set(by_code), {"ORG-A", "ORG-B"})
+        self.assertEqual(by_code["ORG-B"]["used_count"], 180)
+
+    def test_enterprise_directory_keeps_org_admin_in_own_scope(self):
+        router = create_reibi_batch_c_router(EnterpriseClient([
+            {"id": 1, "org_code": "ORG-A", "org_name": "甲企業"},
+            {"id": 2, "org_code": "ORG-B", "org_name": "乙企業"},
+        ]))
+        endpoint = next(route.endpoint for route in router.routes if route.path == "/api/reibi/operations/enterprises")
+
+        response = endpoint(current_user={"role": "admin", "org_code": "ORG-A"})
+
+        self.assertEqual([row["org_code"] for row in response["data"]], ["ORG-A"])
 
 
 if __name__ == "__main__":

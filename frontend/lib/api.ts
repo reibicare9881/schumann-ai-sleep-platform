@@ -461,8 +461,8 @@ export const API = {
   // REIBI 管理 API（目前限單位 admin）
   // ==========================================
 
-  async getReibiOverview() {
-    return this.request('/api/reibi/overview');
+  async getReibiOverview(orgCode?: string) {
+    return this.request('/api/reibi/overview', { query: { org_code: orgCode } });
   },
 
   async getReibiL5Overview() {
@@ -502,55 +502,60 @@ export const API = {
     URL.revokeObjectURL(url);
   },
 
-  async saveReibiEnterprise(payload: Record<string, any>) {
+  async saveReibiEnterprise(payload: Record<string, any>, orgCode?: string) {
     return this.request('/api/reibi/enterprise', {
       method: 'PUT',
+      query: { org_code: orgCode },
       body: JSON.stringify(payload)
     });
   },
 
-  async listReibiEnterpriseSites() {
-    return this.request('/api/reibi/enterprise/sites');
+  async listReibiEnterpriseSites(orgCode?: string) {
+    return this.request('/api/reibi/enterprise/sites', { query: { org_code: orgCode } });
   },
 
-  async createReibiEnterpriseSite(payload: Record<string, any>) {
+  async createReibiEnterpriseSite(payload: Record<string, any>, orgCode?: string) {
     return this.request('/api/reibi/enterprise/sites', {
       method: 'POST',
+      query: { org_code: orgCode },
       body: JSON.stringify(payload)
     });
   },
 
-  async updateReibiEnterpriseSite(siteId: number, payload: Record<string, any>) {
+  async updateReibiEnterpriseSite(siteId: number, payload: Record<string, any>, orgCode?: string) {
     return this.request(`/api/reibi/enterprise/sites/${siteId}`, {
       method: 'PATCH',
+      query: { org_code: orgCode },
       body: JSON.stringify(payload)
     });
   },
 
-  async deleteReibiEnterpriseSite(siteId: number) {
-    return this.request(`/api/reibi/enterprise/sites/${siteId}`, { method: 'DELETE' });
+  async deleteReibiEnterpriseSite(siteId: number, orgCode?: string) {
+    return this.request(`/api/reibi/enterprise/sites/${siteId}`, { method: 'DELETE', query: { org_code: orgCode } });
   },
 
-  async listReibiDepartments() {
-    return this.request('/api/reibi/enterprise/departments');
+  async listReibiDepartments(orgCode?: string) {
+    return this.request('/api/reibi/enterprise/departments', { query: { org_code: orgCode } });
   },
 
-  async createReibiDepartment(payload: Record<string, any>) {
+  async createReibiDepartment(payload: Record<string, any>, orgCode?: string) {
     return this.request('/api/reibi/enterprise/departments', {
       method: 'POST',
+      query: { org_code: orgCode },
       body: JSON.stringify(payload)
     });
   },
 
-  async updateReibiDepartment(departmentId: number, payload: Record<string, any>) {
+  async updateReibiDepartment(departmentId: number, payload: Record<string, any>, orgCode?: string) {
     return this.request(`/api/reibi/enterprise/departments/${departmentId}`, {
       method: 'PATCH',
+      query: { org_code: orgCode },
       body: JSON.stringify(payload)
     });
   },
 
-  async deleteReibiDepartment(departmentId: number) {
-    return this.request(`/api/reibi/enterprise/departments/${departmentId}`, { method: 'DELETE' });
+  async deleteReibiDepartment(departmentId: number, orgCode?: string) {
+    return this.request(`/api/reibi/enterprise/departments/${departmentId}`, { method: 'DELETE', query: { org_code: orgCode } });
   },
 
   async getReibiBusinessCatalogs() {

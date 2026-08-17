@@ -342,7 +342,8 @@ def create_reibi_batch_c_router(client: Any) -> APIRouter:
     @router.get("/operations/enterprises")
     def operation_enterprises(current_user: dict = Depends(require_reibi_manager)):
         query = client.table("reibi_enterprises").select(
-            "id,org_code,org_name,status,partner_code,plan_code,contract_start,a_layer_fee,b_layer_fee,c_layer_fee,d_layer_fee"
+            "id,org_code,org_name,org_alias,status,industry,partner_code,plan_code,member_limit,used_count,"
+            "contract_start,contract_end,a_layer_fee,b_layer_fee,c_layer_fee,d_layer_fee,updated_at"
         )
         if current_user.get("role") not in {"reibi_super", "reibi_finance"}:
             query = query.eq("id", _enterprise(client, current_user)["id"])

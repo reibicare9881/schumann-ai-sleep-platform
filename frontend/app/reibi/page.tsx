@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, BadgeDollarSign, BarChart3, Boxes, Building2, CalendarClock, FileCheck2, FileText, HardHat, Headphones, HeartPulse, KeyRound, LayoutDashboard, MapPin, Network, Pencil, Plus, RefreshCw, Save, Trash2, Upload, Users } from "lucide-react";
+import { ArrowLeft, BadgeDollarSign, BarChart3, Boxes, Building2, CalendarClock, FileCheck2, FileText, HardHat, Headphones, HeartPulse, KeyRound, LayoutDashboard, MapPin, Network, Pencil, Plus, RefreshCw, Save, Search, Trash2, Upload, Users } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
 import API from "@/lib/api";
@@ -54,6 +54,22 @@ type Department = {
   is_active: boolean;
   direct_member_count: number;
   member_count: number;
+};
+
+type EnterpriseDirectoryRow = {
+  id: number;
+  org_code: string;
+  org_name: string;
+  org_alias?: string | null;
+  status?: string | null;
+  industry?: string | null;
+  partner_code?: string | null;
+  plan_code?: string | null;
+  member_limit?: number | null;
+  used_count?: number | null;
+  contract_start?: string | null;
+  contract_end?: string | null;
+  updated_at?: string | null;
 };
 
 const EMPTY_ENTERPRISE = {
@@ -136,6 +152,10 @@ export default function ReibiManagementPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [departmentDraft, setDepartmentDraft] = useState({ ...EMPTY_DEPARTMENT });
   const [editingDepartmentId, setEditingDepartmentId] = useState<number | null>(null);
+  const [enterpriseDirectory, setEnterpriseDirectory] = useState<EnterpriseDirectoryRow[]>([]);
+  const [selectedOrgCode, setSelectedOrgCode] = useState("");
+  const [enterpriseSearch, setEnterpriseSearch] = useState("");
+  const [enterpriseStatus, setEnterpriseStatus] = useState("all");
   const [source, setSource] = useState<ArtifactSource>("main");
   const [version, setVersion] = useState("");
   const [exportPayload, setExportPayload] = useState<any>(null);
@@ -147,12 +167,20 @@ export default function ReibiManagementPage() {
   const [loading, setLoading] = useState(false);
 
   const allowed = Boolean(session && can(session.systemRole, "manage_reibi"));
+  const canSelectEnterprise = ["reibi_super", "reibi_finance"].includes(session?.systemRole || "");
+  const activeOrgCode = canSelectEnterprise ? selectedOrgCode : session?.orgCode || "";
 
-  const loadOverview = async () => {
+  const loadOverview = async (orgCode = activeOrgCode) => {
     if (!allowed) return;
+    if (canSelectEnterprise && !orgCode) {
+      setOverview(null);
+      setSites([]);
+      setDepartments([]);
+      return;
+    }
     setLoading(true);
     setError("");
-    const response: any = await API.getReibiOverview();
+    const response: any = await API.getReibiOverview(orgCode || undefined);
     if (response.status === "success") {
       const data = response.data as Overview;
       setOverview(data);
@@ -162,8 +190,8 @@ export default function ReibiManagementPage() {
           ...Object.fromEntries(Object.entries(data.enterprise).filter(([key]) => key in EMPTY_ENTERPRISE)),
         });
         const [siteResponse, departmentResponse]: any[] = await Promise.all([
-          API.listReibiEnterpriseSites(),
-          API.listReibiDepartments(),
+          API.listReibiEnterpriseSites(orgCode || undefined),
+          API.listReibiDepartments(orgCode || undefined),
         ]);
         if (siteResponse.status === "success") setSites(siteResponse.data || []);
         else setError(siteResponse.message || "無法讀取企業場域");
@@ -179,8 +207,41 @@ export default function ReibiManagementPage() {
     setLoading(false);
   };
 
+  const loadEnterpriseDirectory = async () => {
+    if (!canSelectEnterprise) return "";
+    const response: any = await API.listReibiOperationEnterprises();
+    if (response.status !== "success") {
+      setError(response.message || "無法讀取跨企業目錄");
+      return "";
+    }
+    const rows = (response.data || []) as EnterpriseDirectoryRow[];
+    setEnterpriseDirectory(rows);
+    const nextOrgCode = rows.some(row => row.org_code === selectedOrgCode)
+      ? selectedOrgCode
+      : rows[0]?.org_code || "";
+    setSelectedOrgCode(nextOrgCode);
+    return nextOrgCode;
+  };
+
+  const refreshAll = async () => {
+    const orgCode = canSelectEnterprise ? await loadEnterpriseDirectory() : activeOrgCode;
+    await loadOverview(orgCode);
+  };
+
+  const selectEnterprise = async (orgCode: string) => {
+    setSelectedOrgCode(orgCode);
+    setEnterprise({ ...EMPTY_ENTERPRISE });
+    setSites([]);
+    setDepartments([]);
+    setEditingSiteId(null);
+    setEditingDepartmentId(null);
+    setSiteDraft({ ...EMPTY_SITE });
+    setDepartmentDraft({ ...EMPTY_DEPARTMENT });
+    await loadOverview(orgCode);
+  };
+
   useEffect(() => {
-    loadOverview();
+    void refreshAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allowed]);
 
@@ -205,10 +266,11 @@ export default function ReibiManagementPage() {
     const payload = Object.fromEntries(
       Object.entries(enterprise).map(([key, value]) => [key, value === "" ? null : value])
     );
-    const response: any = await API.saveReibiEnterprise(payload);
+    const response: any = await API.saveReibiEnterprise(payload, activeOrgCode || undefined);
     if (response.status === "success") {
       setMessage("企業資料已儲存。");
-      await loadOverview();
+      if (canSelectEnterprise) await refreshAll();
+      else await loadOverview(activeOrgCode);
     } else {
       setError(response.message || "企業資料儲存失敗");
     }
@@ -227,13 +289,13 @@ export default function ReibiManagementPage() {
       note: siteDraft.note.trim() || null,
     };
     const response: any = editingSiteId
-      ? await API.updateReibiEnterpriseSite(editingSiteId, payload)
-      : await API.createReibiEnterpriseSite(payload);
+      ? await API.updateReibiEnterpriseSite(editingSiteId, payload, activeOrgCode || undefined)
+      : await API.createReibiEnterpriseSite(payload, activeOrgCode || undefined);
     if (response.status === "success") {
       setSiteDraft({ ...EMPTY_SITE });
       setEditingSiteId(null);
       setMessage(editingSiteId ? "場域已更新。" : "場域已新增。");
-      await loadOverview();
+      await loadOverview(activeOrgCode);
     } else {
       setError(response.message || "場域儲存失敗");
     }
@@ -253,10 +315,10 @@ export default function ReibiManagementPage() {
   const deleteSite = async (site: EnterpriseSite) => {
     if (!window.confirm(`確定刪除場域「${site.label}」？`)) return;
     setLoading(true);
-    const response: any = await API.deleteReibiEnterpriseSite(site.id);
+    const response: any = await API.deleteReibiEnterpriseSite(site.id, activeOrgCode || undefined);
     if (response.status === "success") {
       setMessage("場域已刪除。");
-      await loadOverview();
+      await loadOverview(activeOrgCode);
     } else setError(response.message || "場域刪除失敗");
     setLoading(false);
   };
@@ -273,13 +335,13 @@ export default function ReibiManagementPage() {
       is_active: departmentDraft.is_active,
     };
     const response: any = editingDepartmentId
-      ? await API.updateReibiDepartment(editingDepartmentId, payload)
-      : await API.createReibiDepartment(payload);
+      ? await API.updateReibiDepartment(editingDepartmentId, payload, activeOrgCode || undefined)
+      : await API.createReibiDepartment(payload, activeOrgCode || undefined);
     if (response.status === "success") {
       setDepartmentDraft({ ...EMPTY_DEPARTMENT });
       setEditingDepartmentId(null);
       setMessage(editingDepartmentId ? "部門已更新。" : "部門已新增。");
-      await loadOverview();
+      await loadOverview(activeOrgCode);
     } else setError(response.message || "部門儲存失敗");
     setLoading(false);
   };
@@ -297,10 +359,10 @@ export default function ReibiManagementPage() {
   const deleteDepartment = async (department: Department) => {
     if (!window.confirm(`確定刪除部門「${department.name}」？有下層部門時系統會拒絕刪除。`)) return;
     setLoading(true);
-    const response: any = await API.deleteReibiDepartment(department.id);
+    const response: any = await API.deleteReibiDepartment(department.id, activeOrgCode || undefined);
     if (response.status === "success") {
       setMessage("部門已刪除。");
-      await loadOverview();
+      await loadOverview(activeOrgCode);
     } else setError(response.message || "部門刪除失敗");
     setLoading(false);
   };
@@ -375,6 +437,24 @@ export default function ReibiManagementPage() {
     { label: "合約", value: overview?.contracts ?? 0, icon: <FileCheck2 className="w-5 h-5" /> },
     { label: "工單", value: overview?.work_orders ?? 0, icon: <HardHat className="w-5 h-5" /> },
   ];
+  const normalizedEnterpriseSearch = enterpriseSearch.trim().toLocaleLowerCase("zh-TW");
+  const filteredEnterprises = enterpriseDirectory.filter(row => {
+    const matchesSearch = !normalizedEnterpriseSearch || [row.org_code, row.org_name, row.org_alias, row.industry, row.partner_code]
+      .some(value => String(value || "").toLocaleLowerCase("zh-TW").includes(normalizedEnterpriseSearch));
+    const matchesStatus = enterpriseStatus === "all" || row.status === enterpriseStatus;
+    return matchesSearch && matchesStatus;
+  });
+  const directoryStatuses = Array.from(new Set(enterpriseDirectory.map(row => row.status).filter(Boolean) as string[])).sort();
+  const activeEnterpriseCount = enterpriseDirectory.filter(row => ["active", "啟用中", "試用中"].includes(String(row.status))).length;
+  const expiringEnterpriseCount = enterpriseDirectory.filter(row => {
+    if (!row.contract_end) return false;
+    const days = Math.ceil((new Date(`${row.contract_end}T00:00:00`).getTime() - Date.now()) / 86_400_000);
+    return days >= 0 && days <= 90;
+  }).length;
+  const highUsageEnterpriseCount = enterpriseDirectory.filter(row => {
+    const limit = Number(row.member_limit || 0);
+    return limit > 0 && Number(row.used_count || 0) / limit >= 0.9;
+  }).length;
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
@@ -382,18 +462,18 @@ export default function ReibiManagementPage() {
         <div>
           <Link href="/dashboard" className="inline-flex items-center gap-1 text-sm font-bold text-teal-700 mb-2"><ArrowLeft className="w-4 h-4" /> 返回儀表板</Link>
           <h1 className="text-2xl font-black text-slate-800">REIBI 管理中心</h1>
-          <p className="text-sm text-slate-500 mt-1">企業資料、商務文件統計與 Artifact 搬移預檢</p>
+          <p className="text-sm text-slate-500 mt-1">{canSelectEnterprise ? "跨企業基本資料、授權、場域與部門管理" : "企業資料、商務文件統計與 Artifact 搬移預檢"}</p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           {session.systemRole.startsWith("reibi_") && <Link href="/reibi/l5" className="inline-flex items-center gap-2 rounded-xl bg-teal-800 px-4 py-2 text-sm font-bold text-white"><LayoutDashboard className="w-4 h-4" /> L5 營運總覽</Link>}
-          <Link href="/reibi/workflow" className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2 text-sm font-bold text-white"><FileCheck2 className="w-4 h-4" /> 商務文件工作台</Link>
+          <Link href={activeOrgCode ? `/reibi/workflow?org_code=${encodeURIComponent(activeOrgCode)}` : "/reibi/workflow"} className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2 text-sm font-bold text-white"><FileCheck2 className="w-4 h-4" /> 商務文件工作台</Link>
           <Link href="/reibi/operations" className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white"><BadgeDollarSign className="w-4 h-4" /> 財務與夥伴營運</Link>
           <Link href="/reibi/health" className="inline-flex items-center gap-2 rounded-xl bg-rose-700 px-4 py-2 text-sm font-bold text-white"><HeartPulse className="w-4 h-4" /> 健康與職安</Link>
           <Link href="/reibi/analytics" className="inline-flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2 text-sm font-bold text-white"><BarChart3 className="w-4 h-4" /> 組織分析</Link>
           <Link href="/reibi/service" className="inline-flex items-center gap-2 rounded-xl bg-sky-700 px-4 py-2 text-sm font-bold text-white"><Headphones className="w-4 h-4" /> 服務與整合</Link>
           <Link href="/reibi/mfa" className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white"><KeyRound className="w-4 h-4" /> MFA 安全設定</Link>
           {["admin", "reibi_super"].includes(session.systemRole) && <Link href="/reibi/accounts" className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white"><Users className="w-4 h-4" /> 身分與角色</Link>}
-          <button onClick={loadOverview} disabled={loading} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-600 disabled:opacity-50">
+          <button onClick={() => void refreshAll()} disabled={loading} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-600 disabled:opacity-50">
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> 重新整理
           </button>
         </div>
@@ -401,13 +481,67 @@ export default function ReibiManagementPage() {
 
       {(message || error) && <div className={`rounded-xl border px-4 py-3 text-sm ${error ? "bg-red-50 border-red-200 text-red-700" : "bg-emerald-50 border-emerald-200 text-emerald-700"}`}>{error || message}</div>}
 
+      {canSelectEnterprise && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+            <div>
+              <h2 className="flex items-center gap-2 font-black text-slate-800"><Building2 className="h-5 w-5 text-teal-700" />跨企業管理總覽</h2>
+              <p className="mt-1 text-xs text-slate-500">只顯示企業營運與合約欄位；選定企業後，後端仍會逐次驗證角色與 <code>org_code</code>。</p>
+            </div>
+            {activeOrgCode && <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-black text-teal-800">目前管理：{activeOrgCode}</span>}
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[
+              ["企業總數", enterpriseDirectory.length],
+              ["啟用／試用", activeEnterpriseCount],
+              ["90 天內到期", expiringEnterpriseCount],
+              ["授權使用 ≥90%", highUsageEnterpriseCount],
+            ].map(([label, value]) => <div key={label} className="rounded-xl bg-slate-50 p-4"><div className="text-xl font-black text-slate-900">{value}</div><div className="mt-1 text-xs text-slate-500">{label}</div></div>)}
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3 md:flex-row">
+            <label className="relative flex-1 text-xs font-bold text-slate-600">搜尋企業
+              <Search className="absolute bottom-3 left-3 h-4 w-4 text-slate-400" />
+              <input value={enterpriseSearch} onChange={event => setEnterpriseSearch(event.target.value)} placeholder="名稱、代碼、產業、經銷商" className="mt-1 w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm" />
+            </label>
+            <label className="text-xs font-bold text-slate-600">狀態
+              <select value={enterpriseStatus} onChange={event => setEnterpriseStatus(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm md:w-48">
+                <option value="all">全部狀態</option>
+                {directoryStatuses.map(value => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-[820px] w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500"><tr>{["企業", "狀態／方案", "授權", "合約期間", "產業／經銷商", "操作"].map(label => <th key={label} className="p-3 font-bold">{label}</th>)}</tr></thead>
+              <tbody>
+                {filteredEnterprises.map(row => {
+                  const isSelected = row.org_code === activeOrgCode;
+                  return <tr key={row.id} className={`border-t border-slate-100 ${isSelected ? "bg-teal-50/60" : ""}`}>
+                    <td className="p-3"><div className="font-black text-slate-800">{row.org_name}</div><div className="mt-1 text-slate-400">{row.org_code}{row.org_alias ? ` · ${row.org_alias}` : ""}</div></td>
+                    <td className="p-3"><div>{row.status || "未設定"}</div><div className="mt-1 text-slate-400">{row.plan_code || "未設定方案"}</div></td>
+                    <td className="p-3 font-bold text-slate-700">{Number(row.used_count || 0)}／{Number(row.member_limit || 0) || "未設定"}</td>
+                    <td className="p-3">{row.contract_start || "—"}<br />{row.contract_end || "—"}</td>
+                    <td className="p-3">{row.industry || "—"}<br /><span className="text-slate-400">{row.partner_code || "未指定經銷商"}</span></td>
+                    <td className="p-3"><button onClick={() => void selectEnterprise(row.org_code)} disabled={loading || isSelected} className={`rounded-lg px-3 py-2 font-black ${isSelected ? "bg-teal-100 text-teal-800" : "bg-slate-900 text-white"}`}>{isSelected ? "管理中" : "選擇管理"}</button></td>
+                  </tr>;
+                })}
+                {!filteredEnterprises.length && <tr><td colSpan={6} className="p-8 text-center text-slate-400">沒有符合條件的企業。</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         {stats.map(item => <div key={item.label} className="bg-white border border-slate-200 rounded-2xl p-4"><div className="text-teal-700 mb-3">{item.icon}</div><div className="text-xl font-black text-slate-800">{item.value}</div><div className="text-xs text-slate-500 mt-1">{item.label}</div></div>)}
       </div>
 
       <section className="bg-white border border-slate-200 rounded-2xl p-6">
         <h2 className="font-black text-slate-800 mb-1">企業基本資料</h2>
-        <p className="text-xs text-slate-500 mb-5">單位代碼由登入 Token 決定，前端不能指定或修改其他企業。</p>
+        <p className="text-xs text-slate-500 mb-5">{canSelectEnterprise ? `目前編輯 ${activeOrgCode || "尚未選擇企業"}；企業代碼不可修改，所有寫入由後端重新驗證範圍。` : "單位代碼由登入 Token 決定，前端不能指定或修改其他企業。"}</p>
         <div className="grid md:grid-cols-2 gap-4">
           {[
             ["org_name", "企業名稱"], ["org_alias", "企業簡稱"], ["ubn", "統一編號"], ["industry", "產業"],

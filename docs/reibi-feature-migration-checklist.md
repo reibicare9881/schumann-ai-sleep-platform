@@ -44,7 +44,7 @@
 | FastAPI REIBI router | `[-]` | 主要業務、身分與 L5 角色化總覽 API 已完成；尚待統一 response／稽核、全 endpoint 權限矩陣及 E2E |
 | Next.js REIBI 管理頁 | `[-]` | 主要商務、健康、分析、設定、帳號及 L5 總覽流程已完成；尚待地圖、部分 UX 與瀏覽器 E2E |
 | Artifact 欄位映射 | `[x]` | 主要 storage keys 與目標表已完成程式對照；因舊資料不搬遷，不要求真實匯出檔驗證 |
-| Python 測試環境 | `[x]` | Python 3.11.9 與 `backend/.venv` 已重建，`requirements-dev.txt` 固定 pytest 8.4.2；2026-08-14 為 76 項後端與 135 項 pgTAP 測試通過 |
+| Python 測試環境 | `[x]` | Python 3.11.9 與 `backend/.venv` 已重建，`requirements-dev.txt` 固定 pytest 8.4.2；2026-08-17 為 84 項後端與 135 項 pgTAP 測試通過 |
 | 四 Artifact JSON 匯出 | `[N/A]` | JSX 已具備匯出工具，但依範圍決策不重新發布、不執行真實匯出 |
 | `reibi_super` 安全登入 | `[x]` | 第一位正式帳號 `reibicare9881@gmail.com`（麗媚AI）已完成 Email、密碼、TOTP 綁定及 staging AAL2 登入驗證 |
 | 既有資料正式匯入 | `[N/A]` | 依範圍決策不搬移舊 `window.storage`；新 Supabase 業務資料乾淨起始 |
@@ -143,7 +143,7 @@
 
 - [x] L5-01A 依角色顯示的總覽、待辦與即時通知；採現有業務 table 動態聚合，不新增通知 table。FastAPI 依四種內部角色與兩種經銷商角色裁切欄位／企業範圍，Next.js 提供 L5 總覽入口。
 - [x] L5-01B 新案開通三步驟、交易式企業／場域建立、並發安全案件／企業／憑證流水號，以及不含密碼或共用 PIN 的 PDF 憑證函。
-- [-] L5-01C 企業管理基本資料；企業管理者可完整維護自身企業，`reibi_super` 安全登入已完成，跨企業總覽 UI 與端對端驗收仍待補齊。
+- [x] L5-01C 企業管理基本資料；企業管理者只能維護自身企業，`reibi_super`／`reibi_finance` 可在跨企業目錄搜尋、篩選及選定企業，再管理基本資料、授權、場域與部門。所有讀寫仍由 FastAPI 逐次驗證 `org_code`。
 - [x] L5-01D 企業場域、設備、A/B/C/D 四層方案、授權用量、平台帳號核對與合約狀態。
 - [-] L5-01E 服務案件與企業範圍限制已完成；經銷商專屬案件範圍仍待正式角色登入整合。
 - [x] L5-01F 預約管理與組織越權防護。
@@ -390,3 +390,10 @@
 - [x] L5-K05：新案企業會在同一 transaction 同步至主平台 `organizations`；已回填既有測試企業，企業名稱後續更新亦同步。舊版三個 NOT NULL PIN 欄位只保存彼此獨立、明文從未保存的隨機 bcrypt placeholder，不恢復共用 PIN。
 - [x] SEC-K01：新表啟用 RLS 並撤銷 browser roles；transaction RPC 與 sequences 只授權後端 `service_role`。
 - [x] TST-K01：82 項 Python 測試、Next.js production build、16 個空白本機 migrations 全量重播及可回滾 SQL 交易／權限／organizations 同步測試通過。
+
+## 22. Batch L 跨企業管理總覽（2026-08-17）
+
+- [x] L5-L01：`/reibi` 新增跨企業管理總覽，包含企業名稱／代碼／產業／經銷商搜尋、狀態篩選、企業總數、啟用／試用、90 天內到期與授權使用率警示。
+- [x] L5-L02：選定企業後，基本資料、方案、授權、合約、場域與四層部門 API 全部明確帶入 `org_code`；商務文件入口沿用相同企業範圍。
+- [x] SEC-L01：跨企業選擇只顯示給 `reibi_super`／`reibi_finance`；後端 `require_reibi_manager` 仍是權限來源，企業 `admin` 指定其他組織會回傳 403，瀏覽器不取得 Supabase service role。
+- [x] TST-L01：84 項 Python 測試（含跨企業目錄與企業管理員自身範圍）、TypeScript no-emit、Next.js production build、FastAPI 企業路由 smoke test 與 16 個 migration 歷史核對通過；全 14 角色瀏覽器 E2E 仍列於 TST-04／TST-11。
