@@ -190,6 +190,8 @@ class AssessmentWrite(StrictModel):
     screened: Optional[bool] = None
     duration: Optional[str] = Field(None, max_length=40)
     suicide_ideation: Optional[int] = Field(None, ge=0, le=4)
+    # 預設不同意：沒有明確勾選就不進入所屬企業的組織彙整
+    consent_org_aggregate: bool = False
 
 
 class FeedbackWrite(StrictModel):
@@ -505,6 +507,7 @@ def create_reibi_batch_d_router(client: Any) -> APIRouter:
             "score": scored["score"], "level_code": scored["level"], "level_label": scored["label"],
             "is_flagged": scored["flagged"], "answers": answers, "recommendations": scored["recommendations"],
             "source_payload": {}, "assessed_at": _now(),
+            "consent_org_aggregate": payload.consent_org_aggregate,
         }), "無法儲存健康評估")
         points = _rpc(client, "reibi_adjust_points", {
             "p_profile_id": pid, "p_org_code": org, "p_event_code": payload.assessment_type,

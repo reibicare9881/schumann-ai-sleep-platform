@@ -46,7 +46,7 @@
 | FastAPI REIBI router | `[-]` | 主要業務、身分、L5 總覽與區域佈點 API 已完成，401／403 矩陣與 E2E 已涵蓋；尚待統一 response schema 與寫入稽核（FND-05／06） |
 | Next.js REIBI 管理頁 | `[-]` | 主要商務、健康、分析、設定、帳號、L5 總覽與區域佈點已完成，瀏覽器 E2E 涵蓋 31 項；尚待場域前置選單與定價／About 內容 |
 | Artifact 欄位映射 | `[x]` | 主要 storage keys 與目標表已完成程式對照；因舊資料不搬遷，不要求真實匯出檔驗證 |
-| Python 測試環境 | `[x]` | Python 3.11.9 與 `backend/.venv` 已重建，`requirements-dev.txt` 固定 pytest 8.4.2；2026-08-17 為 3,322 項後端、146 項 pgTAP 與 31 項 Playwright E2E 通過 |
+| Python 測試環境 | `[x]` | Python 3.11.9 與 `backend/.venv` 已重建，`requirements-dev.txt` 固定 pytest 8.4.2；2026-08-18 為 3,369 項後端、159 項 pgTAP 與 37 項 Playwright E2E 通過 |
 | 四 Artifact JSON 匯出 | `[N/A]` | JSX 已具備匯出工具，但依範圍決策不重新發布、不執行真實匯出 |
 | `reibi_super` 安全登入 | `[x]` | 第一位正式帳號 `reibicare9881@gmail.com`（麗媚AI）已完成 Email、密碼、TOTP 綁定及 staging AAL2 登入驗證 |
 | 既有資料正式匯入 | `[N/A]` | 依範圍決策不搬移舊 `window.storage`；新 Supabase 業務資料乾淨起始 |
@@ -87,7 +87,7 @@
 - [-] MP-01B 睡眠、疼痛、工作影響評估及報告保存。
 - [-] MP-01C 個人報告、歷史紀錄、PDF 與趨勢分析。
 - [ ] MP-01D Artifact 原有角色、部門選擇與訂閱閘門的完整對照測試。
-- [ ] MP-01E 評估資料與 `reibi_health_assessments`／既有 `sleep_reports` 的去重與權威來源決策。
+- [x] MP-01E 兩張表的量表不重疊，非重複儲存；實際問題是組織彙整缺同意保護，已依 2026-08-18 決策修正，見 §33。
 
 ### MP-02 個人健康自主管理
 
@@ -496,6 +496,25 @@
 - [x] TST-S03：測試替身補上 PostgREST 的欄位投影語意。原本 `.select("id,label")` 會回傳整列，比真實資料庫寬鬆，會遮蔽 handler 多回傳欄位的問題；`*` 與嵌套查詢維持原行為，確保只收斂不放寬。
 - [x] TST-S04：18 項 Python 測試（場域清單範圍、角色可讀性、跨單位場域阻擋、拒絕時不寫入、備註長度、清單標籤）與 6 項 E2E（含手機版）。E2E 種子新增一組單位成員帳號，連同企業、場域、部門與 `profiles` 一併建立以滿足 `reibi_internal_users` 的 scope constraint。
 - [x] TST-S05：3,360 項 Python 測試、146 項 pgTAP、`pip check`、TypeScript no-emit 與 Next.js production build 全數通過。
+
+## 33. Batch S3 組織彙整同意 MP-01E（2026-08-18）
+
+盤點結果與清單原本的描述不同：`sleep_reports` 與 `reibi_health_assessments` 涵蓋的量表**不重疊**（前者為 ISI 睡眠／BPI 疼痛／工作影響，後者為 PHQ-4／PSS-4／正念／過勞／NMQ／BSRS-5／不法侵害），因此不存在重複儲存或去重問題。真正的缺陷在隱私：
+
+- `reibi_health_assessments.consent_org_aggregate` 自 Batch D 建立後**從未被任何程式碼寫入或讀取**，是死欄位。
+- `sleep_reports` 連該欄位都沒有。
+- `reibi_org_health_snapshot`（單一企業彙整）**對兩張表都沒有同意過濾**，員工的睡眠、疼痛、工作分數與心理量表結果一律無條件進入雇主的組織報表。
+- 跨企業彙整 `reibi_cross_org_health_snapshot` 則本來就以 `profiles.research_opt_in` 正確擋住兩張表，本次未更動。
+
+- [x] DB-S01：新增 migration `20260818074631_sleep_reports_org_aggregate_consent.sql`（第 17 個）。`sleep_reports` 新增 `consent_org_aggregate boolean not null default false` 與 `(org_code, consent_org_aggregate, created_at desc)` 索引，並為兩張表的同意欄位補上 column comment。
+- [x] SEC-S03：重建 `reibi_org_health_snapshot`，對 `sleep_reports` 與 `reibi_health_assessments` **對稱**加入同意過濾（各 2 處：eligible 樣本計算與 latest 明細）。預設 false，未明確同意者不進彙整。
+- [x] SEC-S04：k≥5 抑制與本人同意是兩層**獨立**保護，互不取代。即使樣本足夠，未同意者仍被排除；即使全部同意，同意人數不足 5 仍抑制且不回傳任何指標。
+- [x] MP-S05：`POST /api/sleep/assessment` 與 `POST /api/reibi/health/assessments` 均接受 `consent_org_aggregate` 並寫入資料列；預設 false，且**逐次評估獨立**，前一次同意不會延續到下一次。
+- [x] MP-S06：評估表單最後一步（僅單位成員可見）新增同意勾選，說明「單位僅能看到 5 人以上的去識別統計，看不到你的個人分數；不勾選不影響取得個人報告」。
+- [x] SEC-S05：組織彙整同意與跨企業研究同意（`profiles.research_opt_in`）是兩個獨立開關，測試確認勾選前者不會連帶開啟後者。
+- [x] TST-S06：13 項 pgTAP（欄位定義、只計入同意者、撤回後抑制、全部撤回歸零、心理量表對稱受限）與 9 項 Python API 測試。既有 `reibi_batch_e.test.sql` 的測試資料同步補上同意值 —— 它原本失敗正好證明過濾生效。
+- [x] TST-S07：3,369 項 Python 測試、**159 項 pgTAP**、37 項 E2E、`pip check`、TypeScript no-emit 與 Next.js production build 全數通過；17 個 migration 於空資料庫重播成功，`db:lint` 無錯誤。
+- [ ] OPS-S01：遠端 Supabase 尚未套用第 17 個 migration。套用後，既有 `sleep_reports` 資料列的同意值會是 false，組織彙整將只反映套用後明確同意的評估 —— 這是刻意的隱私預設，但上線前應向企業客戶說明。
 
 ## 30. Batch R1 讓 registry 成為 Batch D／E 的授權來源（2026-08-17）
 

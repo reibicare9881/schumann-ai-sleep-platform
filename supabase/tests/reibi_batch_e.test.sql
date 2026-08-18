@@ -36,12 +36,13 @@ select ('10000000-0000-0000-0000-00000000000' || n)::uuid,
 from generate_series(1, 5) as n;
 
 insert into public.sleep_reports
-  (id, user_id, org_code, platform, created_at, sleep_score, sleep_level, pain_score, pain_level, work_score)
+  (id, user_id, org_code, platform, created_at, sleep_score, sleep_level, pain_score, pain_level, work_score,
+   consent_org_aggregate)
 select ('20000000-0000-0000-0000-00000000000' || n)::uuid,
        ('10000000-0000-0000-0000-00000000000' || n)::uuid,
        'BATCH-E-TEST', 'sleep', '2026-08-01'::timestamptz,
        n * 10, case when n <= 2 then 'green' else 'orange' end,
-       n * 5, case when n <= 3 then 'green' else 'red' end, n * 3
+       n * 5, case when n <= 3 then 'green' else 'red' end, n * 3, true
 from generate_series(1, 4) as n;
 
 select is(
@@ -51,11 +52,12 @@ select is(
 );
 
 insert into public.sleep_reports
-  (id, user_id, org_code, platform, created_at, sleep_score, sleep_level, pain_score, pain_level, work_score)
+  (id, user_id, org_code, platform, created_at, sleep_score, sleep_level, pain_score, pain_level, work_score,
+   consent_org_aggregate)
 values (
   '20000000-0000-0000-0000-000000000005',
   '10000000-0000-0000-0000-000000000005',
-  'BATCH-E-TEST', 'sleep', '2026-08-01', 50, 'red', 25, 'red', 15
+  'BATCH-E-TEST', 'sleep', '2026-08-01', 50, 'red', 25, 'red', 15, true
 );
 
 select is(
@@ -75,10 +77,11 @@ select is(
 );
 
 insert into public.reibi_health_assessments
-  (profile_id, artifact_user_key, org_code, assessment_type, score, level_code, assessed_at)
+  (profile_id, artifact_user_key, org_code, assessment_type, score, level_code, assessed_at,
+   consent_org_aggregate)
 values (
   '10000000-0000-0000-0000-000000000001', 'batch-e-user-1',
-  'BATCH-E-TEST', 'phq4', 8, 'orange', '2026-08-01'
+  'BATCH-E-TEST', 'phq4', 8, 'orange', '2026-08-01', true
 );
 
 select is(

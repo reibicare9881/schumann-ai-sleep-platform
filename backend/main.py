@@ -167,6 +167,9 @@ class AssessmentData(BaseModel):
     sleep_scores: SleepScores
     pain_scores: PainScores
     work_scores: WorkScores
+    # 預設不同意：沒有明確勾選就不進入所屬企業的組織彙整。
+    # 跨企業研究彙整另由 profiles.research_opt_in 控制，兩者互不取代。
+    consent_org_aggregate: bool = False
     
 class OrgSettingsUpdate(BaseModel):
     """單位 OKR/ESG 參數更新模型"""
@@ -1030,7 +1033,8 @@ async def submit_sleep_assessment(
         "work_score": work_score,
         "work_scores": request.work_scores.model_dump(),
         "status": "completed",
-        "recs": custom_recs
+        "recs": custom_recs,
+        "consent_org_aggregate": request.consent_org_aggregate
     }
     
     supabase.table("sleep_reports").insert(report).execute()

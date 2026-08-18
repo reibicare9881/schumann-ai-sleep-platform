@@ -337,6 +337,7 @@ export const API = {
     sleep_scores: Record<string, number>;
     pain_scores: Record<string, number>;
     work_scores: Record<string, number>;
+    consent_org_aggregate?: boolean;
   }) {
     return this.request('/api/sleep/assessment', {
       method: 'POST',
