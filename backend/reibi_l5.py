@@ -16,7 +16,7 @@ from typing import Any, Iterable
 from fastapi import APIRouter, Depends, HTTPException
 
 from auth import get_current_user
-from roles import PARTNER_ROLES, REIBI_INTERNAL_ROLES, ROLE_DEFINITIONS
+from roles import PARTNER_ROLES, REIBI_INTERNAL_ROLES, ROLE_DEFINITIONS, has_permission
 
 
 L5_ROLES = REIBI_INTERNAL_ROLES | PARTNER_ROLES
@@ -387,6 +387,141 @@ def fetch_l5_datasets(client: Any, current_user: dict[str, Any]) -> tuple[dict[s
     return datasets, partner_codes
 
 
+
+# ── 區域佈點（L5-01G 點線面） ──────────────────────────────────────────────────
+#
+# 來源 Artifact 的 MapScreen 以 `enterprise.region` 分區，但它建立企業時從未寫入
+# 該欄位（reibi-l5_v2_14 第 1035-1053 行），所以原版的五個區域永遠顯示 0。這裡改由
+# 企業的 partner_code 關聯到經銷商的「負責區域」推導 —— 那是 Artifact 真正有在收集
+# 的欄位，也是新系統既有的 reibi_distributors.region。
+#
+# 區域目標沿用 Artifact 的數字；里程碑時間軸依 2026-08-17 決策暫不移植。
+
+REGION_DEFINITIONS: tuple[dict[str, Any], ...] = (
+    {"key": "north", "label": "北部", "target": 40,
+     "cities": ("台北市", "新北市", "基隆市", "桃園市", "新竹縣市")},
+    {"key": "central", "label": "中部", "target": 20,
+     "cities": ("台中市", "彰化縣", "南投縣", "雲林縣", "苗栗縣")},
+    {"key": "south", "label": "南部", "target": 20,
+     "cities": ("高雄市", "台南市", "嘉義縣市", "屏東縣")},
+    {"key": "east", "label": "東部", "target": 8,
+     "cities": ("花蓮縣", "台東縣", "宜蘭縣")},
+    {"key": "overseas", "label": "海外", "target": 12,
+     "cities": ("日本", "新加坡", "馬來西亞", "越南")},
+)
+
+REGION_KEYS = tuple(item["key"] for item in REGION_DEFINITIONS)
+
+# 經銷商的「區域」在新系統是自由文字，因此除了 Artifact 的英文鍵值，也接受中文標籤。
+_REGION_ALIASES = {
+    **{item["key"]: item["key"] for item in REGION_DEFINITIONS},
+    **{item["label"]: item["key"] for item in REGION_DEFINITIONS},
+    "北": "north", "中": "central", "南": "south", "東": "east",
+    "北區": "north", "中區": "central", "南區": "south", "東區": "east",
+    "海外區": "overseas", "overseas region": "overseas",
+}
+
+
+def normalize_region(value: Any) -> str | None:
+    """把自由文字的區域值對應回正規鍵值；無法判讀時回 None 而不是猜測。"""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    return _REGION_ALIASES.get(text) or _REGION_ALIASES.get(text.lower())
+
+
+def distributor_region_map(distributors: Iterable[dict[str, Any]]) -> dict[str, str]:
+    """經銷商代碼 → 區域鍵值。次級經銷商沒填區域時沿用其主經銷商的區域。"""
+    rows = list(distributors)
+    by_id: dict[Any, dict[str, Any]] = {row.get("id"): row for row in rows if row.get("id") is not None}
+
+    resolved: dict[str, str] = {}
+    for row in rows:
+        code = str(row.get("org_code") or "").strip().upper()
+        if not code:
+            continue
+        region = normalize_region(row.get("region"))
+        if region is None:
+            parent = by_id.get(row.get("parent_id"))
+            if parent is not None:
+                region = normalize_region(parent.get("region"))
+        if region is not None:
+            resolved[code] = region
+    return resolved
+
+
+def build_region_coverage(
+    enterprises: Iterable[dict[str, Any]],
+    distributors: Iterable[dict[str, Any]],
+) -> dict[str, Any]:
+    """依區域彙整佈點家數與目標達成率。
+
+    未能分區的企業不會被靜默丟棄 —— 回傳中會說明各自的原因，否則區域加總對不上
+    總家數時無從判斷是資料缺漏還是統計錯誤。
+    """
+    region_of_code = distributor_region_map(distributors)
+    counts = {key: 0 for key in REGION_KEYS}
+    unassigned = {"no_partner": 0, "unknown_partner": 0, "partner_without_region": 0}
+
+    enterprise_rows = list(enterprises)
+    for row in enterprise_rows:
+        code = str(row.get("partner_code") or "").strip().upper()
+        if not code:
+            unassigned["no_partner"] += 1
+            continue
+        region = region_of_code.get(code)
+        if region is not None:
+            counts[region] += 1
+        elif any(str(item.get("org_code") or "").strip().upper() == code for item in distributors):
+            unassigned["partner_without_region"] += 1
+        else:
+            unassigned["unknown_partner"] += 1
+
+    def percent(count: int, target: int) -> int:
+        if target <= 0:
+            return 0
+        return min(100, round(count / target * 100))
+
+    regions = [
+        {
+            "key": item["key"],
+            "label": item["label"],
+            "cities": list(item["cities"]),
+            "target": item["target"],
+            "count": counts[item["key"]],
+            "percent": percent(counts[item["key"]], item["target"]),
+        }
+        for item in REGION_DEFINITIONS
+    ]
+
+    total_target = sum(item["target"] for item in REGION_DEFINITIONS)
+    total_count = len(enterprise_rows)
+    unassigned_total = sum(unassigned.values())
+
+    return {
+        "total": {
+            "count": total_count,
+            "target": total_target,
+            "percent": percent(total_count, total_target),
+        },
+        "regions": regions,
+        "unassigned": {"count": unassigned_total, "reasons": unassigned},
+        "assigned_count": total_count - unassigned_total,
+    }
+
+
+def fetch_region_coverage(client: Any) -> dict[str, Any]:
+    enterprises = _rows(
+        _limited(client.table("reibi_enterprises").select("id,partner_code")),
+        "讀取區域佈點企業",
+    )
+    distributors = _rows(
+        _limited(client.table("reibi_distributors").select("id,org_code,parent_id,region")),
+        "讀取經銷商區域",
+    )
+    return build_region_coverage(enterprises, distributors)
+
+
 def create_reibi_l5_router(client: Any) -> APIRouter:
     router = APIRouter(prefix="/api/reibi/l5", tags=["REIBI L5"])
 
@@ -397,5 +532,13 @@ def create_reibi_l5_router(client: Any) -> APIRouter:
             "status": "success",
             "data": build_l5_dashboard(current_user, datasets, partner_codes=partner_codes),
         }
+
+    @router.get("/regions")
+    def regions(current_user: dict = Depends(get_current_user)):
+        # Artifact 的「點線面」只開放給 super 與數據分析師，財務與客服看不到；
+        # 對應到 registry 就是 cross_org_analytics。內容純為家數，不含金額。
+        if not has_permission(current_user, "cross_org_analytics"):
+            raise HTTPException(status_code=403, detail="沒有跨企業區域佈點檢視權限")
+        return {"status": "success", "data": fetch_region_coverage(client)}
 
     return router

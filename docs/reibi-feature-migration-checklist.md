@@ -43,10 +43,10 @@
 | Supabase baseline | `[x]` | 本機與遠端 migration 一致 |
 | Database hardening | `[x]` | `anon`／`authenticated` 無 REIBI 表權限 |
 | REIBI domain schema | `[x]` | 38 張 `reibi_*` 表，均由 migration 建立並採 deny-by-default RLS／grants |
-| FastAPI REIBI router | `[-]` | 主要業務、身分與 L5 角色化總覽 API 已完成；尚待統一 response／稽核、全 endpoint 權限矩陣及 E2E |
-| Next.js REIBI 管理頁 | `[-]` | 主要商務、健康、分析、設定、帳號及 L5 總覽流程已完成；尚待地圖、部分 UX 與瀏覽器 E2E |
+| FastAPI REIBI router | `[-]` | 主要業務、身分、L5 總覽與區域佈點 API 已完成，401／403 矩陣與 E2E 已涵蓋；尚待統一 response schema 與寫入稽核（FND-05／06） |
+| Next.js REIBI 管理頁 | `[-]` | 主要商務、健康、分析、設定、帳號、L5 總覽與區域佈點已完成，瀏覽器 E2E 涵蓋 31 項；尚待場域前置選單與定價／About 內容 |
 | Artifact 欄位映射 | `[x]` | 主要 storage keys 與目標表已完成程式對照；因舊資料不搬遷，不要求真實匯出檔驗證 |
-| Python 測試環境 | `[x]` | Python 3.11.9 與 `backend/.venv` 已重建，`requirements-dev.txt` 固定 pytest 8.4.2；2026-08-17 為 84 項後端與 135 項 pgTAP 測試通過 |
+| Python 測試環境 | `[x]` | Python 3.11.9 與 `backend/.venv` 已重建，`requirements-dev.txt` 固定 pytest 8.4.2；2026-08-17 為 3,322 項後端、146 項 pgTAP 與 31 項 Playwright E2E 通過 |
 | 四 Artifact JSON 匯出 | `[N/A]` | JSX 已具備匯出工具，但依範圍決策不重新發布、不執行真實匯出 |
 | `reibi_super` 安全登入 | `[x]` | 第一位正式帳號 `reibicare9881@gmail.com`（麗媚AI）已完成 Email、密碼、TOTP 綁定及 staging AAL2 登入驗證 |
 | 既有資料正式匯入 | `[N/A]` | 依範圍決策不搬移舊 `window.storage`；新 Supabase 業務資料乾淨起始 |
@@ -149,7 +149,7 @@
 - [x] L5-01D 企業場域、設備、A/B/C/D 四層方案、授權用量、平台帳號核對與合約狀態。
 - [x] L5-01E 服務案件與企業範圍限制完成；主經銷商可查看及選擇自身與直屬子經銷商企業，次級經銷商只限自身企業。案件清單、建立案件與 L5 統計均由 FastAPI 重新驗證可信角色範圍。
 - [x] L5-01F 預約管理與組織越權防護。
-- [ ] L5-01G 點線面地圖／區域視圖。
+- [x] L5-01G 區域佈點（點線面）；里程碑時間軸依 2026-08-17 決策暫不移植，見 §31。
 
 ### L5-02 財務
 
@@ -440,7 +440,7 @@
 - [x] TST-O08：跨企業角色（`reibi_super`／`reibi_finance`）在矩陣中一律明確帶 `org_code`，與 UI 行為一致；`{org_code}` 路徑參數使用該角色實際有權的代碼，避免用佔位符觸發合法的跨組織 403 而遮蔽守門本身的結果。
 - [x] TST-O09：測試替身補上 `not_` 否定過濾（`reibi_batch_e` 的部門清單查詢使用 `not_.is_(...)`）。
 - [x] SEC-O06：修正 `GET /api/reibi/finance/settings` 在設定列不存在時直接對空清單取 `[0]`，造成 IndexError → 500。改為 404 並附明確訊息；不憑空補一組預設分潤上限。
-- [ ] SEC-O07：`roles.py` 被文件列為唯一權威，但 Batch D／E router 自行寫死角色集合，與 registry 不一致。`admin_hr` 在 registry 持有 `org_analytics` 與 `ohs_manage`、`admin_finance` 持有 `org_analytics`，實際上所有相關路由都回 403，這三個細分企業管理角色目前無法執行文件所述職掌。屬 fail-closed（過度拒絕），非資料外洩。現行行為已由 `TestPermissionRegistryDivergence` 固定下來以免無聲改變；是否放寬需產品決策。
+- [x] SEC-O07：`roles.py` 與 Batch D／E router 的授權落差已於 Batch R1 修正（見 §30）。`admin_hr` 取得職安管理與組織彙整、`reibi_data` 取得跨企業分析，守門改由 `has_permission()` 推導。
 - [x] TST-O11：3070 項 Python 測試通過，`pip check` 無衝突，TypeScript no-emit 與 Next.js production build 通過。
 
 ## 27. Batch O3 內嵌授權路由（2026-08-17）
@@ -473,6 +473,18 @@
 - [x] TST-Q07：L5 角色裁切 5 項 —— super 看到完整流程卡與趨勢、`reibi_data` 看不到財務數字與作業流程、`reibi_finance` 看不到權限申請待辦、空狀態不是崩潰、後端 500 時頁面不是空白畫面。
 - [x] TST-Q08：手機版 6 項（Pixel 5 視窗）—— L5、跨企業管理、新案開通、服務中心、商務文件五個頁面均無水平溢出，登入表單在窄視窗仍可完整操作。
 - [x] TST-Q09：24 項 E2E 全數通過（18 desktop + 6 mobile）。新增 `npm run e2e`／`e2e:desktop`／`e2e:mobile`／`e2e:report`。
+## 31. Batch S 區域佈點 L5-01G（2026-08-17）
+
+- [x] L5-S01：新增 `GET /api/reibi/l5/regions` 與 `/reibi/l5/regions` 頁面，呈現全區佈點總達成率與北／中／南／東／海外五區的家數、目標與達成率。區域目標沿用 Artifact 數字（40／20／20／8／12，合計 100 家）。
+- [x] L5-S02：**修正來源 Artifact 的缺陷。** `reibi-l5_v2_14` 的 `MapScreen`（第 4612 行）以 `enterprise.region` 分區，但其新案開通建立企業的物件（第 1035-1053 行）從未寫入該欄位，因此原版五個區域永遠顯示 0，只有最上方總數會動。照抄會複製一個壞掉的功能。
+- [x] L5-S03：區域改由企業的 `partner_code` 關聯到 `reibi_distributors.region` 推導 —— 那是 Artifact 真正有在收集的欄位（第 2734 行「負責區域」下拉），新系統 schema 也已存在，**不需要 migration，也不需要回填企業資料**。次級經銷商未設定區域時沿用其主經銷商。
+- [x] L5-S04：無法歸區的企業不會被靜默丟棄。回應與畫面會分別列出「未指定接案經銷商」「經銷商代碼查無資料」「經銷商未設定負責區域」三種原因與家數，並保證區域合計 ＋ 未歸區 ＝ 總家數。原版沒有這層說明，數字對不上時無從判斷是資料缺漏還是統計錯誤。
+- [x] L5-S05：經銷商表單的「區域」由自由文字輸入改為五選一下拉。原本是自由文字，任意字串會讓分區統計無法可靠彙整；正規化函式仍容忍既有的中文標籤與大小寫差異。
+- [x] SEC-S01：權限對齊 Artifact —— 點線面只開放 `super` 與數據分析師，財務與客服看不到，對應到 registry 即 `cross_org_analytics`（`reibi_super` 與 `reibi_data`）。回應只有家數，不含任何金額欄位。
+- [x] TST-S01：41 項 Python 測試（區域正規化、次級經銷商繼承、達成率上限、未歸區歸因、加總守恆、端點權限與無金額欄位）與 6 項瀏覽器 E2E（兩種可見角色、兩種被擋角色、L5 入口依角色顯示、未歸區說明）。
+- [x] TST-S02：3,322 項 Python 測試、146 項 pgTAP、31 項 E2E、`pip check`、TypeScript no-emit 與 Next.js production build 全數通過。
+- [~] L5-S06：擴展里程碑時間軸依 2026-08-17 決策暫不移植 —— Artifact 內的六筆里程碑是寫死的行銷內容且已過期（最後一筆為 2026 Q2）。待提供最新內容後再補。
+
 ## 30. Batch R1 讓 registry 成為 Batch D／E 的授權來源（2026-08-17）
 
 背景：`roles.py` 定義 26 個權限字串，但後端只查詢其中 4 個（`manage_reibi`、`service_center`／`service_manage`、`enterprise_manage`），其餘 22 個從未被引用。實際授權靠 Batch D／E 各自寫死的角色集合，而那些集合成形於 14 角色 registry 之前。本批依 2026-08-17 決策只修 `admin_hr` 與 `reibi_data`。

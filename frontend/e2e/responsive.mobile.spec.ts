@@ -23,6 +23,7 @@ async function expectNoHorizontalOverflow(page: Page, label: string): Promise<vo
 
 const PAGES: Array<{ path: string; heading: string; label: string }> = [
   { path: '/reibi/l5', heading: 'L5 營運總覽', label: 'L5 總覽' },
+  { path: '/reibi/l5/regions', heading: '區域佈點', label: '區域佈點' },
   { path: '/reibi', heading: 'REIBI', label: '跨企業管理' },
   { path: '/reibi/onboarding', heading: '新案開通', label: '新案開通' },
   { path: '/reibi/service', heading: '服務', label: '服務中心' },

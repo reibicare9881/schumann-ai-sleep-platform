@@ -469,6 +469,10 @@ export const API = {
     return this.request('/api/reibi/l5/overview');
   },
 
+  async getReibiL5Regions() {
+    return this.request('/api/reibi/l5/regions');
+  },
+
   async listReibiOnboardingCases() {
     return this.request('/api/reibi/onboarding/cases');
   },
