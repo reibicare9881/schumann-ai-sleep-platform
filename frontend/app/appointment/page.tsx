@@ -26,6 +26,8 @@ export default function AppointmentPage() {
   // 預約表單狀態
   const [formDate, setFormDate] = useState("");
   const [formTime, setFormTime] = useState("");
+  const [formSiteId, setFormSiteId] = useState("");
+  const [sites, setSites] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isAdmin = session?.systemRole === "admin";
@@ -49,6 +51,7 @@ export default function AppointmentPage() {
             date: d.execution_date || "", 
             time: d.appointment_time || "",
             svc: d.service_type,
+            site: d.service_site_label || "",
             status: d.status,
             ts: d.created_at
           };
@@ -64,6 +67,14 @@ export default function AppointmentPage() {
   useEffect(() => {
     if (session) loadAppts();
   }, [session, activeTab]);
+
+  // 場域屬於單位而非服務類型，切換分頁時不需要重新載入
+  useEffect(() => {
+    if (!session?.orgCode) return;
+    API.getAppointmentSites()
+      .then((res: any) => setSites(res?.status === "success" && Array.isArray(res.data) ? res.data : []))
+      .catch(() => setSites([]));
+  }, [session?.orgCode]);
 
   if (loading || !session) return null;
 
@@ -91,12 +102,14 @@ export default function AppointmentPage() {
         user_id: currentUserId, // 🛡️ 防呆 3：確保絕對有 ID 傳給後端
         execution_date: formDate,
         appointment_time: formTime,
-        service_type: activeTab
+        service_type: activeTab,
+        service_site_id: formSiteId ? Number(formSiteId) : null
       });
 
       if (res.status === 'success') {
         setFormDate("");
         setFormTime("");
+        setFormSiteId("");
         alert("預約已送出，請靜待管理員審核確認！");
         loadAppts();
       }
@@ -187,8 +200,9 @@ export default function AppointmentPage() {
               
               <div className="space-y-4 mb-6">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-2">預約日期</label>
+                  <label htmlFor="appointment-date" className="block text-xs font-bold text-slate-700 mb-2">預約日期</label>
                   <input 
+                    id="appointment-date"
                     type="date" 
                     min={new Date().toISOString().split("T")[0]}
                     value={formDate} 
@@ -196,9 +210,27 @@ export default function AppointmentPage() {
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 text-sm" 
                   />
                 </div>
+                {sites.length > 0 && (
+                  <div>
+                    <label htmlFor="appointment-site" className="block text-xs font-bold text-slate-700 mb-2">服務場域</label>
+                    <select
+                      id="appointment-site"
+                      value={formSiteId}
+                      onChange={e => setFormSiteId(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 text-sm"
+                    >
+                      <option value="">未指定場域</option>
+                      {sites.map((site: any) => (
+                        <option key={site.id} value={site.id}>
+                          {site.label}{site.address ? `（${site.address}）` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-2">期望時段</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <span className="block text-xs font-bold text-slate-700 mb-2" id="appointment-time-label">期望時段</span>
+                  <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby="appointment-time-label">
                     {TIMES.map(t => (
                       <button 
                         key={t}
@@ -255,7 +287,7 @@ export default function AppointmentPage() {
                           {a.status === 'cancelled' && <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-sm">已取消</span>}
                         </div>
                         <div className="text-xs text-slate-500 mt-1">
-                          {isAdmin ? <><strong className="text-slate-700">{a.name}</strong> ({a.dept})</> : "您的排程"}
+                          {isAdmin ? <><strong className="text-slate-700">{a.name}</strong> ({a.dept})</> : "您的排程"}{a.site ? <span className="ml-2 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{a.site}</span> : null}
                           <span className="mx-2 text-slate-300">|</span> 
                           申請於 {new Date(a.ts).toLocaleDateString()}
                         </div>

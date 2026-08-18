@@ -9,6 +9,7 @@ export const ACCOUNTS = {
   finance: { email: 'e2e-finance@example.test', role: 'reibi_finance', label: '財務管理員' },
   cs: { email: 'e2e-cs@example.test', role: 'reibi_cs', label: '客服管理員' },
   data: { email: 'e2e-data@example.test', role: 'reibi_data', label: '數據分析師' },
+  member: { email: 'e2e-member@example.test', role: 'member', label: '單位成員' },
 } as const;
 
 export const E2E_PASSWORD = 'e2e-local-fixture-password-2026';

@@ -58,6 +58,31 @@ def _as_comparable(value: Any) -> Any:
     return (2, str(value))
 
 
+_SIMPLE_COLUMN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _parse_projection(columns: tuple[str, ...]) -> tuple[str, ...] | None:
+    """Return the columns to keep, or None when every column is returned.
+
+    PostgREST projects to the requested columns; a fake that ignores the select
+    list would hide a handler that leaks a field it never asked for.  Embedded
+    resources (``profiles!inner(...)``, ``alias:table(...)``) and ``*`` are left
+    alone so this stays a narrowing of behaviour, never a broadening.
+    """
+    requested: list[str] = []
+    for chunk in columns:
+        for part in str(chunk).split(","):
+            name = part.strip()
+            if not name:
+                continue
+            if name == "*" or "(" in name or ":" in name:
+                return None
+            if not _SIMPLE_COLUMN.match(name):
+                return None
+            requested.append(name)
+    return tuple(requested) or None
+
+
 class FakeQuery:
     """A chainable, PostgREST-shaped query over one in-memory table."""
 
@@ -73,11 +98,13 @@ class FakeQuery:
         self._single = False
         self._single_strict = False
         self._count_mode: str | None = None
+        self._projection: tuple[str, ...] | None = None
 
     # ---- operations -----------------------------------------------------
-    def select(self, *_columns: str, count: str | None = None, **_kwargs: Any) -> "FakeQuery":
+    def select(self, *columns: str, count: str | None = None, **_kwargs: Any) -> "FakeQuery":
         if self._operation == "select":
             self._count_mode = count
+            self._projection = _parse_projection(columns)
         return self
 
     def insert(self, payload: Any, **_kwargs: Any) -> "FakeQuery":
@@ -248,6 +275,11 @@ class FakeQuery:
             data = copy.deepcopy(matched)
         else:
             data = copy.deepcopy(self._selected(rows))
+            if self._projection is not None:
+                data = [
+                    {key: row[key] for key in self._projection if key in row}
+                    for row in data
+                ]
             for key, desc in reversed(self._order):
                 data.sort(key=lambda row: _as_comparable(row.get(key)), reverse=desc)
             if self._range is not None:

@@ -42,6 +42,16 @@ test.describe('手機版可用性', () => {
     });
   }
 
+  test('預約頁在手機視窗不會水平溢出', async ({ page }) => {
+    // 預約是單位成員功能，super 沒有 orgCode 會看到阻擋畫面。
+    await loginAs(page, 'member');
+    await page.goto('/appointment');
+    await expect(page.getByRole('heading', { name: /自主健管預約排程/ })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expectNoHorizontalOverflow(page, '預約排程');
+  });
+
   test('登入表單在手機視窗可完整操作', async ({ page }) => {
     await page.goto('/reibi-login');
     const email = page.locator('input[type="email"]');

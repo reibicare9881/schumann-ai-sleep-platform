@@ -133,7 +133,7 @@
 - [x] MP-06A 部門 L1-L4 CRUD、排序、直接／含下層人數、上層關係與循環防護。
 - [x] MP-06B 部門 CSV 範本、匯入預檢、原子取代與架構確認書列印。
 - [x] MP-06C 組織設定、帳號上限、產業別與方案設定。
-- [-] MP-06D 預約排程、服務場域與預約前置帶入；既有排程與場域可用，Batch F 已補組織越權防護及場域欄位，場域前置選單仍待 UX 整合。
+- [x] MP-06D 預約排程、服務場域與預約前置帶入；場域選單、越權防護與清單顯示已完成，見 §32。
 - [x] MP-06E 服務申請、變更需求與受控處理狀態。
 - [x] MP-06F 應付款、匯款申報、私有憑證保存、Gemini OCR／信心標記與人工覆核。
 - [x] MP-06G 個人訂閱申請、查詢、審核、一次性啟用碼與到期。
@@ -484,6 +484,18 @@
 - [x] TST-S01：41 項 Python 測試（區域正規化、次級經銷商繼承、達成率上限、未歸區歸因、加總守恆、端點權限與無金額欄位）與 6 項瀏覽器 E2E（兩種可見角色、兩種被擋角色、L5 入口依角色顯示、未歸區說明）。
 - [x] TST-S02：3,322 項 Python 測試、146 項 pgTAP、31 項 E2E、`pip check`、TypeScript no-emit 與 Next.js production build 全數通過。
 - [~] L5-S06：擴展里程碑時間軸依 2026-08-17 決策暫不移植 —— Artifact 內的六筆里程碑是寫死的行銷內容且已過期（最後一筆為 2026 Q2）。待提供最新內容後再補。
+
+## 32. Batch S2 預約服務場域 MP-06D（2026-08-17）
+
+- [x] MP-S01：`appointments.service_site_id` 與其外鍵早在 Batch F 就已建立，但 `POST /api/appointments` 的 payload 從未寫入該欄位，前端也沒有任何場域選單 —— 欄位存在卻永遠是 NULL。現已在建立預約時寫入場域與備註。
+- [x] MP-S02：新增 `GET /api/appointments/sites`。原本唯一的場域清單端點 `/api/reibi/enterprise/sites` 需要 `manage_reibi` 權限，實際要預約的 `member`／`dept_head` 拿不到，因此預約流程需要一個只讀自身單位、欄位最小化的入口。
+- [x] SEC-S02：建立預約時重新驗證 `service_site_id` 屬於登入者所屬單位，不接受瀏覽器自帶任意 id；越權時回 403 且不寫入任何資料。個人帳號（無 `org_code`）不得存取場域清單。
+- [x] MP-S03：預約清單附上 `service_site_label` 供前端直接顯示，避免每列各發一次查詢；沒有場域的預約不受影響。
+- [x] MP-S04：前端預約頁在單位確實有場域時才顯示選單，避免留下永遠空白的欄位；清單以標籤顯示場域。
+- [x] A11Y-S01：修正預約表單的 `<label>` 未與輸入元件關聯（缺 `htmlFor`／`id`），螢幕閱讀器與自動化皆無法定位；時段按鈕群組改用 `role="group"` 與 `aria-labelledby`。
+- [x] TST-S03：測試替身補上 PostgREST 的欄位投影語意。原本 `.select("id,label")` 會回傳整列，比真實資料庫寬鬆，會遮蔽 handler 多回傳欄位的問題；`*` 與嵌套查詢維持原行為，確保只收斂不放寬。
+- [x] TST-S04：18 項 Python 測試（場域清單範圍、角色可讀性、跨單位場域阻擋、拒絕時不寫入、備註長度、清單標籤）與 6 項 E2E（含手機版）。E2E 種子新增一組單位成員帳號，連同企業、場域、部門與 `profiles` 一併建立以滿足 `reibi_internal_users` 的 scope constraint。
+- [x] TST-S05：3,360 項 Python 測試、146 項 pgTAP、`pip check`、TypeScript no-emit 與 Next.js production build 全數通過。
 
 ## 30. Batch R1 讓 registry 成為 Batch D／E 的授權來源（2026-08-17）
 

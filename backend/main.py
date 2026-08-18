@@ -501,6 +501,30 @@ class AppointmentCreate(BaseModel):
     execution_date: str # 對應前端的 date
     appointment_time: str # 對應前端的 time
     service_type: str # 對應前端的 svc (schumann 或 laser)
+    service_site_id: Optional[int] = None # 服務場域；由 /api/appointments/sites 取得
+    note: Optional[str] = Field(default=None, max_length=500)
+
+
+def _org_service_sites(org_code: Optional[str]) -> list[dict]:
+    """回傳該單位的服務場域。單位沒有對應 REIBI 企業時回空清單而不是報錯。"""
+    code = str(org_code or "").strip()
+    if not code:
+        return []
+    enterprise = supabase.table("reibi_enterprises").select("id").eq("org_code", code).limit(1).execute()
+    if not enterprise.data:
+        return []
+    rows = supabase.table("reibi_enterprise_sites")         .select("id,label,address,note")         .eq("enterprise_id", enterprise.data[0]["id"])         .order("sort_order").order("id").execute()
+    return rows.data or []
+
+
+@app.get("/api/appointments/sites")
+async def list_appointment_sites(current_user: dict = Depends(require_member_or_above)):
+    """預約前置：列出登入者所屬單位的服務場域。
+
+    /api/reibi/enterprise/sites 需要 manage_reibi，一般成員拿不到，因此預約流程
+    需要這個只讀自身單位、欄位最小化的入口。
+    """
+    return {"status": "success", "data": _org_service_sites(current_user.get("org_code"))}
 
 @app.get("/api/appointments")
 async def get_appointments(
@@ -519,8 +543,16 @@ async def get_appointments(
         query = query.eq("user_id", current_user.get("uid"))
 
     res = query.order("execution_date", desc=False).order("appointment_time", desc=False).execute()
-    
-    return {"status": "success", "data": res.data}
+
+    # 附上場域名稱供前端直接顯示，避免每列各發一次查詢
+    rows = res.data or []
+    if any(row.get("service_site_id") for row in rows):
+        labels = {int(site["id"]): site.get("label") for site in _org_service_sites(org_code)}
+        for row in rows:
+            site_id = row.get("service_site_id")
+            row["service_site_label"] = labels.get(int(site_id)) if site_id else None
+
+    return {"status": "success", "data": rows}
 
 @app.post("/api/appointments")
 async def create_appointment(
@@ -532,6 +564,12 @@ async def create_appointment(
          raise HTTPException(status_code=403, detail="越權操作：只能為自己預約")
          
     # 組裝寫入 Supabase 的資料 (讓 Supabase 自己生成 uuid)
+    # 場域必須屬於登入者所屬單位；不接受瀏覽器自行帶入任意 site id
+    if appt.service_site_id is not None:
+        allowed = {int(row["id"]) for row in _org_service_sites(current_user.get("org_code"))}
+        if int(appt.service_site_id) not in allowed:
+            raise HTTPException(status_code=403, detail="越權操作：此服務場域不屬於您的單位")
+
     payload = {
         "user_id": appt.user_id,
         "org_code": current_user.get("org_code"),
@@ -540,6 +578,8 @@ async def create_appointment(
         "execution_date": appt.execution_date,
         "appointment_time": appt.appointment_time,
         "service_type": appt.service_type,
+        "service_site_id": appt.service_site_id,
+        "note": appt.note,
         "status": "pending"
     }
 

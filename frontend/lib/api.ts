@@ -391,11 +391,17 @@ export const API = {
     });
   },
 
+  async getAppointmentSites() {
+    return this.request('/api/appointments/sites');
+  },
+
   async createAppointment(apptData: {
     user_id: string;
     execution_date: string;
     appointment_time: string;
     service_type: string;
+    service_site_id?: number | null;
+    note?: string | null;
   }) {
     return this.request('/api/appointments', {
       method: 'POST',
