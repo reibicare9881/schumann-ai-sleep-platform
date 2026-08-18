@@ -6,6 +6,7 @@ import { ArrowLeft, Building2, CheckCircle2, Download, Plus, RefreshCw, Send, Tr
 
 import { useAuth } from "@/components/AuthProvider";
 import API from "@/lib/api";
+import IndustryPicker from "@/components/IndustryPicker";
 
 type Row = Record<string, any>;
 const plans = [
@@ -106,7 +107,7 @@ export default function ReibiOnboardingPage() {
         <Field label="電話"><input className="input" value={form.phone} onChange={e => update("phone", e.target.value)} /></Field>
         <Field label="統編"><input className="input" maxLength={8} value={form.ubn} onChange={e => update("ubn", e.target.value.replace(/\D/g, ""))} /></Field>
         <Field label="地址"><input className="input" value={form.address} onChange={e => update("address", e.target.value)} /></Field>
-        <Field label="產業"><input className="input" value={form.industry} onChange={e => update("industry", e.target.value)} /></Field>
+        <Field label="產業"><IndustryPicker value={form.industry} onChange={next => update("industry", next)} /></Field>
         <Field label="方案"><select className="input" value={form.plan_code} onChange={e => update("plan_code", e.target.value)}>{plans.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
         <Field label="授權人數 *"><input type="number" min="1" className="input" value={form.member_limit} onChange={e => update("member_limit", e.target.value)} /></Field>
         <Field label="合約開始 *"><input type="date" className="input" value={form.contract_start} onChange={e => update("contract_start", e.target.value)} /></Field>

@@ -968,6 +968,47 @@ def _execute(query: Any, operation: str) -> list[dict[str, Any]]:
         raise HTTPException(status_code=502, detail=f"Supabase {operation} 失敗") from exc
 
 
+# 方案對應的帳號上限（沿用 Artifact AccLimitScreen 的級距）。Artifact 的使用人數是
+# 寫死的 72% 假資料；這裡改用 reibi_enterprises.used_count 的實際值。
+PLAN_ACCOUNT_LIMITS: tuple[tuple[str, str, int], ...] = (
+    ("basic", "基本型", 100),
+    ("growth", "成長型", 300),
+    ("professional", "專業型", 500),
+    ("flagship", "旗艦型", 1000),
+)
+ACCOUNT_LIMIT_WARNING_PERCENT = 90
+
+
+def build_account_usage(enterprise: dict[str, Any]) -> dict[str, Any]:
+    """企業自身的授權使用狀況與方案級距對照。"""
+    plan_code = str(enterprise.get("plan_code") or "").strip().lower()
+    ladder = [
+        {"plan_code": code, "label": label, "limit": limit, "is_current": code == plan_code}
+        for code, label, limit in PLAN_ACCOUNT_LIMITS
+    ]
+
+    # 授權上限以企業實際簽約的 member_limit 為準；方案級距只作為對照與升級參考，
+    # 客製方案本來就不在級距內。
+    limit = int(enterprise.get("member_limit") or 0)
+    used = int(enterprise.get("used_count") or 0)
+    percent = round(used / limit * 100) if limit > 0 else 0
+    current = next((row for row in ladder if row["is_current"]), None)
+
+    return {
+        "org_code": enterprise.get("org_code"),
+        "plan_code": plan_code or None,
+        "plan_label": current["label"] if current else "客製方案",
+        "member_limit": limit,
+        "used_count": used,
+        "remaining": max(limit - used, 0),
+        "percent": percent,
+        "over_limit": limit > 0 and used > limit,
+        "warning": limit > 0 and percent >= ACCOUNT_LIMIT_WARNING_PERCENT,
+        "warning_threshold": ACCOUNT_LIMIT_WARNING_PERCENT,
+        "plans": ladder,
+    }
+
+
 def _current_enterprise_id(client: Any, current_user: dict[str, Any], required: bool = True) -> Optional[int]:
     org_code = str(current_user.get("org_code") or "").upper()
     if current_user.get("role") == "reibi_super" and not org_code:
@@ -1222,6 +1263,24 @@ def create_reibi_router(client: Any) -> APIRouter:
             "儲存企業",
         )
         return {"status": "success", "data": rows[0] if rows else values}
+
+    @router.get("/enterprise/account-usage")
+    def enterprise_account_usage(current_user: dict = Depends(require_reibi_manager)):
+        """企業自己的帳號上限管控畫面所需資料。
+
+        L5 端看得到所有企業的授權使用率，但企業管理者原本沒有任何入口看自己的，
+        這是 Artifact AccLimitScreen 的對應端點。
+        """
+        enterprise_id = _current_enterprise_id(client, current_user)
+        rows = _execute(
+            client.table("reibi_enterprises")
+            .select("org_code,plan_code,member_limit,used_count")
+            .eq("id", enterprise_id).limit(1),
+            "查詢授權使用狀況",
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="找不到企業授權資料")
+        return {"status": "success", "data": build_account_usage(rows[0])}
 
     @router.get("/enterprise/sites")
     def list_enterprise_sites(current_user: dict = Depends(require_reibi_manager)):

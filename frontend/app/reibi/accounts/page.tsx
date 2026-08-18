@@ -23,6 +23,8 @@ export default function IdentityAccountsPage() {
   const [error, setError] = useState("");
   const [edits, setEdits] = useState<Record<string, Row>>({});
   const [draft, setDraft] = useState<Row>({ email: "", display_name: "", role: "member", org_code: "", department_id: "", distributor_id: "", staff_id: "", mfa_required: false });
+  // 授權用量：邀請帳號前應該先看得到自己還剩多少名額。
+  const [usage, setUsage] = useState<Row | null>(null);
 
   const allowed = ["admin", "reibi_super"].includes(session?.systemRole || "");
   const selectedRole = roles.find(role => role.key === draft.role);
@@ -56,6 +58,13 @@ export default function IdentityAccountsPage() {
   }, [allowed, session?.orgCode, session?.systemRole]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!allowed) return;
+    API.getReibiAccountUsage()
+      .then((res: any) => setUsage(res?.status === "success" ? res.data : null))
+      .catch(() => setUsage(null));
+  }, [allowed]);
 
   const invite = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -124,6 +133,52 @@ export default function IdentityAccountsPage() {
         </div>
         {error && <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
         {message && <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</div>}
+
+        {usage && (
+          <section className="mt-6 rounded-2xl bg-white p-5 shadow-sm">
+            <h2 className="font-black text-slate-900">帳號上限管控</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              授權上限以合約簽訂的人數為準；下方方案級距僅供升級參考。
+            </p>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-4">
+              <div><div className="text-xs text-slate-500">目前方案</div><div className="mt-1 font-black text-slate-900">{usage.plan_label}</div></div>
+              <div><div className="text-xs text-slate-500">已啟用人數</div><div className="mt-1 font-black text-slate-900">{usage.used_count} 人</div></div>
+              <div><div className="text-xs text-slate-500">授權上限</div><div className="mt-1 font-black text-slate-900">{usage.member_limit || "未設定"}{usage.member_limit ? " 人" : ""}</div></div>
+              <div><div className="text-xs text-slate-500">剩餘名額</div><div className="mt-1 font-black text-slate-900">{usage.remaining} 人</div></div>
+            </div>
+
+            <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className={`h-full rounded-full ${usage.over_limit ? "bg-rose-600" : usage.warning ? "bg-amber-500" : "bg-teal-600"}`}
+                style={{ width: `${Math.min(100, usage.percent)}%` }}
+              />
+            </div>
+            <div className="mt-1.5 text-xs text-slate-500">使用率 {usage.percent}%</div>
+
+            {usage.over_limit ? (
+              <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800">
+                已啟用人數超過授權上限，請儘速聯繫麗媚調整方案。
+              </div>
+            ) : usage.warning ? (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+                使用率已達 {usage.percent}%（警示門檻 {usage.warning_threshold}%），如需增加人數請於服務中心送出升方案申請。
+              </div>
+            ) : null}
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {(usage.plans || []).map((plan: Row) => (
+                <div
+                  key={plan.plan_code}
+                  className={`flex items-center justify-between rounded-xl px-3 py-2 text-sm ${plan.is_current ? "bg-teal-50 font-bold text-teal-800" : "bg-slate-50 text-slate-600"}`}
+                >
+                  <span>{plan.label}{plan.is_current ? "（目前方案）" : ""}</span>
+                  <span>≤ {plan.limit.toLocaleString("zh-TW")} 人</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[360px_1fr]">
           <form onSubmit={invite} className="h-fit rounded-2xl bg-white p-5 shadow-sm">

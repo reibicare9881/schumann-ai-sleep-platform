@@ -138,6 +138,9 @@
 - [x] MP-06F 應付款、匯款申報、私有憑證保存、Gemini OCR／信心標記與人工覆核。
 - [x] MP-06G 個人訂閱申請、查詢、審核、一次性啟用碼與到期。
 - [-] MP-06H 隱私、資安文件、稽核紀錄與版本／操作說明已整合；完整定價與 About REIBI 專頁仍待內容確認。
+- [x] MP-06I 行業分類（Artifact `IndustryScreen`）：10 大類 × 10 子類分類體系，取代原本的自由文字輸入，見 §34。
+- [x] MP-06J 帳號上限管控（Artifact `AccLimitScreen`）：企業自身的方案、授權上限、已啟用人數、使用率與方案級距對照，見 §34。
+- [ ] MP-06K 體驗場域（Artifact `VenueScreen`）：REIBI 體驗中心清單、地址、交通方式與首次免費體驗預約。**尚未移植**，需先提供各體驗中心的正式資料。
 
 ## 5. L5 專屬管理後台
 
@@ -515,6 +518,17 @@
 - [x] TST-S06：13 項 pgTAP（欄位定義、只計入同意者、撤回後抑制、全部撤回歸零、心理量表對稱受限）與 9 項 Python API 測試。既有 `reibi_batch_e.test.sql` 的測試資料同步補上同意值 —— 它原本失敗正好證明過濾生效。
 - [x] TST-S07：3,369 項 Python 測試、**159 項 pgTAP**、37 項 E2E、`pip check`、TypeScript no-emit 與 Next.js production build 全數通過；17 個 migration 於空資料庫重播成功，`db:lint` 無錯誤。
 - [ ] OPS-S01：遠端 Supabase 尚未套用第 17 個 migration。套用後，既有 `sleep_reports` 資料列的同意值會是 false，組織彙整將只反映套用後明確同意的評估 —— 這是刻意的隱私預設，但上線前應向企業客戶說明。
+
+## 34. Batch S4 清單漏列項目補正（2026-08-18）
+
+依使用者要求對四個 Artifact 的畫面與選單入口做**逐項比對**（主平台 53 個入口、L5 19 個），發現三項功能在本清單中**完全沒有對應條目** —— 不是標記為待辦，而是從未被列入盤點。
+
+- [x] MP-06I：`IndustryScreen` 的 10 大類（科技／金融／製造／服務／醫療／教育／建築／傳播／政府／其他）× 各 10 子類分類體系已移植為 `frontend/lib/industries.ts` 與 `IndustryPicker` 元件，套用於新案開通與企業管理兩處。原本 `industry` 是自由文字輸入，同一產業會出現多種寫法，跨企業分析無法據此分群。儲存格式維持單一文字欄位 `大類／子類`，既有自由文字資料不會失效，畫面會提示重新選擇。
+- [x] MP-06J：新增 `GET /api/reibi/enterprise/account-usage` 與 `/reibi/accounts` 的「帳號上限管控」區塊。L5 端原本就看得到所有企業的授權使用率，但企業管理者沒有任何入口看自己的。授權上限以合約 `member_limit` 為準，方案級距（基本 100／成長 300／專業 500／旗艦 1000）僅供升級參考；90% 警示與超限為兩種不同狀態。
+- [x] MP-S07：**Artifact 的使用人數是寫死的假資料**（`AccLimitScreen` 內為 `Math.floor(limit*0.72)`）。新系統改用 `reibi_enterprises.used_count` 的實際值。
+- [ ] MP-06K：`VenueScreen` 體驗場域尚未移植。Artifact 內含台北／新北體驗中心的名稱、地址、所在區域、交通方式與「首次免費體驗（每人限一次）」預約入口，全為寫死內容，需先確認各中心的正式資料。
+- [x] TST-S08：17 項 Python 測試（使用率計算、警示門檻、超限、除零、合約上限優先於級距、方案級距數值、跨企業不外洩、角色權限）。
+- [x] AUDIT-S01：同時修正兩項先前的誤判 —— `AnnualStatsScreen` 年度統計實際上由 `/kpi` 涵蓋（含期間篩選、燈號分佈、有效評估人次、部門維度）；`LinePushScreen` 實際上已接在 `/reibi/service`。兩者均無缺口。
 
 ## 30. Batch R1 讓 registry 成為 Batch D／E 的授權來源（2026-08-17）
 

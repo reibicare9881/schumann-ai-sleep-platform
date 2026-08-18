@@ -480,6 +480,10 @@ export const API = {
     return this.request('/api/reibi/l5/regions');
   },
 
+  async getReibiAccountUsage() {
+    return this.request('/api/reibi/enterprise/account-usage');
+  },
+
   async listReibiOnboardingCases() {
     return this.request('/api/reibi/onboarding/cases');
   },

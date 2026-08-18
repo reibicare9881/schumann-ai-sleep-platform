@@ -39,15 +39,18 @@ test.describe('預約服務場域', () => {
   });
 
   test('未選場域仍可預約', async ({ page }) => {
+    // 以筆數增減判定成功。清單的日期是拆成月份縮寫與日兩格顯示，用日期字串比對
+    // 會匹配到多個元素，也無法證明真的多了一筆。
+    const counter = page.getByText(/^共 \d+ 筆$/);
+    const before = Number((await counter.textContent())!.replace(/\D/g, ''));
+
     await page.getByLabel('預約日期').fill('2026-12-02');
     await page.getByRole('button', { name: '10:00' }).first().click();
 
     page.once('dialog', dialog => void dialog.accept());
     await page.getByRole('button', { name: /送出預約申請/ }).click();
 
-    await expect(page.getByText('2026-12-02').or(page.getByText('02'))).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(counter).toHaveText(`共 ${before + 1} 筆`, { timeout: 20_000 });
     await expectNoErrorBanner(page);
   });
 

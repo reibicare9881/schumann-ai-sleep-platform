@@ -6,6 +6,7 @@ import { ArrowLeft, BadgeDollarSign, BarChart3, Boxes, Building2, CalendarClock,
 
 import { useAuth } from "@/components/AuthProvider";
 import API from "@/lib/api";
+import IndustryPicker from "@/components/IndustryPicker";
 import { can } from "@/lib/config";
 
 type ArtifactSource = "main" | "l5" | "quote" | "workorder";
@@ -544,7 +545,7 @@ export default function ReibiManagementPage() {
         <p className="text-xs text-slate-500 mb-5">{canSelectEnterprise ? `目前編輯 ${activeOrgCode || "尚未選擇企業"}；企業代碼不可修改，所有寫入由後端重新驗證範圍。` : "單位代碼由登入 Token 決定，前端不能指定或修改其他企業。"}</p>
         <div className="grid md:grid-cols-2 gap-4">
           {[
-            ["org_name", "企業名稱"], ["org_alias", "企業簡稱"], ["ubn", "統一編號"], ["industry", "產業"],
+            ["org_name", "企業名稱"], ["org_alias", "企業簡稱"], ["ubn", "統一編號"],
             ["contact_name", "聯絡人"], ["phone", "電話"], ["email", "Email"], ["address", "地址"],
           ].map(([key, label]) => (
             <label key={key} className="block text-xs font-bold text-slate-600">{label}
@@ -556,6 +557,15 @@ export default function ReibiManagementPage() {
               />
             </label>
           ))}
+          <label className="block text-xs font-bold text-slate-600">產業
+            <div className="mt-1">
+              <IndustryPicker
+                value={enterprise.industry ?? ""}
+                onChange={next => setEnterprise(prev => ({ ...prev, industry: next }))}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-500"
+              />
+            </div>
+            </label>
         </div>
         <button onClick={saveEnterprise} disabled={loading || !enterprise.org_name} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-teal-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Save className="w-4 h-4" /> 儲存企業資料</button>
       </section>
