@@ -178,7 +178,7 @@
 - [x] L5-04D 報表中心、日期篩選、CSV 與列印／另存 PDF。
 - [x] L5-04E 企業／經銷商名冊查詢；不提供個人健康名冊。
 - [x] L5-04F 策略面板與區域／夥伴分析。
-- [~] L5-04G Artifact 來源版本（`source_version`）已在匯入流程記錄；**站內操作手冊未移植**。Artifact `ManualScreen` 是六分頁的線上手冊（角色說明／新案開通／月結流程／分潤規則／常見問題／緊急操作），內容改寫進 [reibi-merge-master-handoff.md](reibi-merge-master-handoff.md) §10，repo 讀者查得到，但 L5 操作人員在站內沒有任何說明入口。本項先前誤標為完成，見 §36 AUDIT-S02。
+- [x] L5-04G Artifact 來源版本（`source_version`）已在匯入流程記錄；站內操作手冊已於 2026-08-19 補上 `/reibi/l5/manual`（六分頁）。角色權限表由權限 registry 產生、分潤比例與升級門檻由計價模組產生，因此手冊永遠等於實際設定，不是第二份會脫節的說明。見 §39。
 
 ## 6. 報價與合約
 
@@ -487,7 +487,8 @@
 - [x] SEC-S01：權限對齊 Artifact —— 點線面只開放 `super` 與數據分析師，財務與客服看不到，對應到 registry 即 `cross_org_analytics`（`reibi_super` 與 `reibi_data`）。回應只有家數，不含任何金額欄位。
 - [x] TST-S01：41 項 Python 測試（區域正規化、次級經銷商繼承、達成率上限、未歸區歸因、加總守恆、端點權限與無金額欄位）與 6 項瀏覽器 E2E（兩種可見角色、兩種被擋角色、L5 入口依角色顯示、未歸區說明）。
 - [x] TST-S02：3,322 項 Python 測試、146 項 pgTAP、31 項 E2E、`pip check`、TypeScript no-emit 與 Next.js production build 全數通過。
-- [~] L5-S06：擴展里程碑時間軸依 2026-08-17 決策暫不移植 —— Artifact 內的六筆里程碑是寫死的行銷內容且已過期（最後一筆為 2026 Q2）。待提供最新內容後再補。
+- [N/A] L5-S06：擴展里程碑時間軸**確定不移植**（2026-08-19 決策，原為 `[~]` 暫緩）。Artifact `MapScreen` 的六筆里程碑（2024 Q4 – 2026 Q2）是寫死的行銷文案，`done` 是硬編碼的布林值而非由資料推導 —— 那些勾勾是宣稱不是事實。盤點當日（2026-08-19）後三筆的時間全部已過，畫面上仍顯示為未完成，最後一筆過期逾兩個月且其後無新內容。補上新的一輪，明年同樣會再過期一次。
+  同一個畫面的另一半（五大區域與目標家數 40／20／20／8／12）已於 `cada642` 移植，且改為由經銷商負責區域推導真實家數，見 `/reibi/l5/regions`。`MapScreen` 本來就是一半資料、一半海報；資料那半已完成，本項是海報那半。若日後確實需要，應做成可維護的資料表而非程式常數。
 
 ## 32. Batch S2 預約服務場域 MP-06D（2026-08-17）
 
@@ -594,7 +595,7 @@
 
 ### 待處理
 
-- [ ] AUDIT-S02：`L5-04G` 先前誤標為完成。Artifact `ManualScreen` 的六分頁站內操作手冊沒有移植，內容改寫進交接手冊 §10。需決定是要在站內補一頁（對 L5 操作人員較合理），或正式標記為刻意不移植。
+- [x] AUDIT-S02：`L5-04G` 先前誤標為完成。已於 2026-08-19 在站內補上 `/reibi/l5/manual`，見 §39。
 - [x] TST-S11：新增 `tests/test_work_order_catalog.py`（55 項：目錄與 Artifact 逐項比對、進度計算、孤兒勾核、由報價 D 層推導工單項目，以及 HTTP 層的路由順序、驗收把關與服務人員指派）與 `tests/test_migration_gap_fixes.py`（29 項：C 層拆分與折扣、三個訂閱方案月數、兌換目錄價格與前端不得帶價）。
 - [x] TST-S12：3,549 項 Python 測試與 159 項 pgTAP 通過，TypeScript no-emit 與 Next.js production build 通過，18 個 migration 於空資料庫全量重播後 pgTAP 仍全綠。
 
@@ -694,3 +695,28 @@
   佣金金額不因基數修正而變動、門檻邊界與進度上限、白金不標成最高等級、方案定價 fallback 維持不移植）。
   同時修正 `test_reibi_api.py` 中原本斷言 `annual_sales == 350000` 的那一行 —— 它把錯誤釘住了。
 - [x] TST-S16：3,679 項 Python 測試通過，TypeScript no-emit 與 Next.js production build 通過。
+
+## 39. Batch S9 L5 站內操作手冊與里程碑決策（2026-08-19）
+
+- [x] MAN-S01：`/reibi/l5/manual` 六分頁上線（角色說明／新案開通／月結流程／分潤規則／常見問題／緊急操作），
+  入口在 L5 總覽。開放給所有進得了 L5 的角色，包含經銷商 —— 他們也要對月結與分潤，
+  手冊的用途就是讓操作的人查得到規則，限縮反而違背目的。內容純為規則說明，不含任何企業或個人資料。
+- [x] MAN-S02：**會變的內容一律由程式產生，不另存靜態複本**。角色權限表取自 `roles.ROLE_DEFINITIONS`，
+  分潤比例與升級門檻取自 `reibi_batch_c` 的 `COMMISSION_LEVELS` 與 `COMMISSION_TIER_THRESHOLDS`。
+  新增角色或調整比例，手冊自動跟著變。
+- [x] MAN-S03：`roles.py` 新增 `PERMISSION_LABELS`（30 個權限的人話說明）與 `documented_role_catalog()`。
+  少了說明，角色表會把權限顯示成程式代碼，等於沒寫；`missing_permission_labels()` 讓漏補的情況直接測試失敗。
+- [x] MAN-S04：**刻意不照抄 Artifact 的手寫內容**，三個原因都是盤點時實際踩到的：
+  （1）「分潤規則」分頁寫「年累積 A+C 層簽約額」，與它自己的程式碼矛盾（見 §38 COM-S02）；
+  （2）兩條 FAQ 描述的是 Artifact 的限制（「LINE 推播目前為模擬記錄」「大數據為模擬示範數據」），
+  在新系統已不成立，照抄就是公布錯誤資訊；
+  （3）三條緊急操作在講共用 PIN 與備援碼，那是已記錄的刻意不移植項（改用 Supabase Auth 邀請與 TOTP），
+  照抄等於教操作人員去點不存在的功能。FAQ 與緊急操作已重寫為新系統的實況。
+- [x] MAN-S05：**月結時程保留**（每月 30 日彙整 → 隔月 10 日對帳 → 隔月 15 日匯款）。
+  這是 Artifact 手冊唯一在新系統完全沒有別處記載的營運知識，也是保留這一頁的主要理由。
+- [x] MAN-S06：新案開通步驟改寫。Artifact 最後一步是「自動生成 orgCode、initPin、backupCode、
+  memberPin、deptPin、adminPin」，共用 PIN 制已不存在，改為 Email 邀請、本人設定密碼與管理者 TOTP 綁定。
+- [x] TST-S17：新增 `tests/test_manual.py`（51 項：角色表等於 registry、權限不得顯示成代碼、
+  分潤比例與門檻等於計價模組、A+C 錯誤不得重現、已作廢字串不得出現、經銷商可讀而企業角色不可讀、
+  回應不含企業或個人資料）。
+- [x] TST-S18：3,736 項 Python 測試通過，TypeScript no-emit 與 Next.js production build 通過。

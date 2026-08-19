@@ -541,4 +541,23 @@ def create_reibi_l5_router(client: Any) -> APIRouter:
             raise HTTPException(status_code=403, detail="沒有跨企業區域佈點檢視權限")
         return {"status": "success", "data": fetch_region_coverage(client)}
 
+    @router.get("/manual")
+    def manual(current_user: dict = Depends(get_current_user)):
+        """L5 站內操作手冊。
+
+        開放給所有能進 L5 的角色（含經銷商）—— 手冊的用途就是讓操作的人查得到規則，
+        限縮反而違背目的。內容全是規則說明，不含任何企業或個人資料，
+        角色與分潤兩節由 registry 與計價模組即時產生。
+        """
+        # 以「進得了 L5 的角色」為界，而不是某個權限字串：經銷商要對月結與分潤，
+        # 卻沒有 reibi_overview（那是內部總覽用的）。這組集合與 /reibi/l5 前端的
+        # L5_ROLES 相同，手冊看得到的範圍就等於看得到 L5 的範圍。
+        if str(current_user.get("role") or "") not in (REIBI_INTERNAL_ROLES | PARTNER_ROLES):
+            raise HTTPException(status_code=403, detail="此手冊僅供 REIBI 內部與經銷夥伴使用")
+        # 延後匯入：手冊的分潤章節取自 reibi_batch_c，而 batch_c 匯入本模組的
+        # partner_scope_codes，在模組層匯入會形成循環。
+        from reibi_manual import build_manual
+
+        return {"status": "success", "data": build_manual()}
+
     return router

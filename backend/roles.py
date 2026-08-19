@@ -131,9 +131,80 @@ ORG_ADMIN_ASSIGNABLE_ROLES = frozenset({
 })
 
 
+# 權限的人話說明。站內操作手冊的角色權限表由此產生，不另外手寫一份 ——
+# Artifact 的 ManualScreen 就是手寫的，結果它描述的角色與實際授權早已對不上。
+# 新增權限時這裡沒補，`missing_permission_labels()` 會讓測試失敗。
+PERMISSION_LABELS: dict[str, str] = {
+    "all": "全功能（唯一可執行開通、修改方案、核發帳號）",
+    "appointments_manage": "預約排程建立、修改與審核",
+    "appointments_read": "預約排程檢視",
+    "cross_org_analytics": "跨企業去識別化分析",
+    "department_analytics": "所屬部門的去識別化健康趨勢",
+    "distributor_manage": "經銷商建立、等級與次級經銷商維護",
+    "enterprise_manage": "企業資料、方案與授權維護",
+    "finance_manage": "付款時程、發票、匯款沖帳與分潤查核",
+    "health_self": "本人健康評估、日誌、積分與問卷",
+    "high_risk": "高風險族群分佈與介入建議",
+    "identity_manage_all": "全系統帳號邀請、角色指派與撤銷",
+    "identity_manage_org": "本單位帳號邀請與角色指派",
+    "manage_reibi": "REIBI 商務文件（報價、合約、工單）",
+    "message_manage": "LINE 範本、草稿與推播記錄",
+    "oh_interview": "臨場醫護面談紀錄",
+    "ohs_manage": "職安衛計畫、危害辨識與問卷管理",
+    "org_analytics": "本單位去識別化健康彙整與 KPI",
+    "org_finance": "本單位應付款與匯款申報",
+    "org_reports": "本單位 AI 組織報告產生",
+    "org_settings": "本單位組織、部門與參數設定",
+    "partner_commission": "自身佣金明細與月結",
+    "partner_enterprises": "自身承接企業清單",
+    "partner_finance": "自身付款與收款狀態",
+    "partner_subscriptions": "次級經銷商管理",
+    "reibi_overview": "L5 營運總覽（依角色裁切）",
+    "reports": "報表中心與匯出",
+    "security_audit": "資安稽核紀錄檢視",
+    "service_center": "服務申請提交與進度查詢",
+    "service_manage": "服務案件處理與排程確認",
+    "submit_org": "評估結果納入所屬單位彙整",
+}
+
+REALM_LABELS = {
+    "health": "個人",
+    "organization": "企業單位",
+    "reibi": "REIBI 內部",
+    "partner": "經銷夥伴",
+}
+
+
+def missing_permission_labels() -> list[str]:
+    """回傳有被角色引用、但還沒有人話說明的權限。"""
+    used = {permission for definition in ROLE_DEFINITIONS.values() for permission in definition.permissions}
+    return sorted(used - set(PERMISSION_LABELS))
+
+
 def role_catalog() -> list[dict]:
     """Return a JSON-safe catalog for UI rendering and documentation."""
     return [asdict(definition) for definition in ROLE_DEFINITIONS.values()]
+
+
+def documented_role_catalog() -> list[dict]:
+    """角色目錄加上人話說明，供站內操作手冊直接渲染。"""
+    return [
+        {
+            **asdict(definition),
+            "realm_label": REALM_LABELS.get(definition.realm, definition.realm),
+            "permission_labels": [
+                PERMISSION_LABELS.get(permission, permission) for permission in definition.permissions
+            ],
+            "scopes": [
+                label for label, required in (
+                    ("需綁定單位", definition.requires_org),
+                    ("需綁定部門", definition.requires_department),
+                    ("需綁定經銷商", definition.requires_distributor),
+                ) if required
+            ],
+        }
+        for definition in ROLE_DEFINITIONS.values()
+    ]
 
 
 def has_permission(user: dict, permission: str) -> bool:
