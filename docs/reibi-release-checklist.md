@@ -126,10 +126,22 @@ Vercel 前端必須有：`NEXT_PUBLIC_API_URL` 指向正式 backend。
 |---|---|
 | ⬜ 備份確認 | Supabase Dashboard → Database → Backups，確認自動備份已啟用且有可用還原點 |
 | ⬜ 還原演練 | 在**非正式**專案或分支資料庫實際還原一次，記錄耗時與步驟 |
-| ⬜ Migration 歷史核對 | 遠端 16 個 migration 與 repo 一致（本批未新增 schema） |
+| 🔴 **套用待補的 migration** | **遠端 16 個、repo 19 個，落後 3 個。上線前必須套用，否則相關功能會在資料庫層直接失敗** |
+| ⬜ Migration 歷史核對 | 套用後確認遠端與 repo 同為 19 個版本 |
 | ⬜ 監控與告警 | 設定後端錯誤率、Supabase 連線數與 Gemini 失敗的告警管道 |
 
-本次移植**未新增任何 migration**，遠端 schema 維持 16 個版本。
+> ⚠️ **這段原本寫「本次移植未新增任何 migration，遠端 schema 維持 16 個版本」，該敘述自 2026-08-18 起已不成立**，
+> 且會讓人直接跳過套用步驟。已於 2026-08-19 更正。
+
+repo 目前有 **19 個 migration**，遠端 Supabase 停在 **16 個**。缺少的三個與對應影響：
+
+| Migration | 內容 | 未套用的後果 |
+|---|---|---|
+| `20260818074631_sleep_reports_org_aggregate_consent` | `sleep_reports.consent_org_aggregate` 欄位與組織彙整同意過濾 | **送出睡眠評估會失敗** —— `main.py` 的 insert 帶了這個欄位。此 migration 與用到它的程式碼已在 `origin`，因此 staging 可能已處於此狀態，請實地確認 |
+| `20260819103000_reibi_quote_workorder_notes` | 報價與工單備註欄位、C 層方案費／高風險加購拆分 | 儲存含備註的報價或工單會失敗 |
+| `20260819140000_reibi_personal_subscription_gate` | `reibi_subscriptions.profile_id`、`activated_at` 與索引 | 個人訂閱閘門無法運作；申請與啟用碼端點會失敗。閘門本身設計為查詢失敗即視為未訂閱（fail closed），不會誤放行 |
+
+三個 migration 都已在本機資料庫以 `supabase db reset` 全量重播驗證，159 項 pgTAP 通過。
 
 ---
 
