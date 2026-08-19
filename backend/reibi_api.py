@@ -11,7 +11,8 @@ import hashlib
 import hmac
 import json
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+import math
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -39,6 +40,24 @@ ENTERPRISE_FIELDS = (
 )
 ENTERPRISE_SITE_FIELDS = "id,label,address,note,sort_order,created_at,updated_at"
 DEPARTMENT_FIELDS = "id,parent_id,name,hierarchy_level,sort_order,is_active,created_at,updated_at"
+# ── E 層：延保、加值服務與續約 CPI（Artifact PRICING.E）─────────────────────
+# 延保費率為設備原價的 5–10%／年，Artifact 未指定時取 7%。
+E_WARRANTY_RATE_MIN = Decimal("5")
+E_WARRANTY_RATE_MAX = Decimal("10")
+E_WARRANTY_DEFAULT_RATE = Decimal("7")
+E_EQUIPMENT_PRICES = {"bed": 800_000, "chair": 750_000, "la200": 149_400}
+E_VALUE_ADDED_PRICES = {
+    "annual_report": 30_000,    # 年度健康加值報告
+    "industry_white": 50_000,   # 產業健康白皮書（企業版）
+    "esg_report": 40_000,       # ESG 健促揭露報告
+    "hr_consult": 80_000,       # 年度 HR 健促顧問諮詢（4 次）
+}
+# 續約調幅上限。Artifact 以 Math.min(輸入值, cpiCap) 強制，超過的部分直接被截掉。
+E_CPI_CAP = Decimal("0.05")
+E_LAYER_DOC_TYPES = {"續約報價"}
+UPGRADE_DOC_TYPES = {"升級報價"}
+
+
 QUOTE_STATUSES = ("草稿", "已發送", "已確認", "作廢", "已轉合約")
 CONTRACT_STATUSES = ("草稿(合約)", "已發送", "待用印", "用印完成", "執行中", "存檔")
 WORK_ORDER_STATUSES = (
@@ -281,7 +300,25 @@ class QuoteCalculationRequest(StrictModel):
     c_high_risk: int = Field(default=0, ge=0, le=10_000)
     c_custom_fee: Optional[Decimal] = Field(default=None, ge=0)
     d_items: list[Literal["poster", "board", "display", "qr", "digital", "install"]] = Field(default_factory=list)
+    # E 層自訂金額。有結構化輸入時以結構化結果為準，這個欄位保留給議定情形。
     e_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
+
+    # ── E 層結構（Artifact PRICING.E）────────────────────────────────────────
+    # 延保與加值服務只在續約報價適用（延保註記為「第 4 年起」）。
+    doc_type: Optional[str] = Field(default=None, max_length=40)
+    e_warranty_bed: bool = False
+    e_warranty_chair: bool = False
+    e_warranty_la200: bool = False
+    e_warranty_rate: Decimal = Field(default=Decimal("7"), ge=E_WARRANTY_RATE_MIN, le=E_WARRANTY_RATE_MAX)
+    e_value_added: list[Literal["annual_report", "industry_white", "esg_report", "hr_consult"]] = Field(default_factory=list)
+    e_value_custom: Decimal = Field(default=Decimal("0"), ge=0)
+    e_cpi_apply: bool = False
+    e_cpi_rate: Decimal = Field(default=Decimal("0"), ge=0, le=1)
+
+    # ── 升級差額（Artifact calcUpgradeDiff）──────────────────────────────────
+    original_a_fee: Optional[Decimal] = Field(default=None, ge=0)
+    upgrade_date: Optional[date] = None
+    original_contract_end: Optional[date] = None
 
 
 class ArtifactEntry(StrictModel):
@@ -1034,6 +1071,66 @@ def _serialize_update(model: BaseModel) -> dict[str, Any]:
     return model.model_dump(mode="json", exclude_unset=True)
 
 
+def calculate_upgrade_supplement(
+    original_annual: Decimal,
+    new_annual: Decimal,
+    upgrade_date: date,
+    original_contract_end: date,
+) -> dict[str, Any]:
+    """原合約剩餘月份應補收的差額（Artifact calcUpgradeDiff）。
+
+    Artifact 以 30 天為一個月並無條件進位；照抄該規則，否則同一份升級報價在
+    兩套系統會算出不同金額。
+    """
+    month_diff = ((new_annual - original_annual) / Decimal("12")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    days_left = (original_contract_end - upgrade_date).days
+    months_left = max(0, math.ceil(days_left / 30)) if days_left > 0 else 0
+    return {
+        "month_diff": month_diff,
+        "months_left": months_left,
+        "supplement": (month_diff * months_left).quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+    }
+
+
+def calculate_e_layer(payload: "QuoteCalculationRequest") -> dict[str, Any]:
+    """延保、加值服務與續約 CPI。三者都只在續約報價適用。"""
+    is_renewal = (payload.doc_type or "") in E_LAYER_DOC_TYPES
+    if not is_renewal:
+        return {
+            "applies": False,
+            "warranty_fee": Decimal("0"),
+            "value_added_fee": Decimal("0"),
+            "cpi_multiplier": Decimal("1"),
+            "cpi_rate_applied": Decimal("0"),
+            "cpi_capped": False,
+        }
+
+    rate = payload.e_warranty_rate / Decimal("100")
+    warranty = Decimal("0")
+    for flag, key in (
+        (payload.e_warranty_bed, "bed"),
+        (payload.e_warranty_chair, "chair"),
+        (payload.e_warranty_la200, "la200"),
+    ):
+        if flag:
+            warranty += Decimal(E_EQUIPMENT_PRICES[key]) * rate
+
+    value_added = sum(
+        (Decimal(E_VALUE_ADDED_PRICES[key]) for key in dict.fromkeys(payload.e_value_added)),
+        Decimal("0"),
+    ) + payload.e_value_custom
+
+    capped_rate = min(payload.e_cpi_rate, E_CPI_CAP) if payload.e_cpi_apply else Decimal("0")
+    return {
+        "applies": True,
+        "warranty_fee": warranty.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+        "value_added_fee": value_added.quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+        "cpi_multiplier": Decimal("1") + capped_rate,
+        "cpi_rate_applied": capped_rate,
+        "cpi_capped": payload.e_cpi_apply and payload.e_cpi_rate > E_CPI_CAP,
+    }
+
+
 def calculate_quote_fees(payload: QuoteCalculationRequest) -> dict[str, Any]:
     """Reproduce the Artifact quote rules without exposing its internal floor prices."""
     a_tiers = ((100, 600_000), (300, 1_200_000), (500, 1_800_000), (1_000, 3_000_000))
@@ -1065,7 +1162,25 @@ def calculate_quote_fees(payload: QuoteCalculationRequest) -> dict[str, Any]:
     c_fee = ((c_base + Decimal(payload.c_high_risk * 14_000)) * discount).quantize(Decimal("1"))
     d_min = (Decimal(sum(d_prices[item][0] for item in payload.d_items)) * discount).quantize(Decimal("1"))
     d_max = (Decimal(sum(d_prices[item][1] for item in payload.d_items)) * discount).quantize(Decimal("1"))
-    e_fee = payload.e_layer_fee.quantize(Decimal("1"))
+    e_layer = calculate_e_layer(payload)
+    # 續約時 A 層先套 CPI 調幅再計入年費；自訂 A 層金額視為已議定，不再調整。
+    if e_layer["applies"] and payload.a_custom_fee is None and e_layer["cpi_multiplier"] != Decimal("1"):
+        a_fee = (a_fee * e_layer["cpi_multiplier"]).quantize(Decimal("1"))
+
+    structured_e = e_layer["warranty_fee"] + e_layer["value_added_fee"]
+    e_fee = structured_e if e_layer["applies"] and structured_e > 0 else payload.e_layer_fee.quantize(Decimal("1"))
+
+    upgrade = None
+    if (
+        (payload.doc_type or "") in UPGRADE_DOC_TYPES
+        and payload.original_a_fee is not None
+        and payload.upgrade_date is not None
+        and payload.original_contract_end is not None
+    ):
+        upgrade = calculate_upgrade_supplement(
+            payload.original_a_fee, a_fee, payload.upgrade_date, payload.original_contract_end
+        )
+
     total_year = a_fee + c_fee + e_fee
     total_contract = total_year * payload.contract_years + b_fee
     return {
@@ -1080,6 +1195,13 @@ def calculate_quote_fees(payload: QuoteCalculationRequest) -> dict[str, Any]:
         "grand_total_min": total_contract + d_min,
         "grand_total_max": total_contract + d_max,
         "a_custom_required": payload.member_count is not None and payload.member_count > 1_000,
+        "e_warranty_fee": e_layer["warranty_fee"],
+        "e_value_added_fee": e_layer["value_added_fee"],
+        "e_layer_applies": e_layer["applies"],
+        "cpi_multiplier": e_layer["cpi_multiplier"],
+        "cpi_rate_applied": e_layer["cpi_rate_applied"],
+        "cpi_capped": e_layer["cpi_capped"],
+        "upgrade_supplement": upgrade,
     }
 
 

@@ -115,6 +115,45 @@ class TestReibiAssessmentConsent:
         assert response.status_code == 422
 
 
+class TestAssessmentPoints:
+    """Artifact AssessWizard awarded 10 points; the migration dropped it."""
+
+    def test_completing_an_assessment_awards_ten_points(self, client, tokens, fake_supabase):
+        from main import SLEEP_ASSESSMENT_POINTS
+
+        awarded: list[dict] = []
+        fake_supabase.register_rpc("reibi_adjust_points", lambda params: awarded.append(params) or {"balance": 10})
+
+        uid = uid_for("member", "primary")
+        response = client.post(SLEEP_URL, headers=tokens.header("member"), json=_sleep_payload(uid))
+
+        assert response.status_code == 201
+        assert SLEEP_ASSESSMENT_POINTS == 10
+        assert awarded and awarded[0]["p_points"] == 10
+        assert awarded[0]["p_profile_id"] == uid
+
+    def test_the_ledger_key_is_tied_to_the_report(self, client, tokens, fake_supabase):
+        awarded: list[dict] = []
+        fake_supabase.register_rpc("reibi_adjust_points", lambda params: awarded.append(params) or {"balance": 10})
+
+        uid = uid_for("member", "primary")
+        report_id = client.post(
+            SLEEP_URL, headers=tokens.header("member"), json=_sleep_payload(uid)
+        ).json()["report_id"]
+
+        assert awarded[0]["p_event_code"] == "sleep_assessment"
+        assert awarded[0]["p_event_key"] == f"sleep_assessment:{report_id}"
+
+    def test_a_failing_ledger_does_not_lose_the_saved_report(self, client, tokens, fake_supabase):
+        """Points are a bonus; the assessment must still be recorded."""
+        uid = uid_for("member", "primary")
+        # No RPC registered, so the fake raises — mirroring a ledger outage.
+        response = client.post(SLEEP_URL, headers=tokens.header("member"), json=_sleep_payload(uid))
+
+        assert response.status_code == 201
+        assert len(fake_supabase.tables["sleep_reports"]) == 1
+
+
 class TestConsentIsSeparateFromResearchOptIn:
     def test_org_consent_does_not_touch_the_research_flag(self, client, tokens, fake_supabase):
         """Cross-enterprise research uses profiles.research_opt_in, a different

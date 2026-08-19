@@ -160,6 +160,10 @@ class WorkScores(BaseModel):
     w2: int = Field(..., ge=0, le=10)
     w3: int = Field(..., ge=0, le=10)
 
+# Artifact AssessWizard 完成一次評估給 10 積分。
+SLEEP_ASSESSMENT_POINTS = 10
+
+
 class AssessmentData(BaseModel):
     """完整評估提交資料 (具備嚴格型別驗證)"""
     user_id: str = Field(..., description="提交者的 User ID")
@@ -1038,13 +1042,30 @@ async def submit_sleep_assessment(
     }
     
     supabase.table("sleep_reports").insert(report).execute()
+
+    # Artifact 的 AssessWizard 完成評估給 +10 積分（reibi-v10_3_34 第 699 行）。
+    # 積分是附帶獎勵，寫入失敗不應讓已儲存的報告變成錯誤回應。
+    assessment_points = None
+    try:
+        assessment_points = supabase.rpc("reibi_adjust_points", {
+            "p_profile_id": request.user_id,
+            "p_org_code": current_user.get("org_code"),
+            "p_event_code": "sleep_assessment",
+            "p_event_key": f"sleep_assessment:{report_id}",
+            "p_points": SLEEP_ASSESSMENT_POINTS,
+            "p_metadata": {"report_id": report_id},
+            "p_created_by": request.user_id,
+        }).execute().data
+    except Exception as exc:
+        print(f"⚠️ 評估積分寫入失敗（報告已儲存）: {exc}")
     
     return {
         "status": "success",
         "platform": "sleep",
         "report_id": report_id,
         "message": "睡眠評估已提交",
-        "report": report
+        "report": report,
+        "points": assessment_points
     }
 
 @app.get("/api/sleep/reports")

@@ -26,7 +26,19 @@ const EMPTY_QUOTE = {
   member_count: 100, pay_mode: "annual", contract_years: 3, contract_start: "", contract_end: "", a_custom_fee: "",
   discount_percent: 0, b_bed: 0, b_chair: 0, b_la200: 0, c_tier: "基本型", c_high_risk: 0,
   c_custom_fee: "", e_layer_fee: 0, d_items: {} as Record<string, boolean>, d_sites: [] as number[],
+  // E 層結構（續約報價適用）與升級差額輸入
+  e_warranty_bed: false, e_warranty_chair: false, e_warranty_la200: false, e_warranty_rate: 7,
+  e_value_added: {} as Record<string, boolean>, e_value_custom: 0,
+  e_cpi_apply: false, e_cpi_rate: 0,
+  original_a_fee: "", upgrade_date: "", original_contract_end: "",
 };
+
+const E_VALUE_ITEMS: Array<[string, string, number]> = [
+  ["annual_report", "年度健康加值報告", 30000],
+  ["industry_white", "產業健康白皮書（企業版）", 50000],
+  ["esg_report", "ESG 健促揭露報告", 40000],
+  ["hr_consult", "年度 HR 健促顧問諮詢（4 次）", 80000],
+];
 
 const EMPTY_WORK = {
   id: null as number | null, work_order_no: "", contract_id: null as number | null, contract_no: "", client_name: "", status: "草稿",
@@ -107,6 +119,15 @@ export default function ReibiWorkflowPage() {
       c_tier: quote.c_tier || null, c_high_risk: quote.c_high_risk,
       c_custom_fee: quote.c_custom_fee === "" ? null : Number(quote.c_custom_fee),
       d_items: D_ITEMS.filter(([key]) => quote.d_items[key]).map(([key]) => key), e_layer_fee: quote.e_layer_fee,
+      doc_type: quote.doc_type,
+      e_warranty_bed: quote.e_warranty_bed, e_warranty_chair: quote.e_warranty_chair,
+      e_warranty_la200: quote.e_warranty_la200, e_warranty_rate: quote.e_warranty_rate,
+      e_value_added: E_VALUE_ITEMS.filter(([key]) => quote.e_value_added[key]).map(([key]) => key),
+      e_value_custom: quote.e_value_custom,
+      e_cpi_apply: quote.e_cpi_apply, e_cpi_rate: quote.e_cpi_rate,
+      original_a_fee: quote.original_a_fee === "" ? null : Number(quote.original_a_fee),
+      upgrade_date: quote.upgrade_date || null,
+      original_contract_end: quote.original_contract_end || null,
     });
     if (response.status === "success") setCalculation(response.data);
     else setError(response.message || "報價試算失敗");
@@ -305,7 +326,55 @@ export default function ReibiWorkflowPage() {
           <Field label="合約結束"><input type="date" value={quote.contract_end} onChange={e => setQuote(p => ({ ...p, contract_end: e.target.value }))} className="input" /></Field>
         </div>
         <div className="mt-4"><div className="mb-2 text-xs font-bold text-slate-600">D 層環境佈置</div><div className="flex flex-wrap gap-2">{D_ITEMS.map(([key,label]) => <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={Boolean(quote.d_items[key])} onChange={e => setQuote(p => ({ ...p, d_items: { ...p.d_items, [key]: e.target.checked } }))} />{label}</label>)}</div>{catalogs.sites.length > 0 && <><div className="mb-2 mt-4 text-xs font-bold text-slate-600">施工場域</div><div className="flex flex-wrap gap-2">{catalogs.sites.map(site => <label key={site.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={quote.d_sites.includes(site.id)} onChange={e => setQuote(p => ({...p,d_sites:e.target.checked ? [...p.d_sites,site.id] : p.d_sites.filter(id => id !== site.id)}))} />{site.label}</label>)}</div></>}</div>
+        {quote.doc_type === "續約報價" && <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50 p-4">
+          <div className="text-xs font-black text-violet-900">E 層：設備延保與加值服務（續約適用）</div>
+          <div className="mt-3 grid gap-3 md:grid-cols-4">
+            {([["e_warranty_bed", "雲朵床延保"], ["e_warranty_chair", "樂活椅延保"], ["e_warranty_la200", "LA200 延保"]] as const).map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                <input type="checkbox" checked={Boolean((quote as any)[key])} onChange={e => setQuote(p => ({ ...p, [key]: e.target.checked }))} />{label}
+              </label>
+            ))}
+            <Field label="延保費率 %（5–10）"><input type="number" min={5} max={10} step={0.5} className="input" value={quote.e_warranty_rate} onChange={e => setQuote(p => ({ ...p, e_warranty_rate: Number(e.target.value) }))} /></Field>
+          </div>
+
+          <div className="mt-3 text-xs font-black text-violet-900">加值服務</div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {E_VALUE_ITEMS.map(([key, label, price]) => (
+              <label key={key} className="flex items-center gap-2 rounded-lg border border-violet-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">
+                <input type="checkbox" checked={Boolean(quote.e_value_added[key])} onChange={e => setQuote(p => ({ ...p, e_value_added: { ...p.e_value_added, [key]: e.target.checked } }))} />
+                {label}（{money(price)}）
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <Field label="其他加值金額"><input type="number" min={0} className="input" value={quote.e_value_custom} onChange={e => setQuote(p => ({ ...p, e_value_custom: Number(e.target.value) }))} /></Field>
+            <label className="flex items-end gap-2 pb-2 text-xs font-bold text-slate-700">
+              <input type="checkbox" checked={quote.e_cpi_apply} onChange={e => setQuote(p => ({ ...p, e_cpi_apply: e.target.checked }))} />套用 CPI 調幅
+            </label>
+            <Field label="CPI 調幅（上限 5%，超過自動截去）"><input type="number" min={0} max={1} step={0.01} className="input" value={quote.e_cpi_rate} onChange={e => setQuote(p => ({ ...p, e_cpi_rate: Number(e.target.value) }))} /></Field>
+          </div>
+        </div>}
+
+        {quote.doc_type === "升級報價" && <div className="mt-5 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+          <div className="text-xs font-black text-indigo-900">升級差額（依原合約剩餘月份補收）</div>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <Field label="原 A 層年費"><input type="number" min={0} className="input" value={quote.original_a_fee} onChange={e => setQuote(p => ({ ...p, original_a_fee: e.target.value }))} /></Field>
+            <Field label="升級日"><input type="date" className="input" value={quote.upgrade_date} onChange={e => setQuote(p => ({ ...p, upgrade_date: e.target.value }))} /></Field>
+            <Field label="原合約到期日"><input type="date" className="input" value={quote.original_contract_end} onChange={e => setQuote(p => ({ ...p, original_contract_end: e.target.value }))} /></Field>
+          </div>
+        </div>}
+
         <div className="mt-5 flex flex-wrap gap-2"><button onClick={calculate} className="inline-flex items-center gap-2 rounded-xl border border-teal-200 px-4 py-2.5 text-sm font-bold text-teal-700"><Calculator className="h-4 w-4" />重新試算</button><button onClick={saveQuote} disabled={loading} className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Save className="h-4 w-4" />{editingQuoteId ? "儲存版本" : "建立草稿"}</button></div>
+        {calculation?.cpi_capped && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">CPI 調幅超過 5% 上限，已自動截為 5%。</div>}
+        {calculation?.upgrade_supplement && <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+          升級差額：每月 {money(calculation.upgrade_supplement.month_diff)} × 剩餘 {calculation.upgrade_supplement.months_left} 個月 ＝ <b>{money(calculation.upgrade_supplement.supplement)}</b>
+        </div>}
+        {calculation?.e_layer_applies && <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+          {[["E 延保", calculation.e_warranty_fee], ["E 加值服務", calculation.e_value_added_fee], ["CPI 倍率", calculation.cpi_multiplier]].map(([label, value]) => (
+            <div key={String(label)} className="rounded-xl bg-violet-50 p-3"><div className="text-xs text-violet-700">{label}</div><div className="mt-1 text-sm font-black text-violet-900">{label === "CPI 倍率" ? `×${value}` : money(Number(value))}</div></div>
+          ))}
+        </div>}
         {calculation && <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-5">{[["A 年費",calculation.a_layer_fee],["B 設備",calculation.b_layer_fee],["C 年費",calculation.c_layer_fee],["D 區間",`${money(calculation.d_layer_fee_min)}～${money(calculation.d_layer_fee_max)}`],["合約基本總額",calculation.total_contract_fee]].map(([label,value]) => <div key={String(label)} className="rounded-xl bg-slate-50 p-3"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 text-sm font-black text-slate-800">{typeof value === "string" ? value : money(value)}</div></div>)}</div>}
       </section>}
 
