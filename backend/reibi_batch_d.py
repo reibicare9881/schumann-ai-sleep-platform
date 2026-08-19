@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import re
+import secrets
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal, Optional
@@ -10,6 +12,12 @@ from passlib.context import CryptContext
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from auth import get_current_user
+from reibi_subscription_gate import (
+    PLAN_LABELS as SUBSCRIPTION_PLAN_LABELS,
+    TERMS_VERSION,
+    load_access as load_subscription_access,
+    subscription_page_payload,
+)
 from roles import has_permission
 
 
@@ -148,6 +156,24 @@ class ActionCheckin(StrictModel):
 
 class PointsRedeem(StrictModel):
     reward_code: Literal["bioinfo", "ans_measure", "experience_extra", "priority_booking"]
+
+
+class SubscriptionApply(StrictModel):
+    plan_code: Literal["monthly", "quarterly", "annual"]
+    contact: str = Field(min_length=1, max_length=254)
+    # 條款同意是必要條件，不是預設值。Artifact 未勾選時直接擋下申請。
+    agreed_terms_version: str = Field(min_length=1, max_length=40)
+
+    @field_validator("agreed_terms_version")
+    @classmethod
+    def current_terms(cls, value: str) -> str:
+        if value != TERMS_VERSION:
+            raise ValueError(f"服務條款已更新至 {TERMS_VERSION}，請重新閱讀並同意")
+        return value
+
+
+class SubscriptionActivate(StrictModel):
+    activation_code: str = Field(min_length=6, max_length=200)
 
 
 class PointsAdjustment(StrictModel):
@@ -372,8 +398,98 @@ def calculate_mhi(phq_score: Optional[float], pss_score: Optional[float], mind_s
     return {"score": score, "level": level, "parts": parts, "complete": len(available) == 3}
 
 
+def _member_code(user: dict[str, Any]) -> str:
+    """人可讀的會員碼。Artifact 用 genRC() 產生 8 碼，這裡沿用同樣的長度與字集。
+
+    新系統的訂閱是綁 profile_id，會員碼不再是唯一憑證，只作為客服查詢用。
+    """
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # 去掉容易誤讀的 I/O/0/1
+    return "RB" + "".join(secrets.choice(alphabet) for _ in range(6))
+
+
+def _public_subscription(row: dict[str, Any]) -> dict[str, Any]:
+    """回給使用者的訂閱資料。憑證欄位一律剝除。"""
+    hidden = {"activation_code", "activation_code_hash", "source_payload"}
+    return {key: value for key, value in row.items() if key not in hidden}
+
+
 def create_reibi_batch_d_router(client: Any) -> APIRouter:
     router = APIRouter(prefix="/api/reibi/health", tags=["REIBI Batch D"])
+
+    def load_access(user: dict[str, Any]) -> dict[str, Any]:
+        return load_subscription_access(client, user)
+
+    @router.get("/subscription")
+    def my_subscription(current_user: dict = Depends(get_current_user)):
+        """目前帳號的訂閱狀態，加上訂閱頁需要的功能對照與條款。
+
+        任何登入身份都能讀：企業員工拿到的是 gated=False，畫面據此完全不顯示
+        訂閱相關內容，而不是讓前端自己去猜角色。
+        """
+        return {"status": "success", "data": subscription_page_payload(load_access(current_user))}
+
+    @router.post("/subscription/apply", status_code=status.HTTP_201_CREATED)
+    def apply_subscription(payload: SubscriptionApply, current_user: dict = Depends(get_current_user)):
+        access = load_access(current_user)
+        if not access["gated"]:
+            raise HTTPException(status_code=409, detail="企業合約已涵蓋完整功能，不需要個人訂閱")
+        if access["is_pro"]:
+            raise HTTPException(status_code=409, detail="目前已有有效訂閱，到期前不需重複申請")
+        pid = _profile_id(current_user)
+        pending = _execute(
+            client.table("reibi_subscriptions").select("id").eq("profile_id", pid).eq("status", "待審核").limit(1),
+            "查詢既有訂閱申請",
+        )
+        if pending:
+            raise HTTPException(status_code=409, detail="已有一筆訂閱申請正在審核中，請等待客服確認")
+        values = {
+            "profile_id": pid,
+            # 會員碼仍然產生：它是客服人工核對身分時的查詢碼，也是 Artifact 匯入資料的對應鍵。
+            "member_code": _member_code(current_user),
+            "subscriber_name": current_user.get("name"),
+            "contact": payload.contact,
+            "plan_code": payload.plan_code,
+            "plan_label": SUBSCRIPTION_PLAN_LABELS[payload.plan_code],
+            "status": "待審核",
+            "requested_at": _now(),
+            # 同意的是哪一版條款要留下來，否則日後條款調整就無從追溯。
+            "consent_version": TERMS_VERSION,
+            "consent_at": _now(),
+            "source_payload": {},
+            "created_by": current_user.get("name"),
+        }
+        rows = _execute(client.table("reibi_subscriptions").insert(values), "建立訂閱申請")
+        saved = _public_subscription(rows[0])
+        return {"status": "success", "data": {"subscription": saved, "access": load_access(current_user)}}
+
+    @router.post("/subscription/activate")
+    def activate_subscription(payload: SubscriptionActivate, current_user: dict = Depends(get_current_user)):
+        """以財務核發的一次性啟用碼認領訂閱。
+
+        比對的是雜湊，不是明碼 —— 資料庫從不保存啟用碼本身。
+        """
+        access = load_access(current_user)
+        if not access["gated"]:
+            raise HTTPException(status_code=409, detail="企業合約已涵蓋完整功能，不需要個人訂閱")
+        digest = hashlib.sha256(payload.activation_code.strip().encode("utf-8")).hexdigest()
+        rows = _execute(
+            client.table("reibi_subscriptions").select("id,status,profile_id,activated_at")
+            .eq("activation_code_hash", digest).limit(1),
+            "核對啟用碼",
+        )
+        # 查無此碼與碼已被使用回同一句話：逐一區分等於讓人可以試出哪些碼存在。
+        if not rows or rows[0].get("activated_at") or rows[0].get("profile_id"):
+            raise HTTPException(status_code=422, detail="啟用碼無效或已被使用，請聯絡客服確認")
+        record = rows[0]
+        if record.get("status") != "已核准":
+            raise HTTPException(status_code=409, detail="此訂閱尚未完成審核，請等待客服確認後再啟用")
+        _execute(
+            client.table("reibi_subscriptions").update({
+                "profile_id": _profile_id(current_user), "activated_at": _now(), "updated_at": _now(),
+            }).eq("id", record["id"]).is_("profile_id", "null"),
+            "認領訂閱",
+        )
+        return {"status": "success", "data": {"access": load_access(current_user)}}
 
     @router.get("/actions")
     def actions(current_user: dict = Depends(require_personal_health)):

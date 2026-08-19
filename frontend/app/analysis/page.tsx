@@ -86,16 +86,25 @@ export default function AnalysisPage() {
   const [aiReport, setAiReport] = useState<{ text: string, platform: string } | null>(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState<string | null>(null); 
 
+  // 年度改善追蹤報告為訂閱版功能，後端以 402 拒絕免費個人用戶。
+  const [upgradeNotice, setUpgradeNotice] = useState("");
+
   const handleGenerateAITrend = async (platform: 'sleep' | 'schumann') => {
     if (!session?.uid) return;
     setIsGeneratingAI(platform);
+    setUpgradeNotice("");
     try {
-      const res = await API.generateAITrend(session.uid, platform);
+      const res: any = await API.generateAITrend(session.uid, platform);
       if (res.status === 'success') {
         setAiReport({ text: res.ai_analysis, platform });
+      } else if (res.status_code === 402) {
+        // 402 是付費牆而不是錯誤；用升級提示呈現，不要 alert 一句「產生失敗」。
+        setUpgradeNotice(res.message || "此為訂閱版功能。");
+      } else {
+        alert(res.message || "AI 分析產生失敗，請確認是否有足夠的歷史資料。");
       }
     } catch (err: any) {
-      alert(err.message || "AI 分析產生失敗，請確認是否有足夠的歷史資料。");
+      alert(err?.message || "AI 分析產生失敗，請確認是否有足夠的歷史資料。");
     } finally {
       setIsGeneratingAI(null);
     }
@@ -256,6 +265,17 @@ export default function AnalysisPage() {
             </button>
           </div>
         </div>
+
+        {/* 訂閱版功能提示。免費個人用戶的年度改善追蹤由後端以 402 擋下。 */}
+        {upgradeNotice && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
+            <div className="text-sm font-bold text-amber-900">⭐ 年度改善追蹤報告為訂閱版功能</div>
+            <p className="mt-1 text-xs text-amber-800">{upgradeNotice}</p>
+            <a href="/subscribe" className="mt-3 inline-flex rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700">
+              ⭐ 升級訂閱解鎖
+            </a>
+          </div>
+        )}
 
         {/* AI Markdown 渲染結果 */}
         {aiReport && (

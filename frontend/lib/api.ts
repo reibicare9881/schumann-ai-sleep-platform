@@ -14,6 +14,8 @@ interface APIResponse<T = any> {
   data?: T;
   message?: string;
   detail?: string;
+  /** 失敗時的 HTTP 狀態碼。402 代表付費牆，與一般錯誤要分開處理。 */
+  status_code?: number;
 }
 
 interface Session {
@@ -131,16 +133,21 @@ export const API = {
       });
       
       const data = await response.json();
-      
+
       if (!response.ok) {
-        throw new Error(data.detail || data.message || '請求失敗');
+        // 保留 HTTP 狀態碼。呼叫端需要分辨「付費牆（402）」與「真的失敗」——
+        // 只丟一句 message 出去，升級提示會被當成錯誤訊息顯示。
+        const failure = new Error(data.detail || data.message || '請求失敗') as Error & { status?: number };
+        failure.status = response.status;
+        throw failure;
       }
-      
+
       return data;
     } catch (error) {
       console.error('API 請求錯誤:', error);
       return {
         status: 'error',
+        status_code: (error as { status?: number })?.status,
         message: error instanceof Error ? error.message : '未知錯誤'
       };
     }
@@ -745,6 +752,16 @@ export const API = {
   async getReibiHealthActions() { return this.request('/api/reibi/health/actions'); },
   async checkinReibiHealthAction(actionCode: string, checkedOn?: string) {
     return this.request('/api/reibi/health/actions', { method: 'POST', body: JSON.stringify({ action_code: actionCode, checked_on: checkedOn }) });
+  },
+  // 個人訂閱閘門：狀態、申請與啟用碼認領
+  async getReibiSubscription() { return this.request('/api/reibi/health/subscription'); },
+  async applyReibiSubscription(payload: { plan_code: string; contact: string; agreed_terms_version: string }) {
+    return this.request('/api/reibi/health/subscription/apply', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async activateReibiSubscription(activationCode: string) {
+    return this.request('/api/reibi/health/subscription/activate', {
+      method: 'POST', body: JSON.stringify({ activation_code: activationCode })
+    });
   },
   async getReibiPoints() { return this.request('/api/reibi/health/points'); },
   async redeemReibiPoints(rewardCode: string) {

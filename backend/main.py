@@ -43,6 +43,15 @@ from reibi_batch_f import create_reibi_batch_f_router
 from reibi_batch_g import create_internal_session_validator, create_reibi_batch_g_router
 from reibi_l5 import create_reibi_l5_router
 from reibi_onboarding import create_reibi_onboarding_router
+from reibi_subscription_gate import (
+    limit_history,
+    load_access as subscription_access,
+    require_pro,
+    resolve as resolve_subscription,
+)
+
+# 查別人的資料時不套用個人訂閱限制：管理者看的是企業合約涵蓋的範圍。
+NO_LIMIT_ACCESS = resolve_subscription("member", [])
 
 app = FastAPI(
     title="統一多平台 API",
@@ -1006,19 +1015,26 @@ async def submit_sleep_assessment(
     }}
     """
     
-    try:
-        ai_res = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json"
+    # AI 個人化建議是訂閱版功能（Artifact PersonalReportScreen 的 isPro 閘門）。
+    # 免費個人用戶完全不呼叫 Gemini：評估照常儲存、燈號照常計算，
+    # 只是 recs 留空，前端會顯示標準衛教內容與升級提示。
+    # 擋在生成端而不是顯示端，否則我們付了錢產生一份不給看的報告。
+    access = subscription_access(supabase, current_user)
+    custom_recs = None
+    if access["is_pro"]:
+        try:
+            ai_res = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
             )
-        )
-        custom_recs = json.loads(ai_res.text)
-    except Exception as e:
-        print(f"AI 生成衛教建議失敗: {e}")
-        custom_recs = None
-    
+            custom_recs = json.loads(ai_res.text)
+        except Exception as e:
+            print(f"AI 生成衛教建議失敗: {e}")
+            custom_recs = None
+
     report_id = str(uuid.uuid4())
     
     report = {
@@ -1065,7 +1081,9 @@ async def submit_sleep_assessment(
         "report_id": report_id,
         "message": "睡眠評估已提交",
         "report": report,
-        "points": assessment_points
+        "points": assessment_points,
+        # 前端據此在 AI 建議區塊顯示升級提示，而不是自己去猜角色。
+        "subscription": access,
     }
 
 @app.get("/api/sleep/reports")
@@ -1089,12 +1107,22 @@ async def list_sleep_reports(
     # 💡 修正：改從 Supabase 讀取資料
     res = supabase.table("sleep_reports").select("*").eq("user_id", user_id).execute()
     reports = res.data
-    
+
+    # 免費個人用戶只看得到最近 3 個月（Artifact HistoryScreen v10.3.24）。
+    # 限制只在查自己時套用：管理者查轄下員工看的是企業合約涵蓋的資料，
+    # 不該因為被查的人自己沒訂閱就少一截。
+    access = subscription_access(supabase, current_user) if current_user.get("uid") == user_id else NO_LIMIT_ACCESS
+    limited = limit_history(reports, access)
+
     return {
         "status": "success",
         "platform": "sleep",
-        "count": len(reports),
-        "reports": reports
+        "count": len(limited["rows"]),
+        "reports": limited["rows"],
+        # 較早的紀錄是隱藏不是刪除；不回報筆數，使用者會以為資料不見了。
+        "hidden_count": limited["hidden_count"],
+        "history_limited": limited["limited"],
+        "subscription": access,
     }
 
 @app.get("/api/sleep/reports/{report_id}")
@@ -1170,6 +1198,7 @@ async def get_user_history(user_id: str, current_user: dict = Depends(get_curren
     # 權限防護：只能看自己的，同單位管理者可以看轄下員工的
     assert_can_read_user_records(current_user, user_id)
 
+    access = subscription_access(supabase, current_user) if current_user.get("uid") == user_id else NO_LIMIT_ACCESS
     try:
         # 從 Supabase 撈取該使用者的所有紀錄，不分平台，依時間由新到舊排序
         res = supabase.table("records") \
@@ -1177,9 +1206,16 @@ async def get_user_history(user_id: str, current_user: dict = Depends(get_curren
             .eq("user_id", user_id) \
             .order("created_at", desc=True) \
             .execute()
-        
-        return {"status": "success", "data": res.data}
 
+        limited = limit_history(res.data, access)
+        return {
+            "status": "success", "data": limited["rows"],
+            "hidden_count": limited["hidden_count"], "history_limited": limited["limited"],
+            "subscription": access,
+        }
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -1236,6 +1272,10 @@ async def generate_ai_trend_analysis(
     # 1. 權限防護：本人或同單位管理者。
     #    舊版只比對角色，任一單位的 admin／dept_head 都能對任何人的健康資料產生 AI 分析。
     assert_can_read_user_records(current_user, user_id)
+
+    # 2. 年度改善追蹤報告是訂閱版功能（Artifact PersonalReportScreen 的 annual 分頁）。
+    #    這是第二個會呼叫 Gemini 的端點，同樣擋在生成前。
+    require_pro(subscription_access(supabase, current_user), "年度改善追蹤報告")
 
     history_text = []
     prompt = ""

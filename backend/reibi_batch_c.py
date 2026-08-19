@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from reibi_l5 import partner_scope_codes
 
 from auth import require_reibi_manager, require_reibi_partner, require_reibi_super
+from reibi_subscription_gate import PLAN_CODES, PLAN_LABELS, PLAN_MONTHS
 
 
 PLAN_PRICES = {"基本": Decimal("600000"), "成長": Decimal("1200000"), "專業": Decimal("1800000"), "旗艦": Decimal("3000000")}
@@ -23,11 +24,10 @@ COMMISSION_LEVELS = {
     "strategic": {"a": Decimal("28"), "b": Decimal("28"), "c": Decimal("18")},
 }
 PAYMENT_STATUSES = {"待付款", "未到期", "待確認", "部分付款", "已付款"}
-# 個人訂閱方案的月數。三個方案在 Artifact 主平台的 SUB_PLANS 與 L5 的
-# PERSONAL_SUB_PLANS 是同一份定義（月繳 1／季繳 3／年繳 12），兩邊的月數必須一致，
-# 否則核發啟用碼算出的到期日會跟主平台顯示的對不上。
-SUBSCRIPTION_PLAN_MONTHS = {"monthly": 1, "quarterly": 3, "annual": 12}
-SUBSCRIPTION_PLAN_LABELS = {"monthly": "月繳體驗", "quarterly": "季繳方案", "annual": "年繳方案(最優惠)"}
+# 方案月數與名稱由 reibi_subscription_gate 統一定義。財務端核發啟用碼算到期日、
+# 使用者端顯示到期日，兩邊必須用同一組數字 —— Artifact 就是因為兩份複本而出過問題。
+SUBSCRIPTION_PLAN_MONTHS = PLAN_MONTHS
+SUBSCRIPTION_PLAN_LABELS = PLAN_LABELS
 INVOICE_TRANSITIONS = {
     "草稿": {"已開票", "作廢"},
     "已開票": {"待收款", "作廢"},
