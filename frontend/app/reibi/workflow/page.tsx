@@ -72,7 +72,7 @@ const EMPTY_WORK = {
   id: null as number | null, work_order_no: "", contract_id: null as number | null, contract_no: "", client_name: "", status: "草稿",
   contact_name: "", phone: "", email: "", address: "", scheduled_date: "", service_period: "", staff_names: "",
   scope_confirm_reibi: "", scope_confirm_reibi_date: "", scope_confirm_client: "", scope_confirm_client_date: "",
-  global_note: "", special_terms: "",
+  global_note: "", special_terms: "", service_staff_id: "",
 };
 
 const money = (value: any) => `NT$ ${Number(value || 0).toLocaleString("zh-TW")}`;
@@ -295,6 +295,7 @@ export default function ReibiWorkflowPage() {
       ...EMPTY_WORK, ...row, scheduled_date: row.scheduled_date || "",
       scope_confirm_reibi_date: row.scope_confirm_reibi_date || "", scope_confirm_client_date: row.scope_confirm_client_date || "",
       global_note: row.global_note || "", special_terms: row.special_terms || "",
+      service_staff_id: row.service_staff_id ? String(row.service_staff_id) : "",
     });
     const items = row.items || {};
     setWorkItems(Array.isArray(items.customItems) ? items.customItems : []);
@@ -337,6 +338,7 @@ export default function ReibiWorkflowPage() {
       // 備註送空字串而非 null：後端的 _serialize_payload 會濾掉 None，
       // 用 clean() 就會變成「清空後儲存，舊內容仍在」。
       global_note: work.global_note, special_terms: work.special_terms,
+      service_staff_id: clean(work.service_staff_id) ? Number(work.service_staff_id) : null,
       items: workItemsPayload(), acceptance: { acceptChecks, checkNotes },
     });
     if (response.status === "success") { setMessage("工單內容已更新。"); await editWork(response.data); await loadRows("work-orders"); }
@@ -572,7 +574,7 @@ export default function ReibiWorkflowPage() {
         </p>}
       </section>}
 
-      {tab === "work-orders" && work.id && <section className="rounded-2xl border border-slate-200 bg-white p-6 print:hidden"><h2 className="font-black text-slate-800">編輯工單 {work.work_order_no}</h2><div className="mt-4 grid gap-3 md:grid-cols-4"><Field label="聯絡人"><input className="input" value={work.contact_name} onChange={e => setWork(p => ({ ...p, contact_name: e.target.value }))} /></Field><Field label="施工日期"><input type="date" className="input" value={work.scheduled_date} onChange={e => setWork(p => ({ ...p, scheduled_date: e.target.value }))} /></Field><Field label="服務時段"><input className="input" value={work.service_period} onChange={e => setWork(p => ({ ...p, service_period: e.target.value }))} /></Field><Field label="服務人員"><input className="input" value={work.staff_names} onChange={e => setWork(p => ({ ...p, staff_names: e.target.value }))} /></Field><Field label="REIBI 範圍確認人"><input className="input" value={work.scope_confirm_reibi} onChange={e => setWork(p => ({ ...p, scope_confirm_reibi: e.target.value }))} /></Field><Field label="REIBI 確認日期"><input type="date" className="input" value={work.scope_confirm_reibi_date} onChange={e => setWork(p => ({ ...p, scope_confirm_reibi_date: e.target.value }))} /></Field><Field label="客戶範圍確認人"><input className="input" value={work.scope_confirm_client} onChange={e => setWork(p => ({ ...p, scope_confirm_client: e.target.value }))} /></Field><Field label="客戶確認日期"><input type="date" className="input" value={work.scope_confirm_client_date} onChange={e => setWork(p => ({ ...p, scope_confirm_client_date: e.target.value }))} /></Field></div>
+      {tab === "work-orders" && work.id && <section className="rounded-2xl border border-slate-200 bg-white p-6 print:hidden"><h2 className="font-black text-slate-800">編輯工單 {work.work_order_no}</h2><div className="mt-4 grid gap-3 md:grid-cols-4"><Field label="聯絡人"><input className="input" value={work.contact_name} onChange={e => setWork(p => ({ ...p, contact_name: e.target.value }))} /></Field><Field label="施工日期"><input type="date" className="input" value={work.scheduled_date} onChange={e => setWork(p => ({ ...p, scheduled_date: e.target.value }))} /></Field><Field label="服務時段"><input className="input" value={work.service_period} onChange={e => setWork(p => ({ ...p, service_period: e.target.value }))} /></Field><Field label="負責服務人員"><select className="input" value={work.service_staff_id} onChange={e => setWork(p => ({ ...p, service_staff_id: e.target.value }))}><option value="">不指定</option>{catalogs.staff.map(item => <option key={item.id} value={item.id}>{item.name}{item.title ? ` · ${item.title}` : ""}</option>)}</select></Field><Field label="現場人員名單"><input className="input" value={work.staff_names} onChange={e => setWork(p => ({ ...p, staff_names: e.target.value }))} /></Field><Field label="REIBI 範圍確認人"><input className="input" value={work.scope_confirm_reibi} onChange={e => setWork(p => ({ ...p, scope_confirm_reibi: e.target.value }))} /></Field><Field label="REIBI 確認日期"><input type="date" className="input" value={work.scope_confirm_reibi_date} onChange={e => setWork(p => ({ ...p, scope_confirm_reibi_date: e.target.value }))} /></Field><Field label="客戶範圍確認人"><input className="input" value={work.scope_confirm_client} onChange={e => setWork(p => ({ ...p, scope_confirm_client: e.target.value }))} /></Field><Field label="客戶確認日期"><input type="date" className="input" value={work.scope_confirm_client_date} onChange={e => setWork(p => ({ ...p, scope_confirm_client_date: e.target.value }))} /></Field></div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <Field label="整體備註"><textarea rows={2} className="input" value={work.global_note} placeholder="適用於全部施工項目的說明" onChange={e => setWork(p => ({ ...p, global_note: e.target.value }))} /></Field>
           <Field label="特殊條款"><textarea rows={2} className="input" value={work.special_terms} placeholder="加班費分攤、現場限制、客戶自備材料等" onChange={e => setWork(p => ({ ...p, special_terms: e.target.value }))} /></Field>

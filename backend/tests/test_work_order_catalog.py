@@ -255,3 +255,53 @@ class TestEndpoints:
         response = self._accept(client, tokens, checks)
         assert response.status_code == 422
         assert "qr:0" in response.json()["detail"]
+
+
+class TestServiceStaffAssignment:
+    """指派的服務人員（Artifact v1.4 的 serviceStaffId 下拉）。
+
+    `reibi_work_orders.service_staff_id` 從 Batch B 建表起就存在，還帶著外鍵與
+    索引，但沒有任何程式碼寫入或讀取它 —— 跟先前修掉的企業區域、預約服務場域
+    同一類的死欄位。
+    """
+
+    URL = "/api/reibi/work-orders"
+
+    @pytest.fixture
+    def seeded(self, fake_supabase):
+        from support.identities import PRIMARY_ORG_CODE
+
+        fake_supabase.seed("reibi_enterprises", [
+            {"id": 1, "org_code": PRIMARY_ORG_CODE, "org_name": "測試企業", "status": "active"},
+        ])
+        fake_supabase.seed("reibi_staff", [
+            {"id": 3, "name": "陳服務", "title": "客服專員", "is_active": True, "artifact_id": "STAFF_3"},
+        ])
+        fake_supabase.seed("reibi_work_orders", [{
+            "id": 7, "enterprise_id": 1, "work_order_no": "WO-D-2608-001", "client_name": "測試企業",
+            "status": "草稿", "items": {}, "acceptance": {}, "status_history": [], "service_staff_id": None,
+        }])
+        return fake_supabase
+
+    def _put(self, client, tokens, **extra):
+        return client.put(f"{self.URL}/7", headers=tokens.header("admin"), json={
+            "work_order_no": "WO-D-2608-001", "client_name": "測試企業", **extra,
+        })
+
+    def test_the_assignment_is_persisted(self, client, tokens, seeded):
+        assert self._put(client, tokens, service_staff_id=3).status_code == 200
+        assert seeded.tables["reibi_work_orders"][0]["service_staff_id"] == 3
+
+    def test_the_field_is_optional(self, client, tokens, seeded):
+        assert self._put(client, tokens).status_code == 200
+
+    @pytest.mark.parametrize("bad", [0, -1, "three"])
+    def test_an_unusable_staff_reference_is_rejected(self, client, tokens, seeded, bad):
+        assert self._put(client, tokens, service_staff_id=bad).status_code == 422
+
+    def test_the_free_text_roster_is_still_a_separate_field(self, client, tokens, seeded):
+        # staff_names 是現場人員名單，service_staff_id 是負責這張工單的人，兩者不互相取代。
+        assert self._put(client, tokens, service_staff_id=3, staff_names="陳服務、林技師").status_code == 200
+        saved = seeded.tables["reibi_work_orders"][0]
+        assert saved["service_staff_id"] == 3
+        assert saved["staff_names"] == "陳服務、林技師"

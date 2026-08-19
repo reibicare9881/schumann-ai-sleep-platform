@@ -238,6 +238,9 @@ class ContractWrite(StrictModel):
 class WorkOrderWrite(StrictModel):
     work_order_no: Optional[str] = Field(default=None, min_length=1, max_length=100)
     contract_id: Optional[int] = Field(default=None, ge=1)
+    # 指派的 REIBI 服務人員（Artifact v1.4 的 serviceStaffId 下拉）。
+    # staff_names 是自由文字的現場人員名單，兩者不同：這一欄是負責這張工單的人。
+    service_staff_id: Optional[int] = Field(default=None, ge=1)
     contract_no: Optional[str] = Field(default=None, max_length=100)
     client_name: str = Field(min_length=1, max_length=200)
     status: str = Field(default="草稿", max_length=50)
@@ -292,6 +295,7 @@ class WorkOrderAcceptance(StrictModel):
 
 
 class WorkOrderFromContractRequest(StrictModel):
+    service_staff_id: Optional[int] = Field(default=None, ge=1)
     contact_name: Optional[str] = Field(default=None, max_length=100)
     phone: Optional[str] = Field(default=None, max_length=50)
     email: Optional[str] = Field(default=None, max_length=254)
@@ -2096,13 +2100,22 @@ def create_reibi_router(client: Any) -> APIRouter:
                         )
                         if quote_rows:
                             values["quote_id"] = quote_rows[0]["id"]
-                    if table == "reibi_work_orders" and values.get("contract_no"):
-                        contract_rows = _execute(
-                            client.table("reibi_contracts").select("id").eq("doc_no", values["contract_no"]).limit(1),
-                            "比對來源合約",
-                        )
-                        if contract_rows:
-                            values["contract_id"] = contract_rows[0]["id"]
+                    if table == "reibi_work_orders":
+                        if values.get("contract_no"):
+                            contract_rows = _execute(
+                                client.table("reibi_contracts").select("id").eq("doc_no", values["contract_no"]).limit(1),
+                                "比對來源合約",
+                            )
+                            if contract_rows:
+                                values["contract_id"] = contract_rows[0]["id"]
+                        work_staff_artifact_id = _clean_optional(source_record.get("serviceStaffId"))
+                        if work_staff_artifact_id:
+                            work_staff_rows = _execute(
+                                client.table("reibi_staff").select("id").eq("artifact_id", work_staff_artifact_id).limit(1),
+                                "比對工單服務人員",
+                            )
+                            if work_staff_rows:
+                                values["service_staff_id"] = work_staff_rows[0]["id"]
                     if table == "reibi_distributors":
                         staff_artifact_id = _clean_optional(source_record.get("staffId"))
                         parent_artifact_id = _clean_optional(source_record.get("parentId"))

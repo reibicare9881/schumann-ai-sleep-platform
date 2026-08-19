@@ -580,6 +580,7 @@
 - [x] QT-S07：**D 層套組快選**（`PRICING.D.bundles` 的基礎型／標準型／完整型）。只作為勾選預設值，不帶套組標價 —— Artifact 的套組金額是「快速試算」頁的區間中位數，與正式報價單逐項加總的結果本來就不同（完整型套組標 10–20 萬，六項逐項加總是 10.5–21.5 萬）。正式報價一律以逐項為準。
 - [x] SUB-S01：**個人訂閱季繳方案**。Artifact 主平台 `SUB_PLANS` 與 L5 `PERSONAL_SUB_PLANS` 都是月繳 1／季繳 3／年繳 12 三個方案，新系統的 `plan_code` 只認 `monthly` 與 `annual`，發碼時以「不是 annual 就給一個月」計算到期日，季繳無從表達。三個方案的月數已改由 `SUBSCRIPTION_PLAN_MONTHS` 決定。
 - [x] PTS-S01：**積分兌換目錄**。Artifact `PointsScreen` 有五個兌換項（生物資訊檢測 100／自律神經量測 200／體驗加次 50／優先預約 30／企業自訂彈性設定），新系統前端只寫死一顆「50 分兌換健康諮詢」按鈕。目錄已移到後端。第五項「企業自訂」在 Artifact 沒有固定點數，維持不列入自助兌換，畫面標示洽詢管道。
+- [x] WO-S05：**工單指派服務人員**。`reibi_work_orders.service_staff_id` 自 Batch B 建表起就有欄位、外鍵與索引，但沒有任何程式碼寫入或讀取 —— 與 `cada642` 的企業區域、`7870028` 的預約服務場域同一類的死欄位。Artifact v1.4 的 `serviceStaffId` 是綁 L5 服務人員清單的下拉。已補上表單下拉、API 欄位與 Artifact 匯入時的 `artifact_id` 對照；原本的 `staff_names` 維持為現場人員名單，兩者不互相取代。
 - [x] SEC-S01：順手修掉 `POST /api/reibi/health/points/redeem` 的自訂價格問題。原本 `cost` 是前端傳來的參數，等於讓使用者自己標價（Artifact 的兌換鈕只是 alert 請聯絡客服、不扣點，所以價格放前端不會有事；新系統會真的扣點）。現在只收 `reward_code`，點數一律查後端目錄。
 
 ### 核對後確認無缺口
@@ -593,8 +594,8 @@
 ### 待處理
 
 - [ ] AUDIT-S02：`L5-04G` 先前誤標為完成。Artifact `ManualScreen` 的六分頁站內操作手冊沒有移植，內容改寫進交接手冊 §10。需決定是要在站內補一頁（對 L5 操作人員較合理），或正式標記為刻意不移植。
-- [x] TST-S11：新增 `tests/test_work_order_catalog.py`（41 項：目錄與 Artifact 逐項比對、進度計算、孤兒勾核、由報價 D 層推導工單項目）與 `tests/test_migration_gap_fixes.py`（29 項：C 層拆分與折扣、三個訂閱方案月數、兌換目錄價格與前端不得帶價）。
-- [x] TST-S12：3,535 項 Python 測試通過，TypeScript no-emit 通過，第 18 個 migration 在本機資料庫套用並確認可重跑。
+- [x] TST-S11：新增 `tests/test_work_order_catalog.py`（55 項：目錄與 Artifact 逐項比對、進度計算、孤兒勾核、由報價 D 層推導工單項目，以及 HTTP 層的路由順序、驗收把關與服務人員指派）與 `tests/test_migration_gap_fixes.py`（29 項：C 層拆分與折扣、三個訂閱方案月數、兌換目錄價格與前端不得帶價）。
+- [x] TST-S12：3,549 項 Python 測試與 159 項 pgTAP 通過，TypeScript no-emit 與 Next.js production build 通過，18 個 migration 於空資料庫全量重播後 pgTAP 仍全綠。
 
 ## 30. Batch R1 讓 registry 成為 Batch D／E 的授權來源（2026-08-17）
 
