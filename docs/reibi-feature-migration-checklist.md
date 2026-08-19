@@ -519,7 +519,7 @@
 - [x] SEC-S05：組織彙整同意與跨企業研究同意（`profiles.research_opt_in`）是兩個獨立開關，測試確認勾選前者不會連帶開啟後者。
 - [x] TST-S06：13 項 pgTAP（欄位定義、只計入同意者、撤回後抑制、全部撤回歸零、心理量表對稱受限）與 9 項 Python API 測試。既有 `reibi_batch_e.test.sql` 的測試資料同步補上同意值 —— 它原本失敗正好證明過濾生效。
 - [x] TST-S07：3,369 項 Python 測試、**159 項 pgTAP**、37 項 E2E、`pip check`、TypeScript no-emit 與 Next.js production build 全數通過；17 個 migration 於空資料庫重播成功，`db:lint` 無錯誤。
-- [ ] OPS-S01：遠端 Supabase 尚未套用第 17 個 migration。套用後，既有 `sleep_reports` 資料列的同意值會是 false，組織彙整將只反映套用後明確同意的評估 —— 這是刻意的隱私預設，但上線前應向企業客戶說明。
+- [x] OPS-S01：遠端 Supabase 已於 2026-08-20 套用第 17–19 個 migration，與 repo 同為 19 個版本。**既有 `sleep_reports` 資料列的同意值一律為 false**，因此組織彙整目前只反映套用後明確勾選同意的評估 —— 這是刻意的隱私預設，但**上線前仍應向企業客戶說明**，否則他們會發現彙整樣本數比預期少。
 
 ## 34. Batch S4 清單漏列項目補正（2026-08-18）
 

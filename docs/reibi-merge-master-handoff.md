@@ -91,7 +91,7 @@
 | Playwright E2E（`npm run e2e`） | `24 passed`（18 desktop + 6 mobile） |
 
 - Git：提交 `b62fa47` 已推到 `origin/codex/reibi-fastapi-merge`。
-- Supabase 遠端：`Schumann-AI-Platform` 為 `ACTIVE_HEALTHY`，16 個 migration 與 repo 一致；本次移植未新增 schema。
+- Supabase 遠端：`Schumann-AI-Platform` 為 `ACTIVE_HEALTHY`，**19 個 migration 與 repo 一致（2026-08-20 套用第 17–19 個）**。註：自動備份查詢顯示 `pitr_enabled: false` 且無可用還原點，套用前以手動 schema dump 作為回滾依據。
 - Docker Desktop 與 CLI 在本次工作階段可用（Server 29.6.2）。
 
 > 兩個測試基礎建設的重要修正：後端測試原本讀 `backend/.env` 執行，等同指向**正式** Supabase 專案（現已釘死為假值）；`supabase test db` 原本一直回傳 FAIL，Batch K 的斷言從未被計入先前宣稱的「135 項 pgTAP 通過」。詳見 checklist §28。
@@ -355,7 +355,7 @@ npm.cmd run dev
 
 遠端現有少量 staging 資料：1 個 organization／enterprise、1 個 site、2 個 trusted internal users；報價、合約、工單與服務案件目前為 0。不要為 E2E 直接污染共用 Supabase；先規劃可辨識且可安全清理的測試資料。
 
-### 6.2 16 個 migration 順序
+### 6.2 19 個 migration 順序
 
 1. `20260810032520_baseline_remote_schema.sql`
 2. `20260810033150_harden_existing_access.sql`
@@ -373,6 +373,9 @@ npm.cmd run dev
 14. `20260814032823_reibi_mfa_self_enrollment.sql`
 15. `20260814080434_reibi_batch_k_onboarding.sql`
 16. `20260814093150_reibi_batch_k_organizations_sync.sql`
+17. `20260818074631_sleep_reports_org_aggregate_consent.sql`
+18. `20260819103000_reibi_quote_workorder_notes.sql`
+19. `20260819140000_reibi_personal_subscription_gate.sql`
 
 ### 6.3 Schema 變更標準流程
 
