@@ -19,6 +19,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from auth import require_reibi_manager, require_reibi_super
+from reibi_work_order_catalog import (
+    acceptance_checklist,
+    catalog_payload,
+    default_items_from_quote_config,
+    unknown_check_ids,
+)
 
 
 ARTIFACT_SOURCES = {"main", "l5", "quote", "workorder"}
@@ -199,12 +205,19 @@ class QuoteWrite(StrictModel):
     a_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
     b_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
     c_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    # C 層明細。c_layer_fee 仍是權威金額；這兩欄只還原「方案費 + 高風險加購」的組成。
+    c_fee_base: Decimal = Field(default=Decimal("0"), ge=0)
+    c_high_risk_fee: Decimal = Field(default=Decimal("0"), ge=0)
     d_layer_fee_min: Decimal = Field(default=Decimal("0"), ge=0)
     d_layer_fee_max: Decimal = Field(default=Decimal("0"), ge=0)
     e_layer_fee: Decimal = Field(default=Decimal("0"), ge=0)
     total_year_fee: Decimal = Field(default=Decimal("0"), ge=0)
     total_contract_fee: Decimal = Field(default=Decimal("0"), ge=0)
     original_contract_no: Optional[str] = Field(default=None, max_length=100)
+    note: Optional[str] = Field(default=None, max_length=2_000)
+    b_custom_note: Optional[str] = Field(default=None, max_length=2_000)
+    d_note: Optional[str] = Field(default=None, max_length=2_000)
+    e_note: Optional[str] = Field(default=None, max_length=2_000)
     config: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -243,6 +256,8 @@ class WorkOrderWrite(StrictModel):
     acceptance_date: Optional[date] = None
     client_sign_name: Optional[str] = Field(default=None, max_length=100)
     punch_list: Optional[str] = Field(default=None, max_length=2_000)
+    global_note: Optional[str] = Field(default=None, max_length=2_000)
+    special_terms: Optional[str] = Field(default=None, max_length=2_000)
     items: dict[str, Any] = Field(default_factory=dict)
     acceptance: dict[str, Any] = Field(default_factory=dict)
 
@@ -284,6 +299,8 @@ class WorkOrderFromContractRequest(StrictModel):
     scheduled_date: Optional[date] = None
     service_period: Optional[str] = Field(default=None, max_length=100)
     staff_names: Optional[str] = Field(default=None, max_length=500)
+    global_note: Optional[str] = Field(default=None, max_length=2_000)
+    special_terms: Optional[str] = Field(default=None, max_length=2_000)
     items: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -660,6 +677,8 @@ def _artifact_quote(record: dict[str, Any]) -> dict[str, Any]:
         "a_layer_fee": _money(record.get("aFee")),
         "b_layer_fee": _money(record.get("bFee")),
         "c_layer_fee": _money(record.get("cFeeTotal")),
+        "c_fee_base": _money(record.get("cFeeBase")),
+        "c_high_risk_fee": _money(record.get("cHighRiskFee")),
         "d_layer_fee_min": _money(record.get("dFeeMin")),
         "d_layer_fee_max": _money(record.get("dFeeMax")),
         "e_layer_fee": _money(record.get("eTotalFee")),
@@ -667,6 +686,10 @@ def _artifact_quote(record: dict[str, Any]) -> dict[str, Any]:
         "total_contract_fee": _money(record.get("total3Year")),
         "original_contract_no": _clean_optional(record.get("origContractNo")),
         "linked_contract_no": _clean_optional(record.get("linkedContractNo")),
+        "note": _clean_optional(record.get("note")),
+        "b_custom_note": _clean_optional(record.get("bCustomNote")),
+        "d_note": _clean_optional(record.get("dNote")),
+        "e_note": _clean_optional(record.get("eNote")),
         "config": _redact_secrets({
             "bBed": record.get("bBed"), "bChair": record.get("bChair"), "bLA200": record.get("bLA200"),
             "cTier": record.get("cTier"), "dItems": record.get("dItems"), "dSites": record.get("dSites"),
@@ -722,6 +745,8 @@ def _artifact_work_order(record: dict[str, Any]) -> dict[str, Any]:
         "acceptance_date": _date(record.get("acceptDate")),
         "client_sign_name": _clean_optional(record.get("clientSignName")),
         "punch_list": _clean_optional(record.get("punchList")),
+        "global_note": _clean_optional(record.get("globalNote")),
+        "special_terms": _clean_optional(record.get("specialTerms")),
         "items": _redact_secrets({
             "selectedItems": record.get("selectedItems", {}), "itemSpecs": record.get("itemSpecs", {}),
             "itemQty": record.get("itemQty", {}), "itemNote": record.get("itemNote", {}),
@@ -1159,7 +1184,12 @@ def calculate_quote_fees(payload: QuoteCalculationRequest) -> dict[str, Any]:
     b_base = payload.b_bed * 800_000 + payload.b_chair * 750_000 + payload.b_la200 * 149_400
     b_fee = (Decimal(b_base) * discount).quantize(Decimal("1"))
     c_base = payload.c_custom_fee if payload.c_custom_fee is not None else Decimal(c_tiers.get(payload.c_tier or "", 0))
-    c_fee = ((c_base + Decimal(payload.c_high_risk * 14_000)) * discount).quantize(Decimal("1"))
+    c_high_risk_base = Decimal(payload.c_high_risk * 14_000)
+    # 折數同時套在方案費與高風險加購上，兩者相加後才是 c_layer_fee。
+    # 明細各自四捨五入，總額仍以合併後計算，避免明細加總與總額差一元。
+    c_fee_base = (c_base * discount).quantize(Decimal("1"))
+    c_high_risk_fee = (c_high_risk_base * discount).quantize(Decimal("1"))
+    c_fee = ((c_base + c_high_risk_base) * discount).quantize(Decimal("1"))
     d_min = (Decimal(sum(d_prices[item][0] for item in payload.d_items)) * discount).quantize(Decimal("1"))
     d_max = (Decimal(sum(d_prices[item][1] for item in payload.d_items)) * discount).quantize(Decimal("1"))
     e_layer = calculate_e_layer(payload)
@@ -1187,6 +1217,8 @@ def calculate_quote_fees(payload: QuoteCalculationRequest) -> dict[str, Any]:
         "a_layer_fee": a_fee,
         "b_layer_fee": b_fee,
         "c_layer_fee": c_fee,
+        "c_fee_base": c_fee_base,
+        "c_high_risk_fee": c_high_risk_fee,
         "d_layer_fee_min": d_min,
         "d_layer_fee_max": d_max,
         "e_layer_fee": e_fee,
@@ -1793,8 +1825,11 @@ def create_reibi_router(client: Any) -> APIRouter:
         allowed = {
             "client_alias", "contact_name", "phone", "email", "address", "industry", "member_count",
             "pay_mode", "contract_years", "contract_start", "contract_end", "a_layer_fee", "b_layer_fee",
-            "c_layer_fee", "d_layer_fee_min", "d_layer_fee_max", "e_layer_fee", "total_year_fee",
-            "total_contract_fee", "config", "distributor_id", "partner_id", "staff_id",
+            "c_layer_fee", "c_fee_base", "c_high_risk_fee", "d_layer_fee_min", "d_layer_fee_max",
+            "e_layer_fee", "total_year_fee", "total_contract_fee", "config",
+            "distributor_id", "partner_id", "staff_id",
+            # 備註隨快照帶入：續約與升級沿用原約的議定條件，業務再視情況修改。
+            "note", "b_custom_note", "d_note", "e_note",
         }
         values = {key: value for key, value in snapshot.items() if key in allowed}
         values.update({
@@ -1815,10 +1850,21 @@ def create_reibi_router(client: Any) -> APIRouter:
     ):
         return list_scoped("reibi_work_orders", current_user, page, size, record_status, search)
 
+    @router.get("/work-orders/catalog")
+    def work_order_catalog(_: dict = Depends(require_reibi_manager)):
+        """D 層施工項目目錄：規格選項、交付項目與驗收標準。
+
+        路由必須排在 /work-orders/{record_id} 之前，否則 "catalog" 會先被
+        當成 record_id 而回 422。
+        """
+        return {"status": "success", "data": catalog_payload()}
+
     @router.get("/work-orders/{record_id}")
     def get_work_order(record_id: int, current_user: dict = Depends(require_reibi_manager)):
         _, row = get_scoped("reibi_work_orders", record_id, current_user)
-        return {"status": "success", "data": row}
+        data = dict(row)
+        data["acceptance_checklist"] = acceptance_checklist(row.get("items"), row.get("acceptance"))
+        return {"status": "success", "data": data}
 
     @router.post("/work-orders", status_code=status.HTTP_201_CREATED)
     def create_work_order(payload: WorkOrderWrite, current_user: dict = Depends(require_reibi_manager)):
@@ -1857,9 +1903,13 @@ def create_reibi_router(client: Any) -> APIRouter:
         enterprise_id, contract = get_scoped("reibi_contracts", record_id, current_user)
         terms = contract.get("terms") if isinstance(contract.get("terms"), dict) else {}
         quote_snapshot = terms.get("quote_snapshot") if isinstance(terms.get("quote_snapshot"), dict) else {}
+        quote_config = quote_snapshot.get("config") if isinstance(quote_snapshot.get("config"), dict) else {}
         carried_items = {
-            "dItems": quote_snapshot.get("config", {}).get("dItems", {}) if isinstance(quote_snapshot.get("config"), dict) else {},
-            "dSites": quote_snapshot.get("config", {}).get("dSites", []) if isinstance(quote_snapshot.get("config"), dict) else [],
+            "dItems": quote_config.get("dItems", {}),
+            "dSites": quote_config.get("dSites", []),
+            # 由報價的 D 層勾選推出 selectedItems 與預設數量，
+            # 驗收清單才有標準條目可對；前端送來的 items 仍可覆寫。
+            **default_items_from_quote_config(quote_config),
             **payload.items,
         }
         values = _serialize_payload(payload)
@@ -1878,6 +1928,21 @@ def create_reibi_router(client: Any) -> APIRouter:
         enterprise_id, existing = get_scoped("reibi_work_orders", record_id, current_user)
         if existing.get("status") != "驗收中":
             raise HTTPException(status_code=409, detail="只有驗收中的工單可以登錄驗收結果")
+        orphans = unknown_check_ids(existing.get("items"), payload.acceptance)
+        if orphans:
+            raise HTTPException(
+                status_code=422,
+                detail=f"驗收勾核對不到已選施工項目：{'、'.join(orphans[:5])}",
+            )
+        checklist = acceptance_checklist(existing.get("items"), payload.acceptance)
+        # 驗收完成代表每一條標準都通過。有標準未勾或勾了未通過就不能結案，
+        # 這是 Artifact 用 allPassed 控制「驗收通過」按鈕的同一條規則，
+        # 差別在改由後端強制，前端不能繞過。
+        if payload.acceptance_result == "驗收完成" and checklist["total"] > 0 and not checklist["all_passed"]:
+            raise HTTPException(
+                status_code=422,
+                detail=f"尚有 {checklist['total'] - checklist['passed']} 條驗收標準未通過，不可登錄為驗收完成",
+            )
         values = _serialize_payload(payload)
         values.update({
             "status": payload.acceptance_result,
@@ -1885,7 +1950,9 @@ def create_reibi_router(client: Any) -> APIRouter:
             "updated_at": _now_iso(),
         })
         rows = _execute(client.table("reibi_work_orders").update(values).eq("id", record_id).eq("enterprise_id", enterprise_id), "登錄工單驗收")
-        return {"status": "success", "data": rows[0]}
+        data = dict(rows[0])
+        data["acceptance_checklist"] = acceptance_checklist(data.get("items"), data.get("acceptance"))
+        return {"status": "success", "data": data}
 
     @router.post("/artifacts/validate")
     def validate_artifact(export: ArtifactExport, _: dict = Depends(require_reibi_manager)):

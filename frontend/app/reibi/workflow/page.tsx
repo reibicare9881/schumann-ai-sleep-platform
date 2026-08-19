@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Building2, Calculator, CheckCircle2, FileCheck2, FileText, HardHat, Plus, Printer, RefreshCw, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Building2, Calculator, CheckCircle2, ClipboardList, FileCheck2, FileText, HardHat, Plus, Printer, RefreshCw, Save, Trash2 } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
 import API from "@/lib/api";
@@ -11,6 +11,11 @@ import { can } from "@/lib/config";
 type Tab = "quotes" | "contracts" | "work-orders";
 type Row = Record<string, any>;
 type WorkItem = { name: string; spec: string; quantity: number; note: string; result?: "pass" | "fail"; check_note?: string };
+type CatalogSpec = { key: string; label: string; options: string[] };
+type CatalogItem = { key: string; name: string; unit: string; default_quantity: number; specs: CatalogSpec[]; deliverables: string[]; accept_criteria: string[] };
+type ChecklistRow = { check_id: string; criterion: string; result: "pass" | "fail" | null; note: string | null };
+type ChecklistGroup = { key: string; name: string; unit: string; quantity: number; specs: Record<string, string>; deliverables: string[]; checks: ChecklistRow[] };
+type Checklist = { groups: ChecklistGroup[]; total: number; passed: number; failed: number; percent: number; all_passed: boolean };
 
 const QUOTE_NEXT: Record<string, string> = { 草稿: "已發送", 已發送: "已確認" };
 const CONTRACT_NEXT: Record<string, string> = { "草稿(合約)": "已發送", 已發送: "待用印", 待用印: "用印完成", 用印完成: "執行中", 執行中: "存檔" };
@@ -19,6 +24,27 @@ const D_ITEMS = [
   ["poster", "基礎海報套組"], ["board", "健促公告欄"], ["display", "設備展示區"],
   ["qr", "QR Code 貼紙組"], ["digital", "數位看板內容"], ["install", "現場施工"],
 ] as const;
+
+// D 層套組（Artifact PRICING.D.bundles）。
+// 只當成勾選預設值使用，不帶自己的價格：Artifact 的套組金額是「快速試算」頁的
+// 區間中位數，跟正式報價單逐項加總的結果本來就不同（例如完整型套組標 10-20 萬，
+// 六項逐項加總是 10.5-21.5 萬）。正式報價一律以逐項金額為準，這裡若再顯示套組
+// 標價會出現兩個互相矛盾的數字。
+const D_BUNDLES: Array<[string, ReadonlyArray<string>]> = [
+  ["基礎型", ["poster", "qr"]],
+  ["標準型", ["poster", "qr", "board", "install"]],
+  ["完整型", ["poster", "qr", "board", "display", "digital", "install"]],
+];
+
+// 人數級距的建議配置（Artifact QuickQuote 的 applyTier）。
+// 選定級距會一併帶入 B 層設備數量與 C 層方案，業務再依現場需求調整。
+// 超過 1000 人為定制型，Artifact 不給建議數量，這裡同樣不提供按鈕。
+const MEMBER_TIERS: Array<{ label: string; members: number; bed: number; chair: number; la200: number; cTier: string }> = [
+  { label: "基本型 ≤100 人", members: 100, bed: 1, chair: 1, la200: 1, cTier: "基本型" },
+  { label: "成長型 101-300 人", members: 300, bed: 2, chair: 2, la200: 2, cTier: "成長型" },
+  { label: "專業型 301-500 人", members: 500, bed: 3, chair: 3, la200: 3, cTier: "專業型" },
+  { label: "旗艦型 501-1000 人", members: 1000, bed: 5, chair: 5, la200: 5, cTier: "旗艦型" },
+];
 
 const EMPTY_QUOTE = {
   doc_type: "新簽報價", client_name: "", client_alias: "", contact_name: "", phone: "", email: "", address: "", industry: "",
@@ -31,6 +57,8 @@ const EMPTY_QUOTE = {
   e_value_added: {} as Record<string, boolean>, e_value_custom: 0,
   e_cpi_apply: false, e_cpi_rate: 0,
   original_a_fee: "", upgrade_date: "", original_contract_end: "",
+  // 備註欄位。不參與任何計算，但是業務記錄議定條件的地方。
+  note: "", b_custom_note: "", d_note: "", e_note: "",
 };
 
 const E_VALUE_ITEMS: Array<[string, string, number]> = [
@@ -44,6 +72,7 @@ const EMPTY_WORK = {
   id: null as number | null, work_order_no: "", contract_id: null as number | null, contract_no: "", client_name: "", status: "草稿",
   contact_name: "", phone: "", email: "", address: "", scheduled_date: "", service_period: "", staff_names: "",
   scope_confirm_reibi: "", scope_confirm_reibi_date: "", scope_confirm_client: "", scope_confirm_client_date: "",
+  global_note: "", special_terms: "",
 };
 
 const money = (value: any) => `NT$ ${Number(value || 0).toLocaleString("zh-TW")}`;
@@ -63,6 +92,17 @@ export default function ReibiWorkflowPage() {
   const [calculation, setCalculation] = useState<Row | null>(null);
   const [work, setWork] = useState({ ...EMPTY_WORK });
   const [workItems, setWorkItems] = useState<WorkItem[]>([]);
+  // D 層施工項目目錄與工單本身的勾選、數量、規格、逐項備註。
+  const [itemCatalog, setItemCatalog] = useState<CatalogItem[]>([]);
+  const [selectedItems, setSelectedItems] = useState<Record<string, boolean>>({});
+  const [itemQty, setItemQty] = useState<Record<string, number>>({});
+  const [itemSpecs, setItemSpecs] = useState<Record<string, Record<string, string>>>({});
+  const [itemNote, setItemNote] = useState<Record<string, string>>({});
+  // 逐條驗收勾核。checks 以 "項目key:標準序號" 為鍵，與後端 acceptance_checklist 相同。
+  const [acceptChecks, setAcceptChecks] = useState<Record<string, "pass" | "fail">>({});
+  const [checkNotes, setCheckNotes] = useState<Record<string, string>>({});
+  const [checklist, setChecklist] = useState<Checklist | null>(null);
+  const [showSurvey, setShowSurvey] = useState(false);
   const [acceptanceDate, setAcceptanceDate] = useState("");
   const [clientSignName, setClientSignName] = useState("");
   const [punchList, setPunchList] = useState("");
@@ -110,6 +150,15 @@ export default function ReibiWorkflowPage() {
     });
   }, [allowed, tab, selectedOrgCode]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 施工項目目錄不隨企業改變，載入一次即可。
+  useEffect(() => {
+    if (!allowed) return;
+    void API.getReibiWorkOrderCatalog().then((response: any) => {
+      if (response.status === "success") setItemCatalog(response.data || []);
+      else setError(response.message || "無法讀取施工項目目錄");
+    });
+  }, [allowed]);
+
   const calculate = async () => {
     setLoading(true); setError("");
     const response: any = await API.calculateReibiQuote({
@@ -147,8 +196,12 @@ export default function ReibiWorkflowPage() {
     member_count: quote.member_count, pay_mode: quote.pay_mode, contract_years: quote.contract_years,
     contract_start: clean(quote.contract_start), contract_end: clean(quote.contract_end),
     a_layer_fee: isDistributor ? 0 : fees.a_layer_fee, b_layer_fee: isDistributor ? 0 : fees.b_layer_fee, c_layer_fee: isDistributor ? 0 : fees.c_layer_fee,
+    c_fee_base: isDistributor ? 0 : fees.c_fee_base, c_high_risk_fee: isDistributor ? 0 : fees.c_high_risk_fee,
     d_layer_fee_min: isDistributor ? 0 : fees.d_layer_fee_min, d_layer_fee_max: isDistributor ? 0 : fees.d_layer_fee_max, e_layer_fee: isDistributor ? 0 : fees.e_layer_fee,
     total_year_fee: isDistributor ? 0 : fees.total_year_fee, total_contract_fee: isDistributor ? 0 : fees.total_contract_fee,
+    // 同上：備註要能被清空，因此送空字串而不是 null。
+    note: quote.note, b_custom_note: quote.b_custom_note,
+    d_note: quote.d_note, e_note: quote.e_note,
     config: {
       bBed: quote.b_bed, bChair: quote.b_chair, bLA200: quote.b_la200, cTier: quote.c_tier,
       cHighRisk: quote.c_high_risk, dItems: quote.d_items,
@@ -181,6 +234,7 @@ export default function ReibiWorkflowPage() {
       staff_id: row.staff_id ? String(row.staff_id) : "", original_contract_no: row.original_contract_no || "",
       d_sites: Array.isArray(config.dSites) ? config.dSites.map((site: Row) => Number(site.id)).filter(Boolean) : [],
       contract_start: row.contract_start || "", contract_end: row.contract_end || "",
+      note: row.note || "", b_custom_note: row.b_custom_note || "", d_note: row.d_note || "", e_note: row.e_note || "",
     });
     setCalculation(row); setEditingQuoteId(row.id); window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -220,7 +274,7 @@ export default function ReibiWorkflowPage() {
 
   const selectRow = (row: Row) => {
     setSelected(row);
-    if (tab === "work-orders") editWork(row);
+    if (tab === "work-orders") void editWork(row);
     if (tab === "contracts") {
       const current = row.terms?.execution || {};
       setExecution({ signed_by: current.signed_by || "", signed_at: current.signed_at || "", sealed_at: current.sealed_at || "", executed_at: current.executed_at || "", note: current.note || "" });
@@ -236,11 +290,40 @@ export default function ReibiWorkflowPage() {
     setLoading(false);
   };
 
-  const editWork = (row: Row) => {
-    setWork({ ...EMPTY_WORK, ...row, scheduled_date: row.scheduled_date || "", scope_confirm_reibi_date: row.scope_confirm_reibi_date || "", scope_confirm_client_date: row.scope_confirm_client_date || "" });
-    setWorkItems(Array.isArray(row.items?.customItems) ? row.items.customItems : []);
-    setSelected(row); window.scrollTo({ top: 0, behavior: "smooth" });
+  const applyWorkOrder = (row: Row) => {
+    setWork({
+      ...EMPTY_WORK, ...row, scheduled_date: row.scheduled_date || "",
+      scope_confirm_reibi_date: row.scope_confirm_reibi_date || "", scope_confirm_client_date: row.scope_confirm_client_date || "",
+      global_note: row.global_note || "", special_terms: row.special_terms || "",
+    });
+    const items = row.items || {};
+    setWorkItems(Array.isArray(items.customItems) ? items.customItems : []);
+    setSelectedItems(items.selectedItems && typeof items.selectedItems === "object" ? items.selectedItems : {});
+    setItemQty(items.itemQty && typeof items.itemQty === "object" ? items.itemQty : {});
+    setItemSpecs(items.itemSpecs && typeof items.itemSpecs === "object" ? items.itemSpecs : {});
+    setItemNote(items.itemNote && typeof items.itemNote === "object" ? items.itemNote : {});
+    const acceptance = row.acceptance || {};
+    setAcceptChecks(acceptance.acceptChecks && typeof acceptance.acceptChecks === "object" ? acceptance.acceptChecks : {});
+    setCheckNotes(acceptance.checkNotes && typeof acceptance.checkNotes === "object" ? acceptance.checkNotes : {});
+    setAcceptanceDate(row.acceptance_date || "");
+    setClientSignName(row.client_sign_name || "");
+    setPunchList(row.punch_list || "");
+    setChecklist(row.acceptance_checklist || null);
+    setSelected(row);
   };
+
+  // 清單只帶回摘要欄位，逐項規格與驗收勾核要再取單筆。
+  const editWork = async (row: Row) => {
+    applyWorkOrder(row);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    const response: any = await API.getReibiWorkOrder(row.id);
+    if (response.status === "success") applyWorkOrder(response.data);
+  };
+
+  const workItemsPayload = () => ({
+    ...(selected?.items || {}),
+    selectedItems, itemQty, itemSpecs, itemNote, customItems: workItems,
+  });
 
   const saveWork = async () => {
     if (!work.id) return;
@@ -251,9 +334,12 @@ export default function ReibiWorkflowPage() {
       scheduled_date: clean(work.scheduled_date), service_period: clean(work.service_period), staff_names: clean(work.staff_names),
       scope_confirm_reibi: clean(work.scope_confirm_reibi), scope_confirm_reibi_date: clean(work.scope_confirm_reibi_date),
       scope_confirm_client: clean(work.scope_confirm_client), scope_confirm_client_date: clean(work.scope_confirm_client_date),
-      items: { ...(selected?.items || {}), customItems: workItems }, acceptance: selected?.acceptance || {},
+      // 備註送空字串而非 null：後端的 _serialize_payload 會濾掉 None，
+      // 用 clean() 就會變成「清空後儲存，舊內容仍在」。
+      global_note: work.global_note, special_terms: work.special_terms,
+      items: workItemsPayload(), acceptance: { acceptChecks, checkNotes },
     });
-    if (response.status === "success") { setMessage("工單內容已更新。"); setSelected(response.data); await loadRows("work-orders"); }
+    if (response.status === "success") { setMessage("工單內容已更新。"); await editWork(response.data); await loadRows("work-orders"); }
     else setError(response.message || "工單更新失敗");
     setLoading(false);
   };
@@ -263,12 +349,52 @@ export default function ReibiWorkflowPage() {
     setLoading(true); setError("");
     const response: any = await API.acceptReibiWorkOrder(work.id, {
       acceptance_result: result, acceptance_date: acceptanceDate, client_sign_name: clientSignName,
-      punch_list: clean(punchList), acceptance: { item_results: workItems.map(item => ({ name: item.name, result: item.result || "pass", note: item.check_note || "" })) },
+      punch_list: clean(punchList),
+      acceptance: {
+        acceptChecks, checkNotes,
+        // 自訂項目沒有目錄標準可對，逐項結果單獨保留。
+        item_results: workItems.map(item => ({ name: item.name, result: item.result || "pass", note: item.check_note || "" })),
+      },
     });
-    if (response.status === "success") { setMessage(`驗收結果已登錄為「${result}」。`); editWork(response.data); await loadRows("work-orders"); }
+    if (response.status === "success") { setMessage(`驗收結果已登錄為「${result}」。`); await editWork(response.data); await loadRows("work-orders"); }
     else setError(response.message || "驗收登錄失敗");
     setLoading(false);
   };
+
+  // 勾核清單在畫面上即時反映，不必等後端重算。
+  const liveChecklist = useMemo(() => {
+    const groups = itemCatalog.filter(item => selectedItems[item.key]);
+    const rows = groups.flatMap(item => item.accept_criteria.map((_, index) => `${item.key}:${index}`));
+    const passed = rows.filter(id => acceptChecks[id] === "pass").length;
+    const failed = rows.filter(id => acceptChecks[id] === "fail").length;
+    return { groups, total: rows.length, passed, failed, allPassed: rows.length > 0 && passed === rows.length };
+  }, [itemCatalog, selectedItems, acceptChecks]);
+
+  const toggleCatalogItem = (item: CatalogItem, checked: boolean) => {
+    setSelectedItems(previous => ({ ...previous, [item.key]: checked }));
+    if (checked) { setItemQty(previous => ({ ...previous, [item.key]: previous[item.key] || item.default_quantity })); return; }
+    // 取消勾選時一併清掉該項的驗收勾核，否則後端會判定為孤兒鍵值而擋下驗收。
+    setAcceptChecks(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => !id.startsWith(`${item.key}:`))) as Record<string, "pass" | "fail">);
+    setCheckNotes(previous => Object.fromEntries(Object.entries(previous).filter(([id]) => !id.startsWith(`${item.key}:`))));
+  };
+
+  // 場勘需求單的來源。報價把 D 層配置放在 config，合約放在 terms.quote_snapshot.config，
+  // 工單則在建立時複製到 items —— 三種文件都能產生同一份單子。
+  const surveySource = useMemo(() => {
+    if (!selected) return { items: {} as Record<string, boolean>, sites: [] as Row[], note: "" };
+    const fromContract = selected.terms?.quote_snapshot?.config;
+    const source = selected.config || fromContract || selected.items || {};
+    return {
+      items: (source.dItems || {}) as Record<string, boolean>,
+      sites: Array.isArray(source.dSites) ? source.dSites : [],
+      note: selected.d_note || "",
+    };
+  }, [selected]);
+  const surveySites = surveySource.sites;
+  const surveyItems = useMemo(
+    () => itemCatalog.filter(item => surveySource.items[item.key]),
+    [itemCatalog, surveySource],
+  );
 
   const currentRows = rows[tab];
   const expiryWarning = useMemo(() => {
@@ -279,6 +405,51 @@ export default function ReibiWorkflowPage() {
 
   if (!session) return <div className="p-8 text-center text-slate-500">請先登入。</div>;
   if (!allowed) return <div className="p-8 text-center text-red-700">目前帳號沒有 REIBI 商務文件管理權限。</div>;
+
+  // D 層場勘需求單（Artifact QuoteForm／ContractView 的 showSurvey 畫面）。
+  // 業務帶著這張單子到現場，勾選項目與場域已印好，右側留白給現場記錄。
+  if (showSurvey && selected) return (
+    <div className="mx-auto max-w-3xl space-y-4 px-4 py-8">
+      <div className="flex justify-between print:hidden">
+        <button onClick={() => setShowSurvey(false)} className="text-sm font-bold text-teal-700">← 返回文件</button>
+        <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold"><Printer className="h-4 w-4" />列印／另存 PDF</button>
+      </div>
+      <section className="print-area rounded-2xl border border-slate-200 bg-white p-8 leading-relaxed">
+        <p className="text-center text-base font-black text-slate-800">麗媚生化科技有限公司<br /><span className="text-sm">REIBI BIO-Technology Co., Ltd.</span></p>
+        <p className="mt-2 text-center text-sm font-black text-slate-700">D 層 健康識能環境佈置 — 場勘需求單</p>
+        <dl className="mt-6 grid gap-1 rounded-xl bg-slate-50 p-4 text-sm">
+          <div>客戶：{selected.client_name || "—"}{selected.address ? `（${selected.address}）` : ""}</div>
+          <div>聯絡人：{selected.contact_name || "—"} · {selected.phone || "—"}</div>
+          <div>文件編號：{selected.doc_no || selected.work_order_no || "（草稿，尚未儲存）"}</div>
+          <div>製表日期：{new Date().toISOString().slice(0, 10)}</div>
+        </dl>
+
+        <h2 className="mt-6 text-sm font-black text-slate-700">客戶已選擇項目</h2>
+        <div className="mt-2 space-y-2">{surveyItems.length > 0 ? surveyItems.map(item => <div key={item.key} className="rounded-lg border border-slate-200 p-3 text-xs">
+          <b className="text-slate-700">{item.name}</b>
+          <div className="mt-1 text-slate-500">預設 {item.default_quantity} {item.unit}　交付：{item.deliverables.join("、")}</div>
+        </div>) : <p className="text-xs text-slate-500">（尚未勾選 D 層項目，請先於報價的 D 層勾選後再產生本單）</p>}</div>
+
+        <h2 className="mt-6 text-sm font-black text-slate-700">場域地點</h2>
+        <div className="mt-2 space-y-2">{surveySites.length > 0 ? surveySites.map((site: Row, index: number) => <div key={site.id ?? index} className="rounded-lg border border-slate-200 p-3 text-xs">
+          <b className="text-slate-700">{site.label || "(未命名場域)"}</b>
+          <div className="text-slate-500">{site.address || "(地址待場勘後補登)"}</div>
+          {site.note && <div className="text-slate-400">備註：{site.note}</div>}
+        </div>) : [1, 2, 3].map(n => <div key={n} className="rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-400">場域{n}　名稱：________________　地址：____________________________</div>)}</div>
+
+        <div className="mt-6 rounded-xl bg-amber-50 p-4 text-xs">
+          <p className="font-black text-amber-900">業務現場勘查記錄欄（現場填寫）</p>
+          {["現況空間／動線：", "電力／網路可用性：", "與 B 層設備安裝之協調事項：", "勘查人員：________________　勘查日期：________________"].map(label => (
+            <p key={label} className="mt-4 text-amber-900">{label}</p>
+          ))}
+        </div>
+
+        {surveySource.note && <p className="mt-4 text-xs text-slate-600">報價 D 層備註：{surveySource.note}</p>}
+        <p className="mt-4 text-xs text-slate-500">付款方式：50% 訂金 → 50% 完工驗收。正式報價需現場勘查確認後 3-7 工作日內提供。</p>
+        <p className="mt-3 text-center text-xs text-slate-400">本文件由系統自動產生，如有疑問請聯繫 reibiservice@gmail.com</p>
+      </section>
+    </div>
+  );
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-8">
@@ -302,6 +473,13 @@ export default function ReibiWorkflowPage() {
 
       {tab === "quotes" && <section className="rounded-2xl border border-slate-200 bg-white p-6 print:hidden">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-black text-slate-800">{editingQuoteId ? "編輯報價" : "快速試算與正式報價"}</h2><p className="mt-1 text-xs text-slate-500">計價規則沿用 Artifact；編號由資料庫安全產生。</p></div>{editingQuoteId && <button onClick={() => { setEditingQuoteId(null); setQuote({ ...EMPTY_QUOTE }); setCalculation(null); }} className="text-sm font-bold text-slate-500">取消編輯</button>}</div>
+        <div className="mb-4 rounded-xl bg-slate-50 p-3">
+          <div className="text-xs font-bold text-slate-600">人數級距建議配置</div>
+          <p className="mt-1 text-[11px] text-slate-500">帶入該級距的人數、B 層設備數量與 C 層方案，之後仍可逐項調整。1000 人以上為定制型，需個別議價。</p>
+          <div className="mt-2 flex flex-wrap gap-2">{MEMBER_TIERS.map(tier => <button key={tier.label} type="button"
+            onClick={() => setQuote(p => ({ ...p, member_count: tier.members, b_bed: tier.bed, b_chair: tier.chair, b_la200: tier.la200, c_tier: tier.cTier }))}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:border-teal-600 hover:text-teal-700">{tier.label}</button>)}</div>
+        </div>
         <div className="grid gap-3 md:grid-cols-4">
           <Field label="報價類型"><select value={quote.doc_type} onChange={e => setQuote(p => ({ ...p, doc_type: e.target.value }))} className="input"><option>新簽報價</option><option>經銷商報價</option><option>升級報價</option><option>續約報價</option></select></Field>
           <Field label="客戶名稱 *"><input value={quote.client_name} onChange={e => setQuote(p => ({ ...p, client_name: e.target.value }))} className="input" /></Field>
@@ -325,7 +503,14 @@ export default function ReibiWorkflowPage() {
           <Field label="合約開始"><input type="date" value={quote.contract_start} onChange={e => setQuote(p => ({ ...p, contract_start: e.target.value }))} className="input" /></Field>
           <Field label="合約結束"><input type="date" value={quote.contract_end} onChange={e => setQuote(p => ({ ...p, contract_end: e.target.value }))} className="input" /></Field>
         </div>
-        <div className="mt-4"><div className="mb-2 text-xs font-bold text-slate-600">D 層環境佈置</div><div className="flex flex-wrap gap-2">{D_ITEMS.map(([key,label]) => <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={Boolean(quote.d_items[key])} onChange={e => setQuote(p => ({ ...p, d_items: { ...p.d_items, [key]: e.target.checked } }))} />{label}</label>)}</div>{catalogs.sites.length > 0 && <><div className="mb-2 mt-4 text-xs font-bold text-slate-600">施工場域</div><div className="flex flex-wrap gap-2">{catalogs.sites.map(site => <label key={site.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={quote.d_sites.includes(site.id)} onChange={e => setQuote(p => ({...p,d_sites:e.target.checked ? [...p.d_sites,site.id] : p.d_sites.filter(id => id !== site.id)}))} />{site.label}</label>)}</div></>}</div>
+        <div className="mt-4"><div className="mb-2 text-xs font-bold text-slate-600">D 層環境佈置</div>
+          <div className="mb-2 flex flex-wrap items-center gap-2"><span className="text-[11px] text-slate-500">套組快選</span>{D_BUNDLES.map(([name, keys]) => <button key={name} type="button"
+            onClick={() => setQuote(p => ({ ...p, d_items: Object.fromEntries(D_ITEMS.map(([key]) => [key, keys.includes(key)])) }))}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:border-teal-600 hover:text-teal-700">{name}</button>)}
+            <button type="button" onClick={() => setQuote(p => ({ ...p, d_items: {} }))} className="rounded-lg px-2 py-1.5 text-xs font-bold text-slate-400 hover:text-slate-700">清除</button></div>
+          <div className="flex flex-wrap gap-2">{D_ITEMS.map(([key,label]) => <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={Boolean(quote.d_items[key])} onChange={e => setQuote(p => ({ ...p, d_items: { ...p.d_items, [key]: e.target.checked } }))} />{label}</label>)}</div>{catalogs.sites.length > 0 && <><div className="mb-2 mt-4 text-xs font-bold text-slate-600">施工場域</div><div className="flex flex-wrap gap-2">{catalogs.sites.map(site => <label key={site.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={quote.d_sites.includes(site.id)} onChange={e => setQuote(p => ({...p,d_sites:e.target.checked ? [...p.d_sites,site.id] : p.d_sites.filter(id => id !== site.id)}))} />{site.label}</label>)}</div></>}
+          <Field label="D 層備註"><textarea rows={2} className="input mt-3" value={quote.d_note} placeholder="場勘限制、施工時段、客戶自備材料等" onChange={e => setQuote(p => ({ ...p, d_note: e.target.value }))} /></Field>
+        </div>
         {quote.doc_type === "續約報價" && <div className="mt-5 rounded-xl border border-violet-200 bg-violet-50 p-4">
           <div className="text-xs font-black text-violet-900">E 層：設備延保與加值服務（續約適用）</div>
           <div className="mt-3 grid gap-3 md:grid-cols-4">
@@ -354,6 +539,7 @@ export default function ReibiWorkflowPage() {
             </label>
             <Field label="CPI 調幅（上限 5%，超過自動截去）"><input type="number" min={0} max={1} step={0.01} className="input" value={quote.e_cpi_rate} onChange={e => setQuote(p => ({ ...p, e_cpi_rate: Number(e.target.value) }))} /></Field>
           </div>
+          <Field label="E 層備註"><textarea rows={2} className="input mt-3" value={quote.e_note} placeholder="延保起算年度、加值服務交付時程等" onChange={e => setQuote(p => ({ ...p, e_note: e.target.value }))} /></Field>
         </div>}
 
         {quote.doc_type === "升級報價" && <div className="mt-5 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
@@ -364,6 +550,11 @@ export default function ReibiWorkflowPage() {
             <Field label="原合約到期日"><input type="date" className="input" value={quote.original_contract_end} onChange={e => setQuote(p => ({ ...p, original_contract_end: e.target.value }))} /></Field>
           </div>
         </div>}
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          <Field label="B 層設備備註"><textarea rows={2} className="input" value={quote.b_custom_note} placeholder="客製機型、交期約定、安裝條件" onChange={e => setQuote(p => ({ ...p, b_custom_note: e.target.value }))} /></Field>
+          <Field label="整體備註"><textarea rows={2} className="input" value={quote.note} placeholder="議價條件、付款約定、其他說明" onChange={e => setQuote(p => ({ ...p, note: e.target.value }))} /></Field>
+        </div>
 
         <div className="mt-5 flex flex-wrap gap-2"><button onClick={calculate} className="inline-flex items-center gap-2 rounded-xl border border-teal-200 px-4 py-2.5 text-sm font-bold text-teal-700"><Calculator className="h-4 w-4" />重新試算</button><button onClick={saveQuote} disabled={loading} className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Save className="h-4 w-4" />{editingQuoteId ? "儲存版本" : "建立草稿"}</button></div>
         {calculation?.cpi_capped && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">CPI 調幅超過 5% 上限，已自動截為 5%。</div>}
@@ -376,13 +567,100 @@ export default function ReibiWorkflowPage() {
           ))}
         </div>}
         {calculation && <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-5">{[["A 年費",calculation.a_layer_fee],["B 設備",calculation.b_layer_fee],["C 年費",calculation.c_layer_fee],["D 區間",`${money(calculation.d_layer_fee_min)}～${money(calculation.d_layer_fee_max)}`],["合約基本總額",calculation.total_contract_fee]].map(([label,value]) => <div key={String(label)} className="rounded-xl bg-slate-50 p-3"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 text-sm font-black text-slate-800">{typeof value === "string" ? value : money(value)}</div></div>)}</div>}
+        {calculation && Number(calculation.c_high_risk_fee || 0) > 0 && <p className="mt-2 text-xs text-slate-500">
+          C 年費組成：方案費 {money(calculation.c_fee_base)} ＋ 高風險高管加購 {money(calculation.c_high_risk_fee)}（{quote.c_high_risk} 人 × {money(14000)}，均已含折扣）
+        </p>}
       </section>}
 
       {tab === "work-orders" && work.id && <section className="rounded-2xl border border-slate-200 bg-white p-6 print:hidden"><h2 className="font-black text-slate-800">編輯工單 {work.work_order_no}</h2><div className="mt-4 grid gap-3 md:grid-cols-4"><Field label="聯絡人"><input className="input" value={work.contact_name} onChange={e => setWork(p => ({ ...p, contact_name: e.target.value }))} /></Field><Field label="施工日期"><input type="date" className="input" value={work.scheduled_date} onChange={e => setWork(p => ({ ...p, scheduled_date: e.target.value }))} /></Field><Field label="服務時段"><input className="input" value={work.service_period} onChange={e => setWork(p => ({ ...p, service_period: e.target.value }))} /></Field><Field label="服務人員"><input className="input" value={work.staff_names} onChange={e => setWork(p => ({ ...p, staff_names: e.target.value }))} /></Field><Field label="REIBI 範圍確認人"><input className="input" value={work.scope_confirm_reibi} onChange={e => setWork(p => ({ ...p, scope_confirm_reibi: e.target.value }))} /></Field><Field label="REIBI 確認日期"><input type="date" className="input" value={work.scope_confirm_reibi_date} onChange={e => setWork(p => ({ ...p, scope_confirm_reibi_date: e.target.value }))} /></Field><Field label="客戶範圍確認人"><input className="input" value={work.scope_confirm_client} onChange={e => setWork(p => ({ ...p, scope_confirm_client: e.target.value }))} /></Field><Field label="客戶確認日期"><input type="date" className="input" value={work.scope_confirm_client_date} onChange={e => setWork(p => ({ ...p, scope_confirm_client_date: e.target.value }))} /></Field></div>
-        <div className="mt-5 flex items-center justify-between"><h3 className="text-sm font-black text-slate-700">施工與驗收項目</h3><button onClick={() => setWorkItems(items => [...items, { name: "", spec: "", quantity: 1, note: "", result: "pass", check_note: "" }])} className="inline-flex items-center gap-1 text-xs font-bold text-teal-700"><Plus className="h-4 w-4" />新增項目</button></div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <Field label="整體備註"><textarea rows={2} className="input" value={work.global_note} placeholder="適用於全部施工項目的說明" onChange={e => setWork(p => ({ ...p, global_note: e.target.value }))} /></Field>
+          <Field label="特殊條款"><textarea rows={2} className="input" value={work.special_terms} placeholder="加班費分攤、現場限制、客戶自備材料等" onChange={e => setWork(p => ({ ...p, special_terms: e.target.value }))} /></Field>
+        </div>
+
+        {surveySites.length > 0 && <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <h3 className="text-sm font-black text-slate-700">施工場域</h3>
+          <p className="mt-1 text-[11px] text-slate-500">由報價快照帶入，場域資料在企業設定維護；場勘需求單可從下方文件檢視列印。</p>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">{surveySites.map((site, index) => <div key={site.id ?? index} className="rounded-lg border border-slate-200 bg-white p-3 text-xs">
+            <b className="text-slate-700">{site.label || "(未命名場域)"}</b>
+            <div className="mt-1 text-slate-500">{site.address || "(地址待場勘後補登)"}</div>
+            {site.note && <div className="mt-1 text-slate-400">備註：{site.note}</div>}
+          </div>)}</div>
+        </div>}
+
+        <div className="mt-5"><h3 className="text-sm font-black text-slate-700">D 層施工項目</h3>
+          <p className="mt-1 text-xs text-slate-500">勾選的項目會帶出規格選項與驗收標準；驗收清單由此產生。</p>
+          <div className="mt-3 space-y-3">{itemCatalog.map(item => {
+            const checked = Boolean(selectedItems[item.key]);
+            return <div key={item.key} className={`rounded-xl border p-3 ${checked ? "border-teal-200 bg-teal-50/40" : "border-slate-200"}`}>
+              <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                <input type="checkbox" checked={checked} onChange={e => toggleCatalogItem(item, e.target.checked)} />{item.name}
+              </label>
+              {checked && <div className="mt-3 space-y-3">
+                <div className="grid gap-2 md:grid-cols-4">
+                  <Field label={`數量（${item.unit}）`}><input type="number" min={1} className="input" value={itemQty[item.key] ?? item.default_quantity}
+                    onChange={e => setItemQty(p => ({ ...p, [item.key]: Number(e.target.value) }))} /></Field>
+                  {item.specs.map(spec => <Field key={spec.key} label={spec.label}>
+                    <select className="input" value={itemSpecs[item.key]?.[spec.key] || ""}
+                      onChange={e => setItemSpecs(p => ({ ...p, [item.key]: { ...(p[item.key] || {}), [spec.key]: e.target.value } }))}>
+                      <option value="">未指定</option>{spec.options.map(option => <option key={option} value={option}>{option}</option>)}
+                    </select></Field>)}
+                </div>
+                <Field label="項目備註"><input className="input" value={itemNote[item.key] || ""} onChange={e => setItemNote(p => ({ ...p, [item.key]: e.target.value }))} /></Field>
+                <div className="text-[11px] text-slate-500">交付項目：{item.deliverables.join("、")}</div>
+              </div>}
+            </div>;
+          })}</div>
+        </div>
+
+        <div className="mt-5 flex items-center justify-between"><h3 className="text-sm font-black text-slate-700">自訂項目</h3><button onClick={() => setWorkItems(items => [...items, { name: "", spec: "", quantity: 1, note: "", result: "pass", check_note: "" }])} className="inline-flex items-center gap-1 text-xs font-bold text-teal-700"><Plus className="h-4 w-4" />新增項目</button></div>
         <div className="mt-2 space-y-2">{workItems.map((item,index) => <div key={index} className="grid gap-2 rounded-xl border border-slate-200 p-3 md:grid-cols-6"><input className="input" placeholder="項目" value={item.name} onChange={e => setWorkItems(items => items.map((v,i) => i===index ? {...v,name:e.target.value}:v))} /><input className="input" placeholder="規格" value={item.spec} onChange={e => setWorkItems(items => items.map((v,i) => i===index ? {...v,spec:e.target.value}:v))} /><input className="input" type="number" min={1} value={item.quantity} onChange={e => setWorkItems(items => items.map((v,i) => i===index ? {...v,quantity:Number(e.target.value)}:v))} /><input className="input" placeholder="施工備註" value={item.note} onChange={e => setWorkItems(items => items.map((v,i) => i===index ? {...v,note:e.target.value}:v))} /><select className="input" value={item.result || "pass"} onChange={e => setWorkItems(items => items.map((v,i) => i===index ? {...v,result:e.target.value as 'pass'|'fail'}:v))}><option value="pass">通過</option><option value="fail">未通過</option></select><button onClick={() => setWorkItems(items => items.filter((_,i) => i!==index))} className="inline-flex items-center justify-center text-red-600"><Trash2 className="h-4 w-4" /></button></div>)}</div>
         <button onClick={saveWork} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-bold text-white"><Save className="h-4 w-4" />儲存工單內容</button>
-        {work.status === "驗收中" && <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4"><h3 className="font-black text-amber-900">驗收簽署</h3><div className="mt-3 grid gap-3 md:grid-cols-3"><Field label="驗收日期 *"><input type="date" className="input" value={acceptanceDate} onChange={e => setAcceptanceDate(e.target.value)} /></Field><Field label="客戶簽署姓名 *"><input className="input" value={clientSignName} onChange={e => setClientSignName(e.target.value)} /></Field><Field label="缺失改善清單"><input className="input" value={punchList} onChange={e => setPunchList(e.target.value)} /></Field></div><div className="mt-3 flex gap-2"><button onClick={() => submitAcceptance("驗收完成")} className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white">驗收通過</button><button onClick={() => submitAcceptance("驗收異常")} className="rounded-xl bg-red-700 px-4 py-2 text-sm font-bold text-white">登錄異常</button></div></div>}
+        {work.status === "驗收中" && <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4"><h3 className="font-black text-amber-900">驗收簽署</h3>
+          <div className="mt-3 grid gap-3 md:grid-cols-3"><Field label="驗收日期 *"><input type="date" className="input" value={acceptanceDate} onChange={e => setAcceptanceDate(e.target.value)} /></Field><Field label="客戶簽署姓名 *"><input className="input" value={clientSignName} onChange={e => setClientSignName(e.target.value)} /></Field><Field label="缺失改善清單"><input className="input" value={punchList} onChange={e => setPunchList(e.target.value)} /></Field></div>
+
+          <div className="mt-4">
+            <div className="flex items-center justify-between text-xs font-bold text-amber-900">
+              <span>驗收進度 {liveChecklist.passed}/{liveChecklist.total} 項{liveChecklist.failed > 0 ? ` · ${liveChecklist.failed} 項異常` : ""}</span>
+              <span>{liveChecklist.total ? Math.round(liveChecklist.passed / liveChecklist.total * 100) : 0}%</span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white">
+              <div className={`h-full rounded-full transition-all ${liveChecklist.allPassed ? "bg-emerald-600" : "bg-teal-600"}`}
+                style={{ width: `${liveChecklist.total ? liveChecklist.passed / liveChecklist.total * 100 : 0}%` }} />
+            </div>
+          </div>
+
+          <div className="mt-3 space-y-3">{liveChecklist.groups.map(item => <div key={item.key} className="rounded-xl bg-white p-3">
+            <div className="text-sm font-black text-slate-700">{item.name} × {itemQty[item.key] ?? item.default_quantity}{item.unit}</div>
+            {item.specs.some(spec => itemSpecs[item.key]?.[spec.key]) && <div className="mt-1 text-[11px] text-slate-500">
+              {item.specs.filter(spec => itemSpecs[item.key]?.[spec.key]).map(spec => `${spec.label}：${itemSpecs[item.key][spec.key]}`).join("　")}
+            </div>}
+            <div className="mt-2 space-y-2">{item.accept_criteria.map((criterion, index) => {
+              const checkId = `${item.key}:${index}`;
+              const result = acceptChecks[checkId];
+              return <div key={checkId} className="grid gap-2 md:grid-cols-[1fr_auto_200px] md:items-center">
+                <span className="text-xs text-slate-600">{criterion}</span>
+                <div className="flex gap-1">{(["pass", "fail"] as const).map(value => <button key={value} type="button"
+                  onClick={() => setAcceptChecks(p => { const next = { ...p }; if (next[checkId] === value) delete next[checkId]; else next[checkId] = value; return next; })}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-bold ${result === value ? (value === "pass" ? "bg-emerald-700 text-white" : "bg-red-700 text-white") : "bg-slate-100 text-slate-500"}`}>
+                  {value === "pass" ? "通過" : "異常"}</button>)}</div>
+                <input className="input" placeholder="勾核備註" value={checkNotes[checkId] || ""} onChange={e => setCheckNotes(p => ({ ...p, [checkId]: e.target.value }))} />
+              </div>;
+            })}</div>
+          </div>)}</div>
+          {liveChecklist.total === 0 && <p className="mt-3 rounded-lg bg-white p-3 text-xs text-slate-500">尚未勾選任何 D 層施工項目，因此沒有驗收標準可對；請先在上方選定項目並儲存。</p>}
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button onClick={() => submitAcceptance("驗收完成")} disabled={liveChecklist.total > 0 && !liveChecklist.allPassed}
+              title={liveChecklist.total > 0 && !liveChecklist.allPassed ? "尚有驗收標準未通過" : undefined}
+              className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">驗收通過</button>
+            <button onClick={() => submitAcceptance("驗收異常")} className="rounded-xl bg-red-700 px-4 py-2 text-sm font-bold text-white">登錄異常</button>
+            {liveChecklist.total > 0 && !liveChecklist.allPassed && <span className="text-xs text-amber-800">全部標準通過後才可登錄驗收完成。</span>}
+          </div>
+        </div>}
+        {checklist && work.status !== "驗收中" && checklist.total > 0 && <p className="mt-4 text-xs text-slate-500">
+          已登錄驗收：{checklist.passed}/{checklist.total} 項通過{checklist.failed > 0 ? `，${checklist.failed} 項異常` : ""}。
+        </p>}
       </section>}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 print:hidden">
@@ -390,7 +668,7 @@ export default function ReibiWorkflowPage() {
         <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-slate-200 text-xs text-slate-500"><tr><th className="py-3">文件編號</th><th>客戶</th><th>類型</th><th>狀態</th><th>金額／日期</th><th className="text-right">動作</th></tr></thead><tbody>{currentRows.map(row => { const next = tab === "quotes" ? QUOTE_NEXT[row.status] : tab === "contracts" ? CONTRACT_NEXT[row.status] : WORK_NEXT[row.status]; return <tr key={row.id} className="border-b border-slate-100"><td className="py-3 font-mono text-xs font-bold text-slate-700">{row.doc_no || row.work_order_no}</td><td>{row.client_name}</td><td>{row.doc_type || row.contract_type || "施工工單"}</td><td><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold">{row.status}</span></td><td>{tab === "work-orders" ? row.scheduled_date || "未排程" : money(row.total_contract_fee)}</td><td><div className="flex justify-end gap-1"><button onClick={() => selectRow(row)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold">查看</button>{tab === "quotes" && ["草稿","已發送"].includes(row.status) && <button onClick={() => editQuote(row)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold">編輯</button>}{next && <button onClick={() => moveStatus(tab,row,next)} className="rounded-lg bg-teal-50 px-2.5 py-1.5 text-xs font-bold text-teal-700">{next}</button>}{tab === "quotes" && row.status === "已確認" && <button onClick={() => convertQuote(row)} className="rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs font-bold text-indigo-700">轉合約</button>}</div></td></tr>})}</tbody></table>{currentRows.length === 0 && <div className="py-10 text-center text-sm text-slate-500">目前沒有符合條件的文件。</div>}</div>
       </section>
 
-      {selected && <section className="print-area rounded-2xl border border-slate-200 bg-white p-6"><div className="mb-5 flex items-start justify-between gap-4"><div><div className="text-xs font-bold text-teal-700">REIBI 正式文件</div><h2 className="mt-1 text-xl font-black text-slate-800">{selected.doc_no || selected.work_order_no}</h2><p className="mt-1 text-sm text-slate-500">{selected.client_name} · {selected.status}</p></div><button onClick={() => window.print()} className="print:hidden inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold"><Printer className="h-4 w-4" />列印／另存 PDF</button></div>{expiryWarning && tab === "contracts" && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">{expiryWarning}</div>}<dl className="grid gap-3 text-sm md:grid-cols-3">{Object.entries(selected).filter(([key]) => !["source_payload","artifact_id"].includes(key)).slice(0,30).map(([key,value]) => <div key={key} className="rounded-lg bg-slate-50 p-3"><dt className="text-[11px] font-bold uppercase text-slate-400">{key}</dt><dd className="mt-1 break-words font-medium text-slate-700">{typeof value === "object" ? JSON.stringify(value) : String(value ?? "-")}</dd></div>)}</dl>{tab === "contracts" && <div className="print:hidden mt-5 space-y-4"><div className="grid gap-3 rounded-xl bg-slate-50 p-4 md:grid-cols-5"><Field label="簽署人"><input className="input" value={execution.signed_by} onChange={e => setExecution(p => ({...p,signed_by:e.target.value}))} /></Field><Field label="簽署日"><input type="date" className="input" value={execution.signed_at} onChange={e => setExecution(p => ({...p,signed_at:e.target.value}))} /></Field><Field label="用印日"><input type="date" className="input" value={execution.sealed_at} onChange={e => setExecution(p => ({...p,sealed_at:e.target.value}))} /></Field><Field label="執行日"><input type="date" className="input" value={execution.executed_at} onChange={e => setExecution(p => ({...p,executed_at:e.target.value}))} /></Field><Field label="備註"><input className="input" value={execution.note} onChange={e => setExecution(p => ({...p,note:e.target.value}))} /></Field><button onClick={saveContractExecution} className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white md:col-span-5">儲存簽署／用印快照</button></div><div className="flex flex-wrap gap-2"><button onClick={() => createAdjustment(selected,"upgrade")} className="rounded-xl border border-indigo-200 px-4 py-2 text-sm font-bold text-indigo-700">建立升級報價</button><button onClick={() => createAdjustment(selected,"renewal")} className="rounded-xl border border-indigo-200 px-4 py-2 text-sm font-bold text-indigo-700">建立續約報價</button><button onClick={() => createWorkOrder(selected)} className="rounded-xl bg-indigo-700 px-4 py-2 text-sm font-bold text-white">建立施工工單</button></div></div>}</section>}
+      {selected && <section className="print-area rounded-2xl border border-slate-200 bg-white p-6"><div className="mb-5 flex items-start justify-between gap-4"><div><div className="text-xs font-bold text-teal-700">REIBI 正式文件</div><h2 className="mt-1 text-xl font-black text-slate-800">{selected.doc_no || selected.work_order_no}</h2><p className="mt-1 text-sm text-slate-500">{selected.client_name} · {selected.status}</p></div><div className="print:hidden flex gap-2">{(surveyItems.length > 0 || surveySites.length > 0) && <button onClick={() => setShowSurvey(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-teal-700"><ClipboardList className="h-4 w-4" />場勘需求單</button>}<button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold"><Printer className="h-4 w-4" />列印／另存 PDF</button></div></div>{expiryWarning && tab === "contracts" && <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">{expiryWarning}</div>}<dl className="grid gap-3 text-sm md:grid-cols-3">{Object.entries(selected).filter(([key]) => !["source_payload","artifact_id"].includes(key)).slice(0,30).map(([key,value]) => <div key={key} className="rounded-lg bg-slate-50 p-3"><dt className="text-[11px] font-bold uppercase text-slate-400">{key}</dt><dd className="mt-1 break-words font-medium text-slate-700">{typeof value === "object" ? JSON.stringify(value) : String(value ?? "-")}</dd></div>)}</dl>{tab === "contracts" && <div className="print:hidden mt-5 space-y-4"><div className="grid gap-3 rounded-xl bg-slate-50 p-4 md:grid-cols-5"><Field label="簽署人"><input className="input" value={execution.signed_by} onChange={e => setExecution(p => ({...p,signed_by:e.target.value}))} /></Field><Field label="簽署日"><input type="date" className="input" value={execution.signed_at} onChange={e => setExecution(p => ({...p,signed_at:e.target.value}))} /></Field><Field label="用印日"><input type="date" className="input" value={execution.sealed_at} onChange={e => setExecution(p => ({...p,sealed_at:e.target.value}))} /></Field><Field label="執行日"><input type="date" className="input" value={execution.executed_at} onChange={e => setExecution(p => ({...p,executed_at:e.target.value}))} /></Field><Field label="備註"><input className="input" value={execution.note} onChange={e => setExecution(p => ({...p,note:e.target.value}))} /></Field><button onClick={saveContractExecution} className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white md:col-span-5">儲存簽署／用印快照</button></div><div className="flex flex-wrap gap-2"><button onClick={() => createAdjustment(selected,"upgrade")} className="rounded-xl border border-indigo-200 px-4 py-2 text-sm font-bold text-indigo-700">建立升級報價</button><button onClick={() => createAdjustment(selected,"renewal")} className="rounded-xl border border-indigo-200 px-4 py-2 text-sm font-bold text-indigo-700">建立續約報價</button><button onClick={() => createWorkOrder(selected)} className="rounded-xl bg-indigo-700 px-4 py-2 text-sm font-bold text-white">建立施工工單</button></div></div>}</section>}
 
       <style jsx global>{`.input{width:100%;border:1px solid #e2e8f0;border-radius:.75rem;padding:.625rem .75rem;background:white;font-size:.875rem;outline:none}.input:focus{box-shadow:0 0 0 2px #14b8a6}@media print{body *{visibility:hidden}.print-area,.print-area *{visibility:visible}.print-area{position:absolute;inset:0;border:0}}`}</style>
     </div>

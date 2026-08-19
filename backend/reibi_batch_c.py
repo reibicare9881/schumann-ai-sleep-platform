@@ -23,6 +23,11 @@ COMMISSION_LEVELS = {
     "strategic": {"a": Decimal("28"), "b": Decimal("28"), "c": Decimal("18")},
 }
 PAYMENT_STATUSES = {"待付款", "未到期", "待確認", "部分付款", "已付款"}
+# 個人訂閱方案的月數。三個方案在 Artifact 主平台的 SUB_PLANS 與 L5 的
+# PERSONAL_SUB_PLANS 是同一份定義（月繳 1／季繳 3／年繳 12），兩邊的月數必須一致，
+# 否則核發啟用碼算出的到期日會跟主平台顯示的對不上。
+SUBSCRIPTION_PLAN_MONTHS = {"monthly": 1, "quarterly": 3, "annual": 12}
+SUBSCRIPTION_PLAN_LABELS = {"monthly": "月繳體驗", "quarterly": "季繳方案", "annual": "年繳方案(最優惠)"}
 INVOICE_TRANSITIONS = {
     "草稿": {"已開票", "作廢"},
     "已開票": {"待收款", "作廢"},
@@ -98,7 +103,7 @@ class SubscriptionWrite(StrictModel):
     member_code: str = Field(min_length=4, max_length=100)
     subscriber_name: Optional[str] = Field(default=None, max_length=200)
     contact: Optional[str] = Field(default=None, max_length=254)
-    plan_code: Literal["monthly", "annual"] = "monthly"
+    plan_code: Literal["monthly", "quarterly", "annual"] = "monthly"
     plan_label: Optional[str] = Field(default=None, max_length=100)
     amount: Decimal = Field(default=Decimal("0"), ge=0)
     invoice_no: Optional[str] = Field(default=None, max_length=100)
@@ -527,6 +532,9 @@ def create_reibi_batch_c_router(client: Any) -> APIRouter:
         values = _dump(payload)
         values.update({"member_code": payload.member_code.upper(), "status": "待審核", "requested_at": _now(),
                        "source_payload": {}, "created_by": current_user.get("name")})
+        # 未指定標籤時補上方案的正式名稱，讓清單與發票不會只顯示英文代碼。
+        if not values.get("plan_label"):
+            values["plan_label"] = SUBSCRIPTION_PLAN_LABELS.get(payload.plan_code, payload.plan_code)
         rows = _execute(client.table("reibi_subscriptions").insert(values), "建立訂閱申請")
         return {"status": "success", "data": rows[0]}
 
@@ -541,7 +549,7 @@ def create_reibi_batch_c_router(client: Any) -> APIRouter:
             raise HTTPException(status_code=409, detail="只有已核准訂閱可以重新發碼")
         raw, digest, last_four = _activation_code()
         now = datetime.now(timezone.utc)
-        months = 12 if record.get("plan_code") == "annual" else 1
+        months = SUBSCRIPTION_PLAN_MONTHS.get(str(record.get("plan_code") or ""), 1)
         year, month = now.year + (now.month - 1 + months) // 12, (now.month - 1 + months) % 12 + 1
         expires = now.replace(year=year, month=month, day=min(now.day, calendar.monthrange(year, month)[1]))
         values = {"activation_code": None, "activation_code_hash": digest, "activation_code_last_four": last_four,

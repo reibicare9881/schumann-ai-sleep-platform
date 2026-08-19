@@ -53,7 +53,7 @@ export default function ReibiHealthPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [actions, setActions] = useState<Row>({ categories: {}, checkins: [], balance: 0 });
-  const [points, setPoints] = useState<Row>({ balance: 0, ledger: [] });
+  const [points, setPoints] = useState<Row>({ balance: 0, ledger: [], rewards: [] });
   const [diaryKind, setDiaryKind] = useState<"sleep" | "pain">("sleep");
   const [diaries, setDiaries] = useState<Row[]>([]);
   const [sleep, setSleep] = useState({ entry_date: today, bed_time: "23:00", sleep_latency_minutes: 20, night_awakenings: 0, wake_time: "07:00", quality: 3 });
@@ -190,7 +190,23 @@ export default function ReibiHealthPage() {
 
       {tab === "actions" && <section className="grid gap-4 lg:grid-cols-[1fr_380px]">
         <Card><div className="mb-4 flex justify-between"><h2 className="font-black">22 項健康行動</h2><b className="text-amber-700">⭐ {actions.balance || points.balance || 0}</b></div><p className="mb-4 text-xs text-slate-500">每項 +5 分；同項需間隔 7 天，所有增減都保留 ledger。</p>{Object.entries(actions.categories || {}).map(([category, items]: any) => <div key={category} className="mb-5"><h3 className="mb-2 text-xs font-black text-slate-500">{category}</h3><div className="grid gap-2 sm:grid-cols-2">{items.map(([code, label]: string[]) => <button key={code} onClick={async () => { if (await run(() => API.checkinReibiHealthAction(code), `${label}打卡完成`)) await loadPersonal(); }} className="rounded-xl border border-slate-200 px-3 py-2 text-left text-sm hover:bg-teal-50">{label}</button>)}</div></div>)}</Card>
-        <Card><h2 className="font-black">積分明細</h2><div className="mt-3 max-h-[520px] space-y-2 overflow-y-auto">{(points.ledger || []).map((row: Row) => <div key={row.id} className="flex justify-between rounded-xl bg-slate-50 p-3 text-xs"><span>{row.metadata?.reward_label || row.metadata?.action_label || row.event_code}<small className="block text-slate-400">{String(row.created_at).slice(0, 16).replace("T", " ")}</small></span><b className={row.points > 0 ? "text-emerald-700" : "text-red-700"}>{row.points > 0 ? "+" : ""}{row.points}</b></div>)}</div><button className={`${ghostClass} mt-4 w-full`} onClick={() => void run(() => API.redeemReibiPoints({ reward_code: "health_consult", reward_label: "健康諮詢兌換", cost: 50 }), "兌換完成").then(data => data && loadPersonal())}>50 分兌換健康諮詢</button></Card>
+        <div className="space-y-4">
+          <Card>
+            <h2 className="font-black">積分兌換</h2>
+            <p className="mt-1 text-xs text-slate-500">點數由系統維護，餘額不足時無法兌換。</p>
+            <div className="mt-4 space-y-2">{(points.rewards || []).map((reward: Row) => {
+              const affordable = Number(points.balance || 0) >= Number(reward.cost || 0);
+              return <div key={reward.reward_code} className="flex items-center justify-between rounded-xl border border-slate-200 p-3 text-sm">
+                <span className="font-bold text-slate-700">{reward.label}</span>
+                <span className="flex items-center gap-3"><b className="text-amber-700">{reward.cost} 點</b>
+                  <button disabled={!affordable} title={affordable ? undefined : "積分不足"} className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800 disabled:cursor-not-allowed disabled:opacity-40"
+                    onClick={() => void run(() => API.redeemReibiPoints(String(reward.reward_code)), `已兌換${reward.label}`).then(data => data && loadPersonal())}>兌換</button>
+                </span></div>;
+            })}</div>
+            {points.custom_reward_note && <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-500">{points.custom_reward_note}</p>}
+          </Card>
+          <Card><h2 className="font-black">積分明細</h2><div className="mt-3 max-h-[380px] space-y-2 overflow-y-auto">{(points.ledger || []).map((row: Row) => <div key={row.id} className="flex justify-between rounded-xl bg-slate-50 p-3 text-xs"><span>{row.metadata?.reward_label || row.metadata?.action_label || row.event_code}<small className="block text-slate-400">{String(row.created_at).slice(0, 16).replace("T", " ")}</small></span><b className={row.points > 0 ? "text-emerald-700" : "text-red-700"}>{row.points > 0 ? "+" : ""}{row.points}</b></div>)}</div></Card>
+        </div>
       </section>}
 
       {tab === "diary" && <section className="grid gap-4 lg:grid-cols-[420px_1fr]">

@@ -27,6 +27,20 @@ ACTION_CATEGORIES: dict[str, list[tuple[str, str]]] = {
     "REIBI體驗": [("schumann", "舒曼波體驗打卡"), ("la200", "LA200體驗打卡")],
 }
 ACTION_LABELS = {code: label for rows in ACTION_CATEGORIES.values() for code, label in rows}
+# 積分兌換目錄（移植自 Artifact PointsScreen 的 rdm 清單）。
+#
+# Artifact 的「兌換」按鈕只是 alert 請使用者聯絡客服，點數不會真的扣除，所以價格
+# 放在前端不會有事。新系統的 /points/redeem 會實際扣點，價格就必須由後端決定：
+# 原本 cost 是前端傳來的參數，等於讓使用者自己標價。
+REWARD_CATALOG: dict[str, dict[str, Any]] = {
+    "bioinfo": {"label": "生物資訊檢測", "cost": 100},
+    "ans_measure": {"label": "自律神經量測", "cost": 200},
+    "experience_extra": {"label": "積分換取加次(健促體驗)", "cost": 50},
+    "priority_booking": {"label": "優先預約名額", "cost": 30},
+}
+# Artifact 第五項「企業自訂獎勵」標示為「彈性設定」，沒有固定點數，
+# 需由單位個別議定，因此不放進可自助兌換的目錄，只在畫面上標示洽詢管道。
+REWARD_CUSTOM_NOTE = "企業自訂獎勵由所屬單位個別設定，請洽單位健促窗口或 REIBI 客服。"
 MSK_PARTS = {
     "neck", "back_up", "back_low", "shoulder_l", "shoulder_r", "elbow_l", "elbow_r",
     "wrist_l", "wrist_r", "hip_l", "hip_r", "knee_l", "knee_r", "ankle_l", "ankle_r",
@@ -133,9 +147,7 @@ class ActionCheckin(StrictModel):
 
 
 class PointsRedeem(StrictModel):
-    reward_code: str = Field(min_length=1, max_length=80)
-    reward_label: str = Field(min_length=1, max_length=120)
-    cost: int = Field(ge=1, le=100000)
+    reward_code: Literal["bioinfo", "ans_measure", "experience_extra", "priority_booking"]
 
 
 class PointsAdjustment(StrictModel):
@@ -388,15 +400,18 @@ def create_reibi_batch_d_router(client: Any) -> APIRouter:
         rows = _execute(client.table("reibi_point_ledger").select("id,event_code,event_key,points,metadata,created_at")
                         .eq("profile_id", pid).order("created_at", desc=True).limit(200), "無法讀取積分明細")
         balance = _rpc(client, "reibi_point_balance", {"p_profile_id": pid}, "無法讀取積分餘額")
-        return {"status": "success", "data": {"balance": balance or 0, "ledger": rows}}
+        rewards = [{"reward_code": code, **detail} for code, detail in REWARD_CATALOG.items()]
+        return {"status": "success", "data": {"balance": balance or 0, "ledger": rows,
+                                              "rewards": rewards, "custom_reward_note": REWARD_CUSTOM_NOTE}}
 
     @router.post("/points/redeem")
     def redeem(payload: PointsRedeem, current_user: dict = Depends(require_personal_health)):
         pid = _profile_id(current_user)
+        reward = REWARD_CATALOG[payload.reward_code]
         result = _rpc(client, "reibi_adjust_points", {
             "p_profile_id": pid, "p_org_code": _org_code(current_user), "p_event_code": "redeem",
-            "p_event_key": f"redeem:{payload.reward_code}:{uuid.uuid4()}", "p_points": -payload.cost,
-            "p_metadata": {"reward_code": payload.reward_code, "reward_label": payload.reward_label},
+            "p_event_key": f"redeem:{payload.reward_code}:{uuid.uuid4()}", "p_points": -reward["cost"],
+            "p_metadata": {"reward_code": payload.reward_code, "reward_label": reward["label"], "cost": reward["cost"]},
             "p_created_by": pid,
         }, "無法兌換積分")
         return {"status": "success", "data": result}

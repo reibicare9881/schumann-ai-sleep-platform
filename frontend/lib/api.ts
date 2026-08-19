@@ -625,6 +625,14 @@ export const API = {
     return this.request('/api/reibi/work-orders', { query: { page, size, status, search } });
   },
 
+  async getReibiWorkOrderCatalog() {
+    return this.request('/api/reibi/work-orders/catalog');
+  },
+
+  async getReibiWorkOrder(recordId: number) {
+    return this.request(`/api/reibi/work-orders/${recordId}`);
+  },
+
   async updateReibiWorkOrder(recordId: number, payload: Record<string, any>) {
     return this.request(`/api/reibi/work-orders/${recordId}`, { method: 'PUT', body: JSON.stringify(payload) });
   },
@@ -739,8 +747,9 @@ export const API = {
     return this.request('/api/reibi/health/actions', { method: 'POST', body: JSON.stringify({ action_code: actionCode, checked_on: checkedOn }) });
   },
   async getReibiPoints() { return this.request('/api/reibi/health/points'); },
-  async redeemReibiPoints(payload: Record<string, any>) {
-    return this.request('/api/reibi/health/points/redeem', { method: 'POST', body: JSON.stringify(payload) });
+  async redeemReibiPoints(rewardCode: string) {
+    // 點數由後端目錄決定，前端只送兌換品項代碼。
+    return this.request('/api/reibi/health/points/redeem', { method: 'POST', body: JSON.stringify({ reward_code: rewardCode }) });
   },
   async getReibiDiary(kind: 'sleep' | 'pain') { return this.request(`/api/reibi/health/diaries/${kind}`); },
   async saveReibiDiary(kind: 'sleep' | 'pain', payload: Record<string, any>) {

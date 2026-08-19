@@ -177,7 +177,7 @@
 - [x] L5-04D 報表中心、日期篩選、CSV 與列印／另存 PDF。
 - [x] L5-04E 企業／經銷商名冊查詢；不提供個人健康名冊。
 - [x] L5-04F 策略面板與區域／夥伴分析。
-- [x] L5-04G 操作手冊、Artifact 來源版本、API 與 Batch 版本資訊。
+- [~] L5-04G Artifact 來源版本（`source_version`）已在匯入流程記錄；**站內操作手冊未移植**。Artifact `ManualScreen` 是六分頁的線上手冊（角色說明／新案開通／月結流程／分潤規則／常見問題／緊急操作），內容改寫進 [reibi-merge-master-handoff.md](reibi-merge-master-handoff.md) §10，repo 讀者查得到，但 L5 操作人員在站內沒有任何說明入口。本項先前誤標為完成，見 §36 AUDIT-S02。
 
 ## 6. 報價與合約
 
@@ -562,6 +562,39 @@
 
 - [x] TST-S09：48 項新測試（E 層延保費率邊界、加值服務去重、CPI 截斷與 A 層套用、僅續約適用、升級差額進位與到期歸零、評估積分與 ledger 失敗容錯），並加測 A–D 層數值未因新增 E 層而改變。
 - [x] TST-S10：3,445 項 Python 測試、159 項 pgTAP、37 項 E2E、`pip check`、TypeScript no-emit 與 Next.js production build 全數通過。
+
+## 36. Batch S6 逐檔重掃四個 Artifact（2026-08-19）
+
+依使用者要求「確保所有功能都移植」，這輪不看畫面清單，改逐檔翻 JSX 原始碼，重點放在**已移植畫面內部**被漏掉的東西 —— 上一輪的方法只比對畫面是否存在，抓不到這一類。
+
+### 已補上
+
+- [x] WO-S01：**D 層施工項目規格目錄**。Artifact `reibi-workorder_v1_4` 的 `D_ITEMS` 為六個項目各自帶著單位、預設數量、3–4 組規格下拉選項、交付項目與驗收標準；新系統的工單項目只有 name／spec／quantity／note 四個自由文字欄位。目錄已移植為 `backend/reibi_work_order_catalog.py`，由 `GET /api/reibi/work-orders/catalog` 供前端渲染，是唯一權威來源。
+- [x] WO-S02：**逐條驗收**。Artifact 的驗收畫面把選中項目的 `acceptCriteria` 攤平成逐條 pass/fail＋備註，用「已通過／總條數」算進度，且只有全數通過才允許「驗收通過」。新系統原本每個項目只有一個 pass/fail、也沒有標準可對。已補上逐條勾核、進度條與後端強制：全部通過才能登錄「驗收完成」，且驗收勾核對不到已選項目時回 422（避免項目取消勾選後殘留的勾核讓分子超過分母）。
+- [x] WO-S03：工單 `globalNote`（整體備註）與 `specialTerms`（特殊條款）欄位（原缺口報告 B1／B2）。
+- [x] WO-S04：工單的施工場域檢視（原缺口報告 B3）。資料原本就從報價快照帶入 `items.dSites`，但表單完全沒有介面。
+- [x] QT-S03：報價 `note`、`bCustomNote`、`dNote` 與盤點時另外發現的 `eNote` 四個備註欄位（原缺口報告 B4 只列了前三個）。
+- [x] QT-S04：報價 C 層 `cFeeBase`／`cHighRiskFee` 拆分（原缺口報告 B5）。`c_layer_fee` 仍是唯一被分潤與付款時程引用的權威金額，兩個新欄位是明細。
+- [x] QT-S05：**D 層場勘需求單**。Artifact `QuoteForm`／`ContractView` 的 `showSurvey` 是一張可列印的單子（已選項目、場域地點、現場勘查記錄欄）。新系統整個沒有。已補上，並讓報價、合約、工單三種文件都能產生同一份。
+- [x] QT-S06：**人數級距建議配置**（Artifact `QuickQuote` 的 `applyTier`）。選定級距一併帶入 B 層設備數量（1/1/1、2/2/2、3/3/3、5/5/5）與 C 層方案。1000 人以上為定制型，Artifact 不給建議數量，此處同樣不提供。
+- [x] QT-S07：**D 層套組快選**（`PRICING.D.bundles` 的基礎型／標準型／完整型）。只作為勾選預設值，不帶套組標價 —— Artifact 的套組金額是「快速試算」頁的區間中位數，與正式報價單逐項加總的結果本來就不同（完整型套組標 10–20 萬，六項逐項加總是 10.5–21.5 萬）。正式報價一律以逐項為準。
+- [x] SUB-S01：**個人訂閱季繳方案**。Artifact 主平台 `SUB_PLANS` 與 L5 `PERSONAL_SUB_PLANS` 都是月繳 1／季繳 3／年繳 12 三個方案，新系統的 `plan_code` 只認 `monthly` 與 `annual`，發碼時以「不是 annual 就給一個月」計算到期日，季繳無從表達。三個方案的月數已改由 `SUBSCRIPTION_PLAN_MONTHS` 決定。
+- [x] PTS-S01：**積分兌換目錄**。Artifact `PointsScreen` 有五個兌換項（生物資訊檢測 100／自律神經量測 200／體驗加次 50／優先預約 30／企業自訂彈性設定），新系統前端只寫死一顆「50 分兌換健康諮詢」按鈕。目錄已移到後端。第五項「企業自訂」在 Artifact 沒有固定點數，維持不列入自助兌換，畫面標示洽詢管道。
+- [x] SEC-S01：順手修掉 `POST /api/reibi/health/points/redeem` 的自訂價格問題。原本 `cost` 是前端傳來的參數，等於讓使用者自己標價（Artifact 的兌換鈕只是 alert 請聯絡客服、不扣點，所以價格放前端不會有事；新系統會真的扣點）。現在只收 `reward_code`，點數一律查後端目錄。
+
+### 核對後確認無缺口
+
+- L5 `buildEntPaymentRows` 應收明細（A1–A3／B1–B3／C1–C3／D1–D2 共 11 列）與 `build_payment_schedule()` 逐列一致，含 B 層 30/40/30、D 層 50/50 與付款狀態初值。差異僅 C1 說明文字少了「(N 人)」，即已記錄的 `execs` 決策。
+- `ParamsScreen` 的 ROI 三情境（保守 0.6／中性 1.0／樂觀 1.4）、三年淨 ROI 與回本月數，與 `calculate_roi()` 一致。
+- `OSHActivityScreen` 職安問卷填答活躍度已移植，含「送出份數而非完成率」與不列入不法侵害的說明。
+- `PointsScreen` 積分表列的 14 種獲取方式中，燈號改善 +20、連續 12 週 +60、舒曼波／LA200 體驗 +15、生物資訊檢測 +20、自律神經量測 +30、OKR 達標 +50 這幾項在 **Artifact 本身也只是靜態顯示文字**，從未呼叫 `DB.addPts`。實際會發分的項目新系統全數對上，非缺口。
+- 工單 `pickDoc`（手動挑選既有合約／報價帶入）由「合約 → 建立施工工單」按鈕搭配 `contract_id` 外鍵取代。
+
+### 待處理
+
+- [ ] AUDIT-S02：`L5-04G` 先前誤標為完成。Artifact `ManualScreen` 的六分頁站內操作手冊沒有移植，內容改寫進交接手冊 §10。需決定是要在站內補一頁（對 L5 操作人員較合理），或正式標記為刻意不移植。
+- [x] TST-S11：新增 `tests/test_work_order_catalog.py`（41 項：目錄與 Artifact 逐項比對、進度計算、孤兒勾核、由報價 D 層推導工單項目）與 `tests/test_migration_gap_fixes.py`（29 項：C 層拆分與折扣、三個訂閱方案月數、兌換目錄價格與前端不得帶價）。
+- [x] TST-S12：3,535 項 Python 測試通過，TypeScript no-emit 通過，第 18 個 migration 在本機資料庫套用並確認可重跑。
 
 ## 30. Batch R1 讓 registry 成為 Batch D／E 的授權來源（2026-08-17）
 
