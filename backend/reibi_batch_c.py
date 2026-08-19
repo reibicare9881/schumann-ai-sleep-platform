@@ -24,6 +24,18 @@ COMMISSION_LEVELS = {
     "strategic": {"a": Decimal("28"), "b": Decimal("28"), "c": Decimal("18")},
 }
 PAYMENT_STATUSES = {"待付款", "未到期", "待確認", "部分付款", "已付款"}
+# 經銷商等級升級門檻，以年簽約額（A 層授權費）判定。
+#
+# Artifact 只自動判定到白金為止（reibi-l5.jsx:4404 的 nextLv 在白金以上為 null），
+# 戰略級手冊註明「另議」，因此這裡同樣不自動化：達到白金之後顯示「戰略等級另議」，
+# 而不是像 Artifact 那樣標成「最高等級」—— 戰略級是存在的，白金不是頂。
+COMMISSION_TIER_THRESHOLDS: tuple[tuple[str, str, Decimal], ...] = (
+    ("silver", "gold", Decimal("8000000")),
+    ("gold", "platinum", Decimal("20000000")),
+)
+COMMISSION_TIER_LABELS = {"silver": "銀牌", "gold": "金牌", "platinum": "白金", "strategic": "戰略"}
+# 戰略級的參考門檻，只作顯示用，不驅動任何自動升級。
+STRATEGIC_REFERENCE_THRESHOLD = Decimal("50000000")
 # 方案月數與名稱由 reibi_subscription_gate 統一定義。財務端核發啟用碼算到期日、
 # 使用者端顯示到期日，兩邊必須用同一組數字 —— Artifact 就是因為兩份複本而出過問題。
 SUBSCRIPTION_PLAN_MONTHS = PLAN_MONTHS
@@ -240,6 +252,35 @@ def build_payment_schedule(enterprise: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def tier_progress(level_code: str, annual_sales: Decimal) -> dict[str, Any]:
+    """距離下一個等級還有多少（Artifact reibi-l5.jsx 的升級進度欄）。
+
+    只是進度顯示，不會自動改變 level_code —— 升等牽涉永久的分潤成本，
+    應由超管明確操作，不該因為業績跨線就自己跳等。
+    """
+    current_label = COMMISSION_TIER_LABELS.get(level_code, level_code)
+    for source, target, threshold in COMMISSION_TIER_THRESHOLDS:
+        if level_code != source:
+            continue
+        # 進度上限 100%：達標後顯示「已達門檻」，實際升等仍要人來按。
+        percent = min(100, int((annual_sales / threshold * 100).to_integral_value(rounding=ROUND_HALF_UP))) if threshold else 0
+        return {
+            "current_level": level_code, "current_label": current_label,
+            "next_level": target, "next_label": COMMISSION_TIER_LABELS[target],
+            "threshold": threshold, "remaining": max(Decimal("0"), threshold - annual_sales),
+            "percent": percent, "reached": annual_sales >= threshold, "negotiated": False,
+        }
+    # 白金之上是戰略級，門檻另議，不自動判定。
+    negotiated = level_code == "platinum"
+    return {
+        "current_level": level_code, "current_label": current_label,
+        "next_level": "strategic" if negotiated else None,
+        "next_label": "戰略" if negotiated else None,
+        "threshold": STRATEGIC_REFERENCE_THRESHOLD if negotiated else None,
+        "remaining": None, "percent": None, "reached": False, "negotiated": negotiated,
+    }
+
+
 def calculate_distributor_commission(distributor: dict[str, Any], enterprises: list[dict[str, Any]], min_retain: Decimal) -> dict[str, Any]:
     level = COMMISSION_LEVELS.get(str(distributor.get("level_code") or "silver"), COMMISSION_LEVELS["silver"])
     cap = Decimal("100") - min_retain
@@ -256,7 +297,22 @@ def calculate_distributor_commission(distributor: dict[str, Any], enterprises: l
             "a_percent": percentages["a"], "b_percent": percentages["b"], "c_percent": percentages["c"],
             "a_commission": commissions["a"], "b_commission": commissions["b"], "c_commission": commissions["c"],
             "total_commission": sum(commissions.values(), Decimal("0")),
-            "annual_sales": sum(bases.values(), Decimal("0")), "enterprise_count": len(matched)}
+            # 年簽約額只計 A 層授權費，是等級升級門檻的判定基礎，與佣金基數是兩回事：
+            # B、C 層照常計入佣金，但不推進升級。原本這裡加總三層，等於把設備銷售
+            # 算進升級業績 —— 一張雲朵床 80 萬，賣十台就跨過金牌 800 萬門檻，
+            # 而升等是永久的邊際成本（A 層 8% → 14%）。
+            #
+            # 依據是 Artifact 實際執行的程式碼（reibi-l5.jsx:4402）與策略頁說明
+            # （同檔 4389 行「年簽約額僅計 A 層授權費，不含 B/C 層」）。
+            # Artifact 手冊分頁 3920 行寫「A+C 層」，與自己的程式碼及另外兩處說明矛盾，
+            # 不採用。
+            #
+            # 刻意不移植 Artifact 的 `aLayerFee || 方案定價 || 240000` 三段 fallback：
+            # 已記錄的決策是一律使用實際簽約金額（見缺口報告 C 類）。
+            "annual_sales": bases["a"],
+            "commission_base_total": sum(bases.values(), Decimal("0")),
+            "tier_progress": tier_progress(str(distributor.get("level_code") or "silver"), bases["a"]),
+            "enterprise_count": len(matched)}
 
 
 def _enterprise(client: Any, current_user: dict[str, Any], requested_id: Optional[int] = None) -> dict[str, Any]:

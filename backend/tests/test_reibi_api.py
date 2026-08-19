@@ -162,7 +162,10 @@ class ReibiApiTests(unittest.TestCase):
         self.assertEqual(result["b_commission"], Decimal("36000"))
         self.assertEqual(result["c_commission"], Decimal("4000"))
         self.assertEqual(result["total_commission"], Decimal("54000"))
-        self.assertEqual(result["annual_sales"], Decimal("350000"))
+        # 年簽約額（升級門檻基礎）只計 A 層；佣金基數三層加總另外回傳。
+        # 這一行原本斷言 350000，把 A+B+C 都算進升級業績，等於把錯誤釘住。
+        self.assertEqual(result["annual_sales"], Decimal("100000"))
+        self.assertEqual(result["commission_base_total"], Decimal("350000"))
 
     def test_batch_c_commission_retain_guard_blocks_excess(self):
         with self.assertRaisesRegex(ValueError, "超過"):

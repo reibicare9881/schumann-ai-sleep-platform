@@ -668,3 +668,29 @@
   申請、條款版本、啟用碼一次性與不可枚舉、歷史限制、402 付費牆、企業員工不受影響）。
 - [x] TST-S14：3,650 項 Python 測試與 159 項 pgTAP 通過（19 個 migration 於空資料庫全量重播後），
   TypeScript no-emit 與 Next.js production build 通過。
+
+## 38. Batch S8 經銷商升級門檻與年簽約額基數（2026-08-19）
+
+盤點 `ManualScreen`「分潤規則」分頁時對照程式碼發現的。手冊本身不是重點，是讀它的過程翻出了計價錯誤。
+
+- [x] COM-S01：**修正年簽約額基數**。`calculate_distributor_commission` 原本回傳
+  `annual_sales = a_base + b_base + c_base`，並以「年度業績」顯示在 `/reibi/operations` 的
+  經銷商等級旁邊 —— 正好是超管決定升等時會看的那個數字。Artifact 實際執行的程式碼
+  （`reibi-l5.jsx:4402` 的 `yearAmt`）**只計 A 層授權費**。一張雲朵床 80 萬，賣十台就跨過金牌
+  800 萬門檻，而升等是永久的邊際成本（A 層 8% → 14%）。三層加總改由 `commission_base_total` 另外回傳，
+  佣金金額不受影響。
+- [x] COM-S02：**Artifact 自身矛盾的裁決**。手冊分頁 3920 行寫「年累積 **A+C** 層簽約額」，
+  但同一分頁 3913 行的 C 層註記寫「不計入年累積業績」，策略頁 4389 行寫「僅計 A 層授權費，不含 B/C 層」，
+  程式碼只算 A 層。四處三處一致，以程式碼為準。**手寫的手冊本身就是錯的** ——
+  這是「手冊要由程式產生而非照抄」最直接的證據。
+- [x] COM-S03：**補上升級門檻與進度**（`tier_progress`）。銀→金 800 萬、金→白金 2,000 萬。
+  戰略級手冊註明「另議」，Artifact 也不自動判定，因此同樣不自動化。差別：Artifact 對白金顯示
+  「最高等級」，本實作改為「戰略等級門檻另議」—— 戰略級是存在的，白金不是頂。
+- [x] COM-S04：進度**不自動改變 `level_code`**。達標只顯示「已達門檻」，實際升等仍由超管操作：
+  升等牽涉永久的分潤成本，不該因業績跨線而自己跳等。
+- [x] COM-S05：`/reibi/operations` 的標籤由「年度業績」改為「年簽約額（A 層）」，並加上進度條。
+  原標籤在基數修正後會產生歧義。
+- [x] TST-S15：新增 `tests/test_commission_tier_basis.py`（29 項：基數只計 A 層、設備銷售不推進升級、
+  佣金金額不因基數修正而變動、門檻邊界與進度上限、白金不標成最高等級、方案定價 fallback 維持不移植）。
+  同時修正 `test_reibi_api.py` 中原本斷言 `annual_sales == 350000` 的那一行 —— 它把錯誤釘住了。
+- [x] TST-S16：3,679 項 Python 測試通過，TypeScript no-emit 與 Next.js production build 通過。
