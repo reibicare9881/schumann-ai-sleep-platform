@@ -85,3 +85,20 @@ FastAPI 已提供 `/api/reibi/artifacts/validate` 預檢與 `/api/reibi/artifact
 新資料只接受 `ai_provider = 'gemini'`。Artifact 既有 Claude 呼叫程式不會移植；歷史 AI 文字可作為來源內容保留，但不能偽標成 Gemini。FastAPI 實作時應由後端呼叫 Gemini，並記錄實際 `ai_model`。
 
 Batch E 已將組織與跨企業報告寫入 `reibi_generated_reports`，同時保存產生當下的去識別化 `metrics_snapshot`、Gemini 模型、日期範圍與生成者。跨企業即時分析另要求個人 `research_opt_in = true`，每個企業及各健康指標子群均達 k≥5 才回傳數值。
+
+## 補充：2026-08-18 逐 key 稽核
+
+以程式掃描四個 Artifact 的 `stor.g`／`stor.s` 取得 70 個 storage key，與本文件比對後有 15 個未被提及。逐一追查後**功能均已移植**，僅是本文件先前未列出對應關係：
+
+| Artifact storage key | 新系統對應 | 說明 |
+|---|---|---|
+| `l5_commission_ledger` | `reibi_commission_ledger` | 名稱相同語意 |
+| `l5_payment_ledger` | `reibi_payment_schedules` | 更名 |
+| `l5_change_requests`、`l5_change_req_index`、`change_req_` | `reibi_access_requests` | 人員／權限變更申請 |
+| `feedback_list` | `reibi_feedback_surveys` | 體驗回饋 |
+| `ow_schedule_`、`ow_tracklist_`、`ow_int_` | `reibi_ohs_records` | 以 `record_type` 區分 roster／interview／tracking |
+| `sleep_diary_today_`、`pain_diary_today_` | `reibi_health_diary_entries` | 以 `diary_type` 區分 |
+| `l5_appt_index`、`l5_health_agg_index` | （不需要） | Artifact 的手工索引 key，改由資料庫索引取代 |
+| `__rq_handoff_index_l5`、`__rq_handoff_index_workorder` | （不需要） | Artifact 之間傳遞資料的暫存機制，改由 `reibi_work_orders.contract_id` 等外鍵關聯取代 |
+
+未列入的 `pin_`、`l5_pin_`、`l5_pin_partner_`、`rc_` 屬共用 PIN 與備援碼機制，依 Batch G／H 決策改用 Supabase Auth，不移植。
