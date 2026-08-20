@@ -63,6 +63,45 @@ E_CPI_CAP = Decimal("0.05")
 E_LAYER_DOC_TYPES = {"續約報價"}
 UPGRADE_DOC_TYPES = {"升級報價"}
 
+# ── A–D 層定價（Artifact PRICING）────────────────────────────────────────────
+#
+# 這四個常數是**唯一權威來源**：報價試算與方案定價頁都從這裡讀。
+# Artifact 把兩者各存一份，於是同一個級距在報價單與定價頁可能算出不同數字 ——
+# 那正是今天在分潤基數上抓到的同一類錯誤（見 §38 COM-S02）。
+#
+# ⚠️ 定價數字的有效性尚未由業務端正式確認（2026-08-20 以「先當作有效」為前提實作）。
+# 要調整價格，改這裡即可，報價單與定價頁會同步跟著變。
+A_LAYER_TIERS: tuple[tuple[int, int], ...] = (
+    (100, 600_000), (300, 1_200_000), (500, 1_800_000), (1_000, 3_000_000),
+)
+PAY_MODE_FACTORS: dict[str, Decimal] = {
+    "annual": Decimal("0.95"),
+    "semi": Decimal("1.00"),
+    "quarterly": Decimal("1.03"),
+}
+C_LAYER_TIERS: dict[str, int] = {"基本型": 35_000, "成長型": 70_000, "專業型": 105_000, "旗艦型": 210_000}
+D_LAYER_PRICES: dict[str, tuple[int, int]] = {
+    "poster": (15_000, 30_000), "board": (25_000, 50_000),
+    "display": (20_000, 40_000), "qr": (5_000, 10_000),
+    "digital": (30_000, 60_000), "install": (10_000, 25_000),
+}
+C_LAYER_HIGH_RISK_FEE = 14_000
+# B 層依人數級距的建議設備配置（Artifact QuickQuote 的 applyTier 與定價頁 planB）。
+# 金額不寫死，由設備單價乘出來 —— Artifact 的定價頁把 169.94 萬那類數字直接打在頁面上，
+# 設備單價一改就會對不上。
+B_LAYER_BUNDLES: tuple[dict[str, Any], ...] = (
+    {"tier": "基本型", "max_members": 100, "bed": 1, "chair": 1, "la200": 1},
+    {"tier": "成長型", "max_members": 300, "bed": 2, "chair": 2, "la200": 2},
+    {"tier": "專業型", "max_members": 500, "bed": 3, "chair": 3, "la200": 3},
+    {"tier": "旗艦型", "max_members": 1_000, "bed": 5, "chair": 5, "la200": 5},
+)
+D_LAYER_LABELS: dict[str, str] = {
+    "poster": "基礎海報套組", "board": "健促公告欄設計", "display": "設備展示區佈置",
+    "qr": "QR Code 貼紙組", "digital": "數位看板內容", "install": "現場佈置施工",
+}
+D_LAYER_PAYMENT_TERM = "50% 訂金 → 50% 完工驗收"
+B_LAYER_PAYMENT_TERM = "訂金 30% → 到貨 40% → 完工 30%"
+
 
 QUOTE_STATUSES = ("草稿", "已發送", "已確認", "作廢", "已轉合約")
 CONTRACT_STATUSES = ("草稿(合約)", "已發送", "待用印", "用印完成", "執行中", "存檔")
@@ -1160,20 +1199,92 @@ def calculate_e_layer(payload: "QuoteCalculationRequest") -> dict[str, Any]:
     }
 
 
+def build_pricing_catalog(contract_years: int = 3) -> dict[str, Any]:
+    """方案與定價頁的內容（Artifact PricingScreen）。
+
+    每個數字都由計價常數推導，沒有一個是打在頁面上的。Artifact 的定價頁把
+    「NT$169.94 萬」這類金額直接寫死，設備單價一改就會與報價單對不上。
+    """
+    equipment = [
+        {"key": "bed", "label": "舒曼波雲朵床（7.83Hz）", "price": E_EQUIPMENT_PRICES["bed"]},
+        {"key": "chair", "label": "舒曼波樂活電動椅（7.83Hz）", "price": E_EQUIPMENT_PRICES["chair"]},
+        {"key": "la200", "label": "UIS·REIBI LA200 光能緩解疼痛體驗設備", "price": E_EQUIPMENT_PRICES["la200"]},
+    ]
+    previous = 0
+    a_layer = []
+    for maximum, annual in A_LAYER_TIERS:
+        a_layer.append({
+            "range": f"≤{maximum} 人" if previous == 0 else f"{previous + 1}–{maximum} 人",
+            "max_members": maximum, "annual_fee": annual, "contract_total": annual * contract_years,
+        })
+        previous = maximum
+    a_layer.append({"range": f"{previous + 1} 人以上", "max_members": None,
+                    "annual_fee": None, "contract_total": None, "custom": True})
+
+    return {
+        # 這個前提要讓讀者看得見，而不是埋在程式註解裡。
+        "disclaimer": (
+            "以下金額與報價單使用同一組計價常數，兩者不可能對不上。"
+            "價格有效性尚未經業務端正式確認，實際成交仍以正式報價單為準。"
+        ),
+        "contract_years": contract_years,
+        "a_layer": {
+            "title": "A 層 · 軟體年授權",
+            "tiers": a_layer,
+            "pay_modes": [
+                {"key": "annual", "label": "年繳", "factor": PAY_MODE_FACTORS["annual"], "note": "95 折"},
+                {"key": "semi", "label": "半年繳", "factor": PAY_MODE_FACTORS["semi"], "note": "原價"},
+                {"key": "quarterly", "label": "季繳", "factor": PAY_MODE_FACTORS["quarterly"], "note": "加收 3%"},
+            ],
+        },
+        "b_layer": {
+            "title": "B 層 · 硬體設備（一次性）",
+            "payment_term": B_LAYER_PAYMENT_TERM,
+            "equipment": equipment,
+            "bundles": [
+                {
+                    "tier": bundle["tier"], "max_members": bundle["max_members"],
+                    "bed": bundle["bed"], "chair": bundle["chair"], "la200": bundle["la200"],
+                    "total": sum(bundle[key] * E_EQUIPMENT_PRICES[key] for key in ("bed", "chair", "la200")),
+                }
+                for bundle in B_LAYER_BUNDLES
+            ],
+        },
+        "c_layer": {
+            "title": "C 層 · 高管健促服務（年費）",
+            "tiers": [{"tier": tier, "annual_fee": fee} for tier, fee in C_LAYER_TIERS.items()],
+            "high_risk_fee": C_LAYER_HIGH_RISK_FEE,
+            "high_risk_note": "高風險高管（連續橙／紅燈）半年一次，依人數加購。",
+        },
+        "d_layer": {
+            "title": "D 層 · 健康識能環境佈置（選配一次性）",
+            "payment_term": D_LAYER_PAYMENT_TERM,
+            "note": "以下為估算區間，正式金額需現場勘查確認後 3–7 工作日提供。",
+            "items": [
+                {"key": key, "label": D_LAYER_LABELS[key], "min": low, "max": high}
+                for key, (low, high) in D_LAYER_PRICES.items()
+            ],
+        },
+        "e_layer": {
+            "title": "E 層 · 延保與加值服務（續約適用）",
+            "warranty_note": (
+                f"設備延保為原價的 {E_WARRANTY_RATE_MIN}–{E_WARRANTY_RATE_MAX}%／年，第 4 年起適用。"
+            ),
+            "value_added": [
+                {"key": "annual_report", "label": "年度健康加值報告", "price": E_VALUE_ADDED_PRICES["annual_report"]},
+                {"key": "industry_white", "label": "產業健康白皮書（企業版）", "price": E_VALUE_ADDED_PRICES["industry_white"]},
+                {"key": "esg_report", "label": "ESG 健促揭露報告", "price": E_VALUE_ADDED_PRICES["esg_report"]},
+                {"key": "hr_consult", "label": "年度 HR 健促顧問諮詢（4 次）", "price": E_VALUE_ADDED_PRICES["hr_consult"]},
+            ],
+            "cpi_note": f"續約可套用 CPI 調幅，上限 {E_CPI_CAP * 100:.0f}%，超過的部分自動截去。",
+        },
+    }
+
+
 def calculate_quote_fees(payload: QuoteCalculationRequest) -> dict[str, Any]:
     """Reproduce the Artifact quote rules without exposing its internal floor prices."""
-    a_tiers = ((100, 600_000), (300, 1_200_000), (500, 1_800_000), (1_000, 3_000_000))
-    pay_factors = {
-        "annual": Decimal("0.95"),
-        "semi": Decimal("1.00"),
-        "quarterly": Decimal("1.03"),
-    }
-    c_tiers = {"基本型": 35_000, "成長型": 70_000, "專業型": 105_000, "旗艦型": 210_000}
-    d_prices = {
-        "poster": (15_000, 30_000), "board": (25_000, 50_000),
-        "display": (20_000, 40_000), "qr": (5_000, 10_000),
-        "digital": (30_000, 60_000), "install": (10_000, 25_000),
-    }
+    a_tiers, pay_factors = A_LAYER_TIERS, PAY_MODE_FACTORS
+    c_tiers, d_prices = C_LAYER_TIERS, D_LAYER_PRICES
     discount = Decimal("1") - (payload.discount_percent / Decimal("100"))
 
     a_base = 0
@@ -1853,6 +1964,12 @@ def create_reibi_router(client: Any) -> APIRouter:
         current_user: dict = Depends(require_reibi_manager),
     ):
         return list_scoped("reibi_work_orders", current_user, page, size, record_status, search)
+
+    @router.get("/pricing")
+    def pricing(contract_years: int = Query(3, ge=1, le=10), _: dict = Depends(require_reibi_manager)):
+        """方案與定價。與 Artifact 一樣是站內頁面，不是對外公開的價目表 ——
+        要不要公開是另一個尚未做出的商業決策。"""
+        return {"status": "success", "data": build_pricing_catalog(contract_years)}
 
     @router.get("/work-orders/catalog")
     def work_order_catalog(_: dict = Depends(require_reibi_manager)):

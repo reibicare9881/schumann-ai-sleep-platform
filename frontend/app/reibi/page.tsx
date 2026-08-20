@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, BadgeDollarSign, BarChart3, Boxes, Building2, CalendarClock, FileCheck2, FileText, HardHat, Headphones, HeartPulse, KeyRound, LayoutDashboard, MapPin, Network, Pencil, Plus, RefreshCw, Save, Search, Trash2, Upload, Users } from "lucide-react";
+import { ArrowLeft, BadgeDollarSign, BarChart3, Boxes, Building2, CalendarClock, FileCheck2, FileText, HardHat, Headphones, HeartPulse, KeyRound, LayoutDashboard, MapPin, Network, Pencil, Plus, RefreshCw, Save, Search, Tag, Trash2, Upload, Users } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
 import API from "@/lib/api";
@@ -469,6 +469,7 @@ export default function ReibiManagementPage() {
           {session.systemRole.startsWith("reibi_") && <Link href="/reibi/l5" className="inline-flex items-center gap-2 rounded-xl bg-teal-800 px-4 py-2 text-sm font-bold text-white"><LayoutDashboard className="w-4 h-4" /> L5 營運總覽</Link>}
           <Link href={activeOrgCode ? `/reibi/workflow?org_code=${encodeURIComponent(activeOrgCode)}` : "/reibi/workflow"} className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2 text-sm font-bold text-white"><FileCheck2 className="w-4 h-4" /> 商務文件工作台</Link>
           <Link href="/reibi/operations" className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white"><BadgeDollarSign className="w-4 h-4" /> 財務與夥伴營運</Link>
+          <Link href="/reibi/pricing" className="inline-flex items-center gap-2 rounded-xl bg-slate-700 px-4 py-2 text-sm font-bold text-white"><Tag className="w-4 h-4" /> 方案與定價</Link>
           <Link href="/reibi/health" className="inline-flex items-center gap-2 rounded-xl bg-rose-700 px-4 py-2 text-sm font-bold text-white"><HeartPulse className="w-4 h-4" /> 健康與職安</Link>
           <Link href="/reibi/analytics" className="inline-flex items-center gap-2 rounded-xl bg-violet-700 px-4 py-2 text-sm font-bold text-white"><BarChart3 className="w-4 h-4" /> 組織分析</Link>
           <Link href="/reibi/service" className="inline-flex items-center gap-2 rounded-xl bg-sky-700 px-4 py-2 text-sm font-bold text-white"><Headphones className="w-4 h-4" /> 服務與整合</Link>
