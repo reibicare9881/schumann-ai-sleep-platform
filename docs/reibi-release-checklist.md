@@ -196,6 +196,44 @@ https://github.com/reibicare9881/schumann-ai-sleep-platform/compare/main...codex
 
 ---
 
+## 2.4 🔴 單位通行碼沒有任何自助重設管道（專案負責人）
+
+**2026-08-20 實際踩到。** 這一項比功能缺口更接近「會擋住上線」。
+
+企業成員、部門主管與單位管理者透過 `/login` 以「單位代碼 + 通行碼」登入，通行碼是
+`organizations` 表上的 bcrypt 雜湊（`member_pin`／`dept_pin`／`admin_pin`）。**忘記之後沒有任何管道可以救：**
+
+| 途徑 | 狀態 |
+|---|---|
+| 站內自助重設 | ❌ 不存在 |
+| Artifact 的備用碼重設 | ❌ 刻意不移植（改用 Supabase Auth 邀請與 TOTP，見缺口報告 C 類） |
+| 人工核驗佇列 | ⚠️ 已實作，但要 `reibi_super` 才能處理 |
+| 直接改資料庫 | ⚠️ 目前唯一可行，需要有人下 SQL |
+
+死結在於：一般企業客戶**不會有 `reibi_super` 帳號，也不會有人幫他們下 SQL**。
+今天的情境是自家人忘記測試企業的 `admin_pin`，改用受邀帳號繞過；正式客戶沒有這個備案。
+
+重設用的 SQL（pgcrypto 已確認可用，且既有雜湊為 `crypt()` 認得的 bcrypt 格式）：
+
+```sql
+update public.organizations
+set admin_pin = crypt('新通行碼', gen_salt('bf', 12))
+where org_code = 'ORG-XXXX-26-000001';
+```
+
+**上線前至少要三選一：**
+
+1. 做一個站內重設流程（例如以單位聯絡 Email 寄一次性連結）
+2. 把單位角色也遷移到 Supabase Auth 邀請制，讓 Email 重設涵蓋全部角色 —— 與 Batch H 的方向一致
+3. 正式接受「只能人工處理」，但**必須**先寫好客服 runbook 並確認有人有權限執行
+
+另外附帶一個相關風險：`/login` 的個人模式與單位模式在 `profiles` 找不到人時會**自動建立帳號**
+（`main.py` 約 333 行）。因此知道單位代碼與通行碼的人可以用任意姓名無限產生帳號 ——
+遠端目前 25 個 `member`、10 個 `admin`、20 個 `individual` 多半由此累積。
+這在 staging 無害，但與 §8.3「staging 與正式共用同一個 Supabase 專案」相加就不是無害。
+
+---
+
 ## 7. 已知且**不**阻擋合併的項目
 
 這些已記錄在 [reibi-feature-migration-checklist.md](reibi-feature-migration-checklist.md)，屬外部依賴或後續批次：
