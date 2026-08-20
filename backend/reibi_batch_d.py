@@ -12,12 +12,14 @@ from passlib.context import CryptContext
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from auth import get_current_user
+from reibi_about import build_about
 from reibi_subscription_gate import (
     PLAN_LABELS as SUBSCRIPTION_PLAN_LABELS,
     TERMS_VERSION,
     load_access as load_subscription_access,
     subscription_page_payload,
 )
+from reibi_venues import VENUE_SELECT, build_venue_payload
 from roles import has_permission
 
 
@@ -418,6 +420,26 @@ def create_reibi_batch_d_router(client: Any) -> APIRouter:
 
     def load_access(user: dict[str, Any]) -> dict[str, Any]:
         return load_subscription_access(client, user)
+
+    @router.get("/venues")
+    def experience_venues(current_user: dict = Depends(require_personal_health)):
+        """REIBI 體驗場域與本人的首次免費額度狀態。"""
+        rows = _execute(
+            client.table("reibi_experience_venues").select(VENUE_SELECT)
+            .eq("is_active", True).order("sort_order"),
+            "無法讀取體驗場域",
+        )
+        used = _execute(
+            client.table("reibi_venue_free_visits").select("profile_id")
+            .eq("profile_id", _profile_id(current_user)).limit(1),
+            "無法讀取免費體驗額度",
+        )
+        return {"status": "success", "data": build_venue_payload(rows, bool(used))}
+
+    @router.get("/about")
+    def about_reibi(_: dict = Depends(get_current_user)):
+        """關於 REIBI。開放給任何登入身份 —— 這是介紹頁，不含任何營運資料。"""
+        return {"status": "success", "data": build_about()}
 
     @router.get("/subscription")
     def my_subscription(current_user: dict = Depends(get_current_user)):

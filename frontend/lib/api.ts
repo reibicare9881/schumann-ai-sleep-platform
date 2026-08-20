@@ -754,6 +754,8 @@ export const API = {
     return this.request('/api/reibi/health/actions', { method: 'POST', body: JSON.stringify({ action_code: actionCode, checked_on: checkedOn }) });
   },
   // 個人訂閱閘門：狀態、申請與啟用碼認領
+  async getReibiVenues() { return this.request('/api/reibi/health/venues'); },
+  async getReibiAbout() { return this.request('/api/reibi/health/about'); },
   async getReibiPricing(contractYears = 3) {
     return this.request('/api/reibi/pricing', { query: { contract_years: contractYears } });
   },

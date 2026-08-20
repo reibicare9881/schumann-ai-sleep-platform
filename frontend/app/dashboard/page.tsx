@@ -11,7 +11,7 @@ import { MappedSleepReport, BackendSleepReport } from "@/types";
 import { useRouter } from "next/navigation";
 import { 
   ClipboardEdit, FileText, BarChart3, Target, 
-  CalendarDays, Leaf, TrendingUp, AlertTriangle, ShieldCheck, LogOut, ChevronRight, RefreshCw, ChevronDown, Activity, Moon, HeartPulse, Database, Headphones, LayoutDashboard, Star
+  CalendarDays, Leaf, TrendingUp, AlertTriangle, ShieldCheck, LogOut, ChevronRight, RefreshCw, ChevronDown, Activity, Moon, HeartPulse, Database, Headphones, LayoutDashboard, Star, MapPin, Info
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -96,6 +96,8 @@ export default function DashboardPage() {
     { id: "reibi-service", icon: <Headphones className="w-8 h-8 text-sky-700" />, label: "REIBI 服務中心", sub: "服務案件・公告報名・權限協助", color: "border-sky-200 hover:border-sky-600", link: "/reibi/service", show: can(session.systemRole, "service_center") },
     // 只有自行註冊的個人用戶需要訂閱；企業員工的功能由公司合約涵蓋。
     { id: "subscribe", icon: <Star className="w-8 h-8 text-amber-500" />, label: "個人訂閱", sub: "AI 個人報告・完整歷史・年度改善追蹤", color: "border-amber-200 hover:border-amber-500", link: "/subscribe", show: session.systemRole === "individual" },
+    { id: "venues", icon: <MapPin className="w-8 h-8 text-teal-600" />, label: "REIBI 體驗場域", sub: "體驗中心據點・首次免費體驗", color: "border-teal-200 hover:border-teal-500", link: "/venues", show: true },
+    { id: "about-reibi", icon: <Info className="w-8 h-8 text-slate-500" />, label: "關於 REIBI", sub: "使命・理論框架・SDG・888 計畫", color: "border-slate-200 hover:border-slate-500", link: "/about-reibi", show: true },
     { id: "privacy", icon: <ShieldCheck className="w-8 h-8 text-slate-600" />, label: "隱私 & 安全中心", sub: "加密機制・法規・稽核", color: "border-slate-200 hover:border-slate-500", link: "/privacy", show: true },
   ].filter(t => t.show);
 
