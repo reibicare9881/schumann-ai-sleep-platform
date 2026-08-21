@@ -64,7 +64,7 @@
 - [ ] FND-07 標準分頁、排序、搜尋與日期範圍參數。
 - [ ] FND-08 共用前端 REIBI layout、側欄／導覽、權限式選單與 breadcrumb。
 - [ ] FND-09 共用表格、篩選、表單、確認對話框、列印與匯出元件。
-- [ ] FND-10 PII／健康資料 log redaction 與錯誤訊息脫敏。
+- [x] FND-10 PII／健康資料 log 脫敏 —— 2026-08-20 完成，見 §42。
 - [ ] FND-11 檔案上傳的大小、MIME、雜湊、路徑與惡意內容防護。
 - [~] FND-12 Supabase Auth leaked-password protection（Dashboard 設定，遠端 advisor 目前唯一警告）。
 
@@ -782,3 +782,22 @@
   佔位文案必須讀起來像提示而非定稿）。過程中抓到一個真實缺陷：
   `normalise_venue` 未輸出 `is_active`，導致 `venue_rejection_reason` 對已正規化的場域誤判為「未開放」。
 - [x] TST-S22：3,863 項 Python 測試通過，TypeScript no-emit 與 Next.js production build 通過。
+
+## 42. Batch S12 log 脫敏（FND-10，2026-08-20）
+
+- [x] LOG-S01：新增 `backend/safe_logging.py`。原本後端用 `print(f"...失敗: {e}")` 記錄例外，
+  而 Supabase 與 Pydantic 的例外訊息**常帶著失敗那筆資料的欄位值** —— 睡眠分數、疼痛分數、
+  PHQ-4／PSS-4，乃至 BSRS-5 的自殺意念題答案。這些字串會進 Railway 的 log，
+  而 log 沒有跟資料庫同等的存取控制。原則改為：log 記「哪裡、什麼類型」，不記訊息內容；
+  DEBUG 模式才輸出且仍經遮蔽。
+- [x] LOG-S02：`redact()` 遮蔽健康分數、量表答案、Email、長數字串、姓名與會員碼，
+  並特別處理 **Postgres 複合鍵錯誤格式** `Key (col)=(val)` —— 那是 Supabase unique 違反
+  最常見的形式，值就攤在錯誤訊息裡。不含敏感鍵名的訊息保持可讀，否則 log 會失去用處。
+- [x] LOG-S03：替換 `main.py` 的 7 處外洩 print、`ai_analyzer_module.py` 與 `parser_module.py`
+  各一處。其中 `ai_analyzer_module.py` 最嚴重 —— 它不只 print，還把 `str(e)` 塞進**回傳給前端**
+  的 `section_1`，等於把例外訊息（可能含送進去的健康資料）直接送到使用者畫面。已改為固定文案。
+- [x] LOG-S04：刪除 `backend/t.py` —— 一支把明文密碼與 bcrypt hash 直接 print 出來的除錯腳本，
+  不該留在 repo。
+- [x] TST-S23：新增 `tests/test_safe_logging.py`（18 項），含一條**回歸防線**：
+  掃描後端原始碼，若 `print(例外)` 的寫法重新出現即測試失敗。
+- [x] TST-S24：3,881 項 Python 測試通過。

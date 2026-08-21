@@ -5,6 +5,7 @@ import json
 from google import genai
 from google.genai import types
 from config import settings
+from safe_logging import log_exception
 
 
 
@@ -60,7 +61,7 @@ def crop_focus_regions(main_image):
         
         return [img_personal, img_subj, img_flower, img_scatter, img_lf_hf, img_hr ,img_sdnn, img_yinyang, img_tianren]
     except Exception as e:
-        print(f"裁切圖片時發生錯誤: {e}")
+        log_exception("parser.crop_images", e)
         return []
 
 def extract_data_with_vision_ai(images):

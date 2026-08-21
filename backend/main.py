@@ -49,6 +49,7 @@ from reibi_subscription_gate import (
     require_pro,
     resolve as resolve_subscription,
 )
+from safe_logging import log_exception
 
 # 查別人的資料時不套用個人訂閱限制：管理者看的是企業合約涵蓋的範圍。
 NO_LIMIT_ACCESS = resolve_subscription("member", [])
@@ -703,13 +704,13 @@ async def analyze_schumann_report(
             )
             public_url = supabase.storage.from_("reports").get_public_url(safe_name)
         except Exception as e:
-            print(f"上傳至 Storage 失敗: {e}")
+            log_exception("analyze.storage_upload", e)
         # ... (下方保留你原本的「4. 呼叫 AI 撰寫深度解說報告」邏輯) ...
         try:
             ai_summary_dict = generate_ai_explanation(parsed_data, language=language)
             ai_summary_text = json.dumps(ai_summary_dict, ensure_ascii=False)
         except Exception as e:
-            print(f"AI 報告生成失敗: {e}")
+            log_exception("analyze.ai_report", e)
             ai_summary_text = None # 容錯機制：就算 AI 寫作失敗，原始數據還是要存進去
 
         # 5. 【關鍵轉換】將 AI 抓出的 JSON 映射到 Supabase 的蛇行欄位
@@ -791,7 +792,7 @@ async def analyze_schumann_report(
         }
 
     except Exception as e:
-        print(f"分析錯誤: {e}")
+        log_exception("analyze.report", e)
         raise HTTPException(status_code=500, detail=str(e))
     
     finally:
@@ -931,7 +932,7 @@ async def get_merged_pdf(record_id: str, current_user: dict = Depends(get_curren
                     orig_doc = fitz.open(stream=response.content, filetype="pdf")
                     final_pdf.insert_pdf(orig_doc)
             except Exception as e:
-                print(f"⚠️ 下載或合併原始 PDF 失敗: {e}")
+                log_exception("pdf.download_merge", e)
 
         # 5. 再接上「AI 分析報告」
         report_doc = fitz.open(stream=report_pdf_bytes, filetype="pdf")
@@ -947,7 +948,7 @@ async def get_merged_pdf(record_id: str, current_user: dict = Depends(get_curren
         )
 
     except Exception as e:
-        print(f"❌ PDF 處理發生錯誤: {str(e)}")
+        log_exception("pdf.process", e)
         raise HTTPException(status_code=500, detail=f"PDF 處理失敗: {str(e)}")
 
 @app.get("/api/schumann/reports/{report_id}")
@@ -1032,7 +1033,7 @@ async def submit_sleep_assessment(
             )
             custom_recs = json.loads(ai_res.text)
         except Exception as e:
-            print(f"AI 生成衛教建議失敗: {e}")
+            log_exception("sleep_assessment.recommendations", e)
             custom_recs = None
 
     report_id = str(uuid.uuid4())
@@ -1073,7 +1074,7 @@ async def submit_sleep_assessment(
             "p_created_by": request.user_id,
         }).execute().data
     except Exception as exc:
-        print(f"⚠️ 評估積分寫入失敗（報告已儲存）: {exc}")
+        log_exception("sleep_assessment.points", exc)
     
     return {
         "status": "success",
