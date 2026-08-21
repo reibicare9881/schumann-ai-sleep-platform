@@ -45,8 +45,9 @@ create table if not exists public.reibi_venue_free_visits (
   appointment_id uuid references public.appointments(id) on delete set null,
   claimed_at timestamptz not null default now(),
   -- 每人限一次，與場域無關：主鍵只有 profile_id。
-  -- 若日後改為「每人每場域一次」，主鍵改成 (profile_id, venue_id) 即可，
-  -- 那是一個資料庫層級的規則變更，不是散落在應用程式各處的 if。
+  -- 此範圍於 2026-08-20 經業務端確認。若日後改為「每人每場域一次」，
+  -- 主鍵改成 (profile_id, venue_id) 即可 —— 那是一個資料庫層級的規則變更，
+  -- 不是散落在應用程式各處的 if。
   primary key (profile_id)
 );
 

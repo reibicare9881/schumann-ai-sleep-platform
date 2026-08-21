@@ -21,8 +21,8 @@ VENUE_SELECT = (
     "first_visit_free,is_placeholder,is_active,sort_order"
 )
 
-# Artifact 的規則是「每人限一次」，與場域無關。這個常數只作說明用途；
-# 實際保證來自 reibi_venue_free_visits 的主鍵（僅 profile_id）。
+# 「每人限一次，不分場域」—— 2026-08-20 經業務端確認，與 Artifact 字面規則一致。
+# 這個常數只作說明用途；實際保證來自 reibi_venue_free_visits 的主鍵（僅 profile_id）。
 FREE_VISIT_SCOPE = "per_person"
 FREE_VISIT_NOTE = "首次免費體驗每人限一次，不分場域。"
 
