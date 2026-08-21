@@ -26,6 +26,9 @@ import main
 # is a deliberate decision, not a default.
 PUBLIC_ROUTES = {
     ("GET", "/"): "服務資訊首頁",
+    # 監控不會帶 token；要求驗證等於讓 Railway 的告警接不上。
+    # 回應刻意只含依賴健康與否的布林值，不含例外訊息或連線細節。
+    ("GET", "/health"): "依賴健康檢查，供監控與 load balancer 使用",
     ("GET", "/api/platforms"): "公開平台清單",
     ("GET", "/api/auth/roles"): "角色目錄，供登入前畫面顯示",
     ("GET", "/api/auth/verify-org/{org_code}"): "登入前驗證單位代碼是否存在",

@@ -49,6 +49,7 @@ from reibi_subscription_gate import (
     require_pro,
     resolve as resolve_subscription,
 )
+from health import build_health_report
 from safe_logging import log_exception
 
 # 查別人的資料時不套用個人訂閱限制：管理者看的是企業合約涵蓋的範圍。
@@ -201,15 +202,32 @@ class OrgSettingsUpdate(BaseModel):
 # ==========================================
 
 @app.get("/")
-def health_check():
-    """系統健康檢查"""
+def root():
+    """服務識別。這裡刻意**不**做健康檢查 —— 監控請改用 /health。
+
+    原本這個端點回傳寫死的 "online"，Supabase 掛掉也照樣 200，
+    監控接上去只能確認機器活著，不能確認服務可用。
+    """
     return {
         "status": "online",
         "service": "統一多平台 API",
         "version": "2.0.0",
         "platforms": ["schumann", "sleep"],
+        "health_endpoint": "/health",
         "timestamp": datetime.now().isoformat()
     }
+
+
+@app.get("/health")
+def health_check(response: Response):
+    """實際檢查依賴的健康檢查。任一必要依賴失敗回 503。
+
+    回應刻意不含例外訊息或連線細節：這個端點未經驗證即可存取。
+    """
+    report = build_health_report(supabase)
+    if report["status"] != "healthy":
+        response.status_code = 503
+    return report
 
 @app.get("/api/platforms")
 def list_platforms():

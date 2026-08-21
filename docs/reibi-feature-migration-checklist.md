@@ -256,7 +256,7 @@
 - [x] TST-08 migration 從空資料庫重播成功。
 - [x] TST-09 本機 database advisors 無 warning/error。
 - [-] TST-10 遠端 advisors：schema 無問題，Auth leaked-password protection 待啟用。
-- [ ] TST-11 完整 E2E：登入→建立企業→報價→合約→工單→驗收。
+- [x] TST-11 完整 E2E：登入→建立企業→報價→合約→工單→驗收。由 `frontend/e2e/business-flow.spec.ts` 覆蓋，透過真實 UI 驅動本機堆疊。**此項先前誤標為未完成**，2026-08-20 核對後更正，見 §44。
 - [ ] TST-12 效能、分頁、大檔匯入與併發寫入測試。
 
 ### REL：合併與上線
@@ -265,7 +265,7 @@
 - [ ] REL-02 migration、API、前端與 runbook code review。
 - [ ] REL-03 遠端 schema／新系統資料備份與乾淨起始演練；舊 Artifact 正式匯入演練為 `[N/A]`。
 - [x] REL-04 Railway Hobby staging 後端已建立，可進行遠端整合測試。
-- [ ] REL-05 設定正式 secrets、CORS、網域、HTTPS、監控與錯誤告警。
+- [-] REL-05 設定正式 secrets、CORS、網域、HTTPS、監控與錯誤告警。**後端側已就緒**：`GET /health` 會實際檢查依賴、失敗回 503（見 §44）。剩餘為外部設定：Railway／Supabase 的告警門檻與通知管道，需專案負責人操作。
 - [ ] REL-06 完整驗證後才合併到 `main`。
 
 ## 10. 外部整合（不阻擋核心移植）
@@ -821,3 +821,30 @@
 - [x] TST-S25：新增 `tests/test_audit_trail.py`（11 項），含「失敗的轉移不留下紀錄」——
   沒有發生的事不該有稽核列 —— 以及「稽核失敗不向上拋」。
 - [x] TST-S26：3,892 項 Python 測試通過。
+
+## 44. Batch S14 健康檢查與 E2E 現況更正（2026-08-20）
+
+### 健康檢查（REL-05 前置）
+
+- [x] OPS-S02：新增 `GET /health`，**實際檢查依賴**：對 Supabase 下一個最小查詢，
+  並確認 Gemini 金鑰有設定。任一必要依賴失敗回 **503**，讓告警與 load balancer 能據此動作。
+  原本的 `/` 回傳寫死的 `{"status": "online"}` —— Supabase 斷線、金鑰過期它都照樣 200。
+  **那種健康檢查在故障時最不可靠，因為它永遠是綠的。**
+- [x] OPS-S03：`/` 保留為服務識別，並回傳 `health_endpoint: "/health"` 指向真正的檢查，
+  避免有人繼續把 `/` 當監控端點。
+- [x] OPS-S04：健康檢查**不真的呼叫 Gemini** —— 該端點每分鐘會被打很多次，
+  每次燒一份 API 額度不合理。只擋「忘了設定金鑰」這個最常見的部署失誤。
+- [x] SEC-S03：回應**不含例外訊息、連線字串或金鑰片段**，只說哪個依賴不健康。
+  這個端點未經驗證即可存取（監控不會帶 token），任何細節都等於對外公開。
+  已於 `test_permission_matrix.py` 的公開路由白名單明確登記 ——
+  該機制在本批確實發揮作用：新增公開端點時測試立刻失敗，逼人寫下理由。
+- [x] TST-S27：新增 `tests/test_health.py`（11 項），含「檢查本身壞掉算不健康而非回 500」
+  與「回應不得含連線細節」。
+
+### E2E 現況更正
+
+- [x] AUDIT-S03：**`TST-11` 先前誤標為未完成。** `frontend/e2e/business-flow.spec.ts` 已覆蓋
+  「建立企業 → 報價 → 合約 → 工單 → 驗收」完整迴圈，透過真實 UI 驅動，
+  且每個狀態轉移都以操作者實際會點的按鈕標籤前進。核對後更正為已完成。
+
+- [x] TST-S28：3,903 項 Python 測試通過。
