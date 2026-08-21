@@ -14,6 +14,7 @@ from reibi_l5 import partner_scope_codes
 
 from auth import require_reibi_manager, require_reibi_partner, require_reibi_super
 from reibi_subscription_gate import PLAN_CODES, PLAN_LABELS, PLAN_MONTHS
+import reibi_audit
 
 
 PLAN_PRICES = {"基本": Decimal("600000"), "成長": Decimal("1200000"), "專業": Decimal("1800000"), "旗艦": Decimal("3000000")}
@@ -512,6 +513,8 @@ def create_reibi_batch_c_router(client: Any) -> APIRouter:
                 "p_amount": float(payload.amount), "p_reviewed_by": current_user.get("name") or current_user.get("uid"), "p_note": payload.note}).execute()
         except Exception as exc:
             raise HTTPException(status_code=409, detail="匯款沖帳失敗；請重新整理後再試") from exc
+        reibi_audit.record(client, current_user, reibi_audit.ACTION_REMITTANCE_RECONCILE,
+            f"匯款申報 #{remittance_id} 沖帳，金額 NT${float(payload.amount):,.0f}，時程 {payload.schedule_ids}")
         return {"status": "success", "data": response.data}
 
     @router.post("/finance/remittances/{remittance_id}/reject")
@@ -565,6 +568,8 @@ def create_reibi_batch_c_router(client: Any) -> APIRouter:
         if payload.status not in INVOICE_TRANSITIONS.get(current, set()):
             raise HTTPException(status_code=409, detail=f"發票不可從「{current}」直接改為「{payload.status}」")
         rows = _execute(client.table("reibi_invoices").update({"status": payload.status, "updated_at": _now()}).eq("id", invoice_id), "更新發票狀態")
+        reibi_audit.record(client, current_user, reibi_audit.ACTION_INVOICE_STATUS,
+            f"發票 #{invoice_id} 狀態由「{current}」改為「{payload.status}」")
         return {"status": "success", "data": rows[0]}
 
     @router.delete("/finance/invoices/{invoice_id}")
@@ -621,16 +626,24 @@ def create_reibi_batch_c_router(client: Any) -> APIRouter:
         if payload.action == "approve":
             if payload.invoice_no is not None or payload.admin_note is not None:
                 _execute(client.table("reibi_subscriptions").update({"invoice_no": payload.invoice_no, "admin_note": payload.admin_note}).eq("id", subscription_id), "更新訂閱審核資料")
-            return {"status": "success", "data": issue_subscription_code(subscription_id, current_user, approve=True)}
+            result = issue_subscription_code(subscription_id, current_user, approve=True)
+            reibi_audit.record(client, current_user, reibi_audit.ACTION_SUBSCRIPTION_REVIEW,
+                f"訂閱申請 #{subscription_id} 核准並核發啟用碼")
+            return {"status": "success", "data": result}
         rows = _execute(client.table("reibi_subscriptions").update({"status": "已拒絕", "admin_note": payload.admin_note,
             "activation_code": None, "activation_code_hash": None, "updated_at": _now()}).eq("id", subscription_id), "拒絕訂閱")
         if not rows:
             raise HTTPException(status_code=404, detail="找不到訂閱申請")
+        reibi_audit.record(client, current_user, reibi_audit.ACTION_SUBSCRIPTION_REVIEW,
+            f"訂閱申請 #{subscription_id} 拒絕")
         return {"status": "success", "data": rows[0]}
 
     @router.post("/subscriptions/{subscription_id}/reissue")
     def reissue_subscription(subscription_id: int, current_user: dict = Depends(require_reibi_super)):
-        return {"status": "success", "data": issue_subscription_code(subscription_id, current_user, approve=False)}
+        result = issue_subscription_code(subscription_id, current_user, approve=False)
+        reibi_audit.record(client, current_user, reibi_audit.ACTION_SUBSCRIPTION_REISSUE,
+            f"訂閱 #{subscription_id} 重新核發啟用碼")
+        return {"status": "success", "data": result}
 
     _catalog_crud(router, client, "staff", "reibi_staff", StaffWrite, {"is_active": False})
     _catalog_crud(router, client, "partners", "reibi_partners", PartnerWrite, {"is_active": False})
@@ -693,6 +706,9 @@ def create_reibi_batch_c_router(client: Any) -> APIRouter:
             rows = _execute(client.table("reibi_commission_ledger").insert(values), "確認分潤出帳")
         except HTTPException as exc:
             raise HTTPException(status_code=409, detail="該經銷商本月分潤已確認") from exc
+        reibi_audit.record(client, current_user, reibi_audit.ACTION_COMMISSION_CONFIRM,
+            f"分潤確認出帳：經銷商 #{payload.distributor_id}，{payload.period_month.isoformat()}，"
+            f"NT${float(preview['total_commission']):,.0f}", org_code=preview.get("org_code"))
         return {"status": "success", "data": rows[0]}
 
     @router.post("/commissions/ledger/{ledger_id}/paid")
@@ -701,6 +717,8 @@ def create_reibi_batch_c_router(client: Any) -> APIRouter:
             "paid_at": _now()}).eq("id", ledger_id).eq("status", "已確認待匯款"), "標記分潤匯款")
         if not rows:
             raise HTTPException(status_code=409, detail="找不到待匯款的分潤記錄")
+        reibi_audit.record(client, current_user, reibi_audit.ACTION_COMMISSION_PAID,
+            f"分潤 #{ledger_id} 標記已匯款，NT${float(rows[0].get('total_commission') or 0):,.0f}")
         return {"status": "success", "data": rows[0]}
 
     return router

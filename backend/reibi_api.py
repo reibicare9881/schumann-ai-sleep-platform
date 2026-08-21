@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from auth import require_reibi_manager, require_reibi_super
+import reibi_audit
 from reibi_work_order_catalog import (
     acceptance_checklist,
     catalog_payload,
@@ -1818,6 +1819,12 @@ def create_reibi_router(client: Any) -> APIRouter:
             .eq("id", record_id).eq("enterprise_id", enterprise_id),
             f"更新 {table}",
         )
+        # 三種文件共用同一個轉移函式，因此稽核也只接這一處。
+        action = {"quote": reibi_audit.ACTION_QUOTE_STATUS,
+                  "contract": reibi_audit.ACTION_CONTRACT_STATUS}.get(kind, reibi_audit.ACTION_WORKORDER_STATUS)
+        label = rows[0].get("doc_no") or rows[0].get("work_order_no") or f"#{record_id}"
+        reibi_audit.record(client, current_user, action,
+            f"{label} 狀態由「{existing.get('status')}」改為「{payload.status}」")
         return {"status": "success", "data": rows[0]}
 
     @router.post("/quotes/calculate")
@@ -1880,6 +1887,8 @@ def create_reibi_router(client: Any) -> APIRouter:
             "p_created_by": current_user.get("name"),
             "p_terms": payload.terms,
         }), "報價轉合約")
+        reibi_audit.record(client, current_user, reibi_audit.ACTION_QUOTE_CONVERT,
+            f"報價 #{record_id} 轉為{payload.contract_type} {rows[0].get('doc_no')}")
         return {"status": "success", "data": rows[0]}
 
     @router.get("/contracts")
@@ -1929,6 +1938,8 @@ def create_reibi_router(client: Any) -> APIRouter:
             .eq("id", record_id).eq("enterprise_id", enterprise_id),
             "更新合約簽署與用印",
         )
+        reibi_audit.record(client, current_user, reibi_audit.ACTION_CONTRACT_EXECUTION,
+            f"合約 {rows[0].get('doc_no')} 更新簽署／用印快照（第 {len(snapshots)} 版）")
         return {"status": "success", "data": rows[0]}
 
     @router.post("/contracts/{record_id}/adjustment-quote", status_code=status.HTTP_201_CREATED)
@@ -2073,6 +2084,9 @@ def create_reibi_router(client: Any) -> APIRouter:
         rows = _execute(client.table("reibi_work_orders").update(values).eq("id", record_id).eq("enterprise_id", enterprise_id), "登錄工單驗收")
         data = dict(rows[0])
         data["acceptance_checklist"] = acceptance_checklist(data.get("items"), data.get("acceptance"))
+        reibi_audit.record(client, current_user, reibi_audit.ACTION_WORKORDER_ACCEPT,
+            f"工單 {data.get('work_order_no')} 登錄「{payload.acceptance_result}」，"
+            f"客戶簽署 {payload.client_sign_name}，勾核 {checklist['passed']}/{checklist['total']} 項通過")
         return {"status": "success", "data": data}
 
     @router.post("/artifacts/validate")
