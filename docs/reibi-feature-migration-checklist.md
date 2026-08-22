@@ -1,8 +1,8 @@
 # REIBI 完整功能移植清單
 
-專案環境、部署、操作與接手流程請見 [完整建置、進度與操作交接手冊](reibi-merge-master-handoff.md)。
+專案環境、部署、操作與接手流程請見 [完整建置、進度與操作交接手冊](reibi-merge-master-handoff.md)；目前總結與未完成項目請見 [完整進度與缺漏報告](reibi-migration-status-report.md)。
 
-最後盤點日期：2026-08-17
+最後盤點日期：2026-08-21
 工作分支：`codex/reibi-fastapi-merge`
 
 ## 1. 範圍與完成定義
@@ -42,11 +42,11 @@
 | Draft Pull Request | `[x]` | 已由使用者建立 |
 | Supabase baseline | `[x]` | 本機與遠端 migration 一致 |
 | Database hardening | `[x]` | `anon`／`authenticated` 無 REIBI 表權限 |
-| REIBI domain schema | `[x]` | 38 張 `reibi_*` 表，均由 migration 建立並採 deny-by-default RLS／grants |
-| FastAPI REIBI router | `[-]` | 主要業務、身分、L5 總覽與區域佈點 API 已完成，401／403 矩陣與 E2E 已涵蓋；尚待統一 response schema 與寫入稽核（FND-05／06） |
-| Next.js REIBI 管理頁 | `[-]` | 主要商務、健康、分析、設定、帳號、L5 總覽與區域佈點已完成，瀏覽器 E2E 涵蓋 31 項；尚待場域前置選單與定價／About 內容 |
+| REIBI domain schema | `[x]` | 41 張 `reibi_*` 表，均由 migration 建立並採 deny-by-default RLS／grants |
+| FastAPI REIBI router | `[-]` | 主要業務、身分、L5、稽核與健康檢查 API 已完成；尚待統一 response schema、錯誤碼與 correlation ID（FND-05） |
+| Next.js REIBI 管理頁 | `[-]` | 主要商務、健康、分析、設定、帳號、L5、場域與定價頁已完成；正式場域資料及 About REIBI 三頁文案仍待提供 |
 | Artifact 欄位映射 | `[x]` | 主要 storage keys 與目標表已完成程式對照；因舊資料不搬遷，不要求真實匯出檔驗證 |
-| Python 測試環境 | `[x]` | Python 3.11.9 與 `backend/.venv` 已重建，`requirements-dev.txt` 固定 pytest 8.4.2；2026-08-18 為 3,369 項後端、159 項 pgTAP 與 37 項 Playwright E2E 通過 |
+| Python 測試環境 | `[x]` | Python 3.11.9 與 `backend/.venv` 可用；目前為 3,903 項 Python tests。pgTAP 有 159 項計畫；E2E 必須在本機 Docker 堆疊重跑後才可宣稱當次通過 |
 | 四 Artifact JSON 匯出 | `[N/A]` | JSX 已具備匯出工具，但依範圍決策不重新發布、不執行真實匯出 |
 | `reibi_super` 安全登入 | `[x]` | 第一位正式帳號 `reibicare9881@gmail.com`（麗媚AI）已完成 Email、密碼、TOTP 綁定及 staging AAL2 登入驗證 |
 | 既有資料正式匯入 | `[N/A]` | 依範圍決策不搬移舊 `window.storage`；新 Supabase 業務資料乾淨起始 |
@@ -76,7 +76,7 @@
 - [x] IAM-04 支援 L5 `reibi_super/reibi_finance/reibi_data/reibi_cs` 與兩種經銷商可信角色；新增角色不能由舊共用 PIN 取得。
 - [x] IAM-05 已完成 Supabase Auth、內部白名單、可撤銷 session、登入限速、既有帳號 TOTP self-enrollment 與 AAL2 強制流程；第一位正式 `reibi_super` 已完成 QR Code 綁定及 AAL2 登入。
 - [x] IAM-06 `reibi_super` 可跨範圍邀請、停用及撤銷 session；單位 `admin` 只能管理自己企業的非 admin 角色，並防止自我停用與最後一位超管被停用。
-- [-] IAM-07 已有 14 角色、權限、可信 session 與資料庫 scope 測試；全站逐 endpoint 的 401／403 矩陣仍併入 TST-04。
+- [-] IAM-07 已有 14 角色、權限、可信 session 與資料庫 scope 測試；401／403、IDOR/BOLA 已有廣泛覆蓋，但全站逐 endpoint 的系統性矩陣仍待整併。
 - [x] IAM-08 五種部門必選角色由 DB constraint、跨表 trigger 與 FastAPI 同時驗證，登入 token 的 `session.dept` 取自伺服器資料。
 
 ## 4. 主平台功能
@@ -153,7 +153,7 @@
 - [x] L5-01D 企業場域、設備、A/B/C/D 四層方案、授權用量、平台帳號核對與合約狀態。
 - [x] L5-01E 服務案件與企業範圍限制完成；主經銷商可查看及選擇自身與直屬子經銷商企業，次級經銷商只限自身企業。案件清單、建立案件與 L5 統計均由 FastAPI 重新驗證可信角色範圍。
 - [x] L5-01F 預約管理與組織越權防護。
-- [x] L5-01G 區域佈點（點線面）；里程碑時間軸依 2026-08-17 決策暫不移植，見 §31。
+- [x] L5-01G 區域佈點（點線面）；擴展里程碑時間軸已於 2026-08-19 決策為 `[N/A]`，見 §31。
 
 ### L5-02 財務
 
@@ -248,11 +248,11 @@
 - [x] TST-01 安裝 Python 3.11.9，重建工作區 `.venv`。
 - [x] TST-02 `pip check`、compile、unit test 與 FastAPI TestClient 均通過。
 - [x] TST-03 對 Supabase client 建立 fake／integration test 分層。
-- [ ] TST-04 每個角色的 401／403、跨組織 IDOR/BOLA 測試。
+- [-] TST-04 401／403、跨組織 IDOR/BOLA 已有路由掃描、守門與 handler 層測試；全站逐 endpoint 的系統性矩陣仍待整併。
 - [ ] TST-05A Artifact mapping 的合成 fixture 回歸測試。
 - [N/A] TST-05B 真實 Artifact 匯出樣本回歸測試；依範圍決策不取得真實舊資料。
 - [x] TST-06 前端 production build 通過。
-- [ ] TST-07 前端主要流程瀏覽器 smoke test 與手機版檢查。
+- [-] TST-07 已有本機 Playwright 的主要流程、手機版與角色裁切測試；企業 admin、occupational_health、兩種經銷商角色的瀏覽器 E2E 仍待補齊（TST-Q10）。
 - [x] TST-08 migration 從空資料庫重播成功。
 - [x] TST-09 本機 database advisors 無 warning/error。
 - [-] TST-10 遠端 advisors：schema 無問題，Auth leaked-password protection 待啟用。
@@ -261,7 +261,7 @@
 
 ### REL：合併與上線
 
-- [ ] REL-01 每一批功能維持 Draft PR，通過測試才標記 ready for review。
+- [x] REL-01 Draft PR 已由專案負責人建立；保持 Draft，完成 release checklist 與 code review 後才標記 ready for review。
 - [ ] REL-02 migration、API、前端與 runbook code review。
 - [ ] REL-03 遠端 schema／新系統資料備份與乾淨起始演練；舊 Artifact 正式匯入演練為 `[N/A]`。
 - [x] REL-04 Railway Hobby staging 後端已建立，可進行遠端整合測試。

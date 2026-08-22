@@ -35,5 +35,5 @@
 
 - [完整功能移植清單](reibi-feature-migration-checklist.md)
 - [Artifact 資料映射](reibi-artifact-mapping.md)
-- [Batch G 操作手冊](reibi-batch-g-runbook.md)
+- [完整建置、進度與操作交接手冊](reibi-merge-master-handoff.md)
 - [本機開發與匯入流程](reibi-local-development.md)

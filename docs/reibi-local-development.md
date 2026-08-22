@@ -5,8 +5,8 @@
 ## 現階段環境邊界
 
 - Railway Hobby 已建立 staging 後端；本機開發仍使用 `http://localhost:8000`，部署環境與本機環境不可混用 secrets。
-- `baseline_remote_schema`、`harden_existing_access` 與 `extend_reibi_domain` 已於 2026-08-12 在本機重播驗證，並套用至已綁定的遠端 Supabase。
-- 遠端已有 38 張 `reibi_*` 資料表，均由 migration 建立並採 deny-by-default RLS／grants；應用程式資料存取只經 FastAPI 的 `service_role`。
+- repo 與遠端目前同為 20 個 migration；細節與當次驗證結果見 [完整進度與缺漏報告](reibi-migration-status-report.md)。
+- 遠端目前有 41 張 `reibi_*` 資料表，均由 migration 建立並採 deny-by-default RLS／grants；應用程式資料存取只經 FastAPI 的 `service_role`。
 - 前端本機 API URL 為 `http://localhost:8000`。
 - FastAPI 持有 `service_role`，前端永遠不可取得該 key，也不直接呼叫 Supabase Data API。
 - 已發布 Artifact 的實際 `window.storage` 資料不在此 repo；依 [2026-08-14 範圍決策](reibi-legacy-data-scope-decision.md)，不匯出或搬移舊資料，新 Supabase 業務資料乾淨起始。
@@ -49,7 +49,7 @@
 | Artifact 跨組織匯入技術能力（目前範圍不執行） | 否 | 是 |
 | L5 新案開通、流水號與安全憑證函 | 否 | 是（`reibi_finance` 亦可） |
 
-受邀的主平台、REIBI 內部與經銷商角色統一使用 `/reibi-login`：Supabase Auth Email／密碼、已驗證 Email、`reibi_internal_users` 可信 registry 與可撤銷的 30 分鐘 server-side session。角色、企業、部門及經銷商範圍均由伺服器載入，瀏覽器不能自行指定。單位共用 PIN 永遠不能取得 L5 或經銷商角色；要求 MFA 的邀請會在 `/auth/complete` 完成 TOTP 設定，後續登入必須達 AAL2。`admin` 與 `reibi_super` 可使用 `/reibi/accounts`，但前者只能管理自己企業且不能授予 `admin`。第一位正式 `reibi_super` 已完成 TOTP 綁定及 staging AAL2 登入驗證；後續帳號與選用匯入操作見 [Batch G 手冊](reibi-batch-g-runbook.md)。
+受邀的主平台、REIBI 內部與經銷商角色統一使用 `/reibi-login`：Supabase Auth Email／密碼、已驗證 Email、`reibi_internal_users` 可信 registry 與可撤銷的 30 分鐘 server-side session。角色、企業、部門及經銷商範圍均由伺服器載入，瀏覽器不能自行指定。單位共用 PIN 永遠不能取得 L5 或經銷商角色；要求 MFA 的邀請會在 `/auth/complete` 完成 TOTP 設定，後續登入必須達 AAL2。`admin` 與 `reibi_super` 可使用 `/reibi/accounts`，但前者只能管理自己企業且不能授予 `admin`。第一位正式 `reibi_super` 已完成 TOTP 綁定及 staging AAL2 登入驗證；帳號、MFA 與緊急撤銷操作見 [交接手冊](reibi-merge-master-handoff.md)。
 
 既有可信帳號可在 `/reibi/mfa` 補綁 TOTP。流程會要求再次輸入密碼、顯示 QR Code、驗證六位數代碼；只有 Supabase 回傳 AAL2 後，後端才透過版本化 transaction 設定 `mfa_required=true`，並撤銷所有舊 AAL1 應用工作階段。不得先在 Dashboard 或 SQL Editor 手動開啟該 flag。
 
@@ -117,6 +117,6 @@ npx.cmd tsc --noEmit
 npm.cmd run build
 ```
 
-截至 2026-08-17，Batch M 的 89 項 Python 測試、TypeScript no-emit、前端 production build、FastAPI 路由 smoke test 與遠端 16 個 migration 歷史核對已通過。`reibi_super`／`reibi_finance` 可在 `/reibi` 跨企業總覽選定企業，再管理基本資料、方案、授權、場域與部門；企業 `admin` 仍只限登入 token 內的自身企業。主經銷商在 `/reibi/service` 可選擇自身與直屬子經銷商企業，次級經銷商只限自身；案件清單、建立與 L5 聚合都由後端重新驗證，L5 作業流程會顯示服務案件的待處理與總筆數。服務中心的部門架構與 CSV 匯入會明確使用已選企業，超級管理員不再因缺少 `enterprise_id` 中斷載入。新案開通入口為 `/reibi/onboarding`；成功後可下載不含密碼的 PDF 憑證函，再到 `/reibi/workflow` 建立報價、合約與工單。新案企業會同步至 `organizations`，因此可直接在 `/reibi/accounts` 邀請該企業的可信帳號。遠端 advisor 尚有一項既有警告：Auth 的 leaked-password protection 未啟用；正式上線前應在 Supabase Auth 設定中開啟。
+目前的驗證基準為 3,903 項 Python 測試、20 個 migration 與 159 項 pgTAP 計畫；每次需要聲稱「全數通過」時，仍須在當次環境重新執行本頁命令與本機資料庫測試。`reibi_super`／`reibi_finance` 可在 `/reibi` 跨企業總覽選定企業，再管理基本資料、方案、授權、場域與部門；企業 `admin` 仍只限登入 token 內的自身企業。主經銷商在 `/reibi/service` 可選擇自身與直屬子經銷商企業，次級經銷商只限自身；案件清單、建立與 L5 聚合都由後端重新驗證。新案開通入口為 `/reibi/onboarding`；成功後可下載不含密碼的 PDF 憑證函，再到 `/reibi/workflow` 建立報價、合約與工單。新案企業會同步至 `organizations`，因此可直接在 `/reibi/accounts` 邀請該企業的可信帳號。遠端 advisor 仍有一項 Auth 警告：leaked-password protection 未啟用；正式上線前應在 Supabase Auth 設定中開啟。
 
 2026-08-14 已重新安裝 Python 3.11.9 並重建 `backend/.venv`；開發依賴由 `backend/requirements-dev.txt` 引用正式依賴並固定 pytest 8.4.2。2026-08-17 最近一次 `pip check` 無相依衝突，89 項 Python 後端測試通過。`.venv` 仍含基底 Python 的絕對路徑；若基底直譯器被移除，應直接依本文件重建，不應搬移或沿用舊環境。

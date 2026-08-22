@@ -16,7 +16,7 @@
 | `pin_*`、`rc_*`、`lk_*` | PIN、備援碼、鎖定狀態 | 不搬明碼/舊雜湊；上線時重新核發憑證 |
 | `rpts` | 個人綜合評估：`profile`、ISI `sScore/sL`、BPI `pScore/pL`、工作分數、AI 建議 | 既有 `sleep_reports` 為相容目標；匯入追蹤寫入 `reibi_artifact_import_records`。額外職健量表寫 `reibi_health_assessments` |
 | `org_{orgCode}` | 組織去識別評估摘要，最多 500 筆 | `reibi_health_assessments` 或重新彙整至 `reibi_org_aggregates` |
-| `pts_{uid}`、`ci_{uid}` | 點數、簽到 | 暫留原始匯入記錄；待點數規則定案後再建 ledger，避免只搬不可稽核餘額 |
+| `pts_{uid}`、`ci_{uid}` | 點數、簽到 | `reibi_point_ledger`；以不可變 ledger 重建餘額，匯入來源仍保留原始 payload |
 | `appt_{orgCode}` | 組織預約 | 既有 `appointments`，並保留匯入來源 |
 | `svc_{orgCode}`、`prs` | 服務請求、問題回報 | `reibi_service_tickets` |
 | `setup_{orgCode}`、`dept_struct_{orgCode}` | 組織設定、L1–L4 部門樹 | `reibi_departments`；非結構設定保留於 enterprise `source_payload` |
@@ -42,14 +42,14 @@
 | `l5_distributors` | 上下級經銷商、區域、等級、統編、地址、聯絡資料、服務人員、分潤 | `reibi_distributors` |
 | `l5_partners` | 推薦夥伴、聯絡人、預設分潤 | `reibi_partners` |
 | `l5_staff` | 員工代號、姓名、職稱、電話、Email | `reibi_staff` |
-| `l5_settings` | REIBI 保留比例等營運設定 | 先保留在匯入原始記錄；設定 API 實作時再建立具名設定欄位 |
+| `l5_settings` | REIBI 保留比例等營運設定 | 具名的營運／分析設定表與 API；無安全映射的附加欄位保留於匯入原始記錄 |
 | `l5_invoices` | 發票號碼／日期、企業、層級、品項、未稅額、稅額、總額、狀態 | `reibi_invoices`（品項暫存 JSONB） |
 | `l5_personal_subs` | 會員碼、方案、金額、發票、核准與啟用碼 | `reibi_subscriptions` |
 | `l5_tickets` | 企業、類型、優先級、期望日期、處理人、狀態 | `reibi_service_tickets` |
 | `l5_line_logs` | 對象、範本、訊息、發送人與模擬狀態 | `reibi_message_logs` |
 | `l5_remit_index`、`l5_mhi_agg_index` | 跨 key 查詢索引 | 不搬移；由資料表索引與查詢取代 |
 | `l5_mhi_agg_{orgCode}`、`l5_health_agg_{orgCode}` | k>=5 去識別彙整 | `reibi_org_aggregates` |
-| 佣金 ledger、變更請求等 L5 擴充 key | 分潤歷程、管理變更 | 先完整進 `reibi_artifact_import_records`；財務規則確認後再正規化，避免錯誤結算 |
+| 佣金 ledger、變更請求等 L5 擴充 key | 分潤歷程、管理變更 | `reibi_commission_ledger` 與受控權限／變更申請流程；無法安全映射的附加欄位保留於 `reibi_artifact_import_records` |
 
 ## 報價／合約 (`reibi-quote_v1_13`)
 
