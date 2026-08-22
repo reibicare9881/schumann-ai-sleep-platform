@@ -12,7 +12,7 @@ from modules.ai_analyzer_module import generate_ai_explanation
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -52,6 +52,7 @@ from reibi_subscription_gate import (
 )
 from health import build_health_report
 from safe_logging import log_exception
+from org_login_throttle import assert_not_throttled, record_attempt
 from upload_safety import scan_for_malware, validate_pdf_bytes
 
 # 查別人的資料時不套用個人訂閱限制：管理者看的是企業合約涵蓋的範圍。
@@ -269,9 +270,9 @@ async def verify_org_code(org_code: str):
     return {"status": "success", "data": {"org_name": res.data[0]["org_name"]}}
 
 @app.post("/api/auth/login")
-async def unified_login(request: LoginRequest):
+async def unified_login(request: LoginRequest, http_request: Request):
     """統一登入 - 支持舒曼和睡眠平台，並整合 Supabase 與 JWT"""
-    
+
     platform = request.platform.lower()
     
     if platform not in ["schumann", "sleep"]:
@@ -345,11 +346,19 @@ async def unified_login(request: LoginRequest):
             expected_pin_hash = org_data.get("occupational_health_pin")
         else:
              raise HTTPException(status_code=400, detail="未知的角色")
-            
+
+        # 通行碼是全組織共用的憑證，猜中一次即可讀取整間企業的健康資料，
+        # 因此比對前先擋暴力嘗試（Artifact 原本就有，移植時漏掉）。
+        client_ip = http_request.client.host if http_request.client else None
+        assert_not_throttled(supabase, org_code, request.role, client_ip)
+
         # 🟢 修正：使用 bcrypt 進行安全比對，嚴禁使用 request.pin != expected_pin_hash
         if not expected_pin_hash or not pwd_context.verify(request.pin, expected_pin_hash):
+            record_attempt(supabase, org_code, request.role, client_ip, succeeded=False)
             raise HTTPException(status_code=401, detail="通行碼錯誤")
-            
+
+        record_attempt(supabase, org_code, request.role, client_ip, succeeded=True)
+
         # 3. 尋找或建立該員工的 profile 資料 (把名字跟 org_code 綁定)
         user_res = supabase.table("profiles").select("*").eq("full_name", request.name).eq("org_code", org_code).eq("system_role", request.role).execute()
         

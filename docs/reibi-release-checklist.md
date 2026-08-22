@@ -141,7 +141,7 @@ Vercel 前端必須有：`NEXT_PUBLIC_API_URL` 指向正式 backend。
 - 前端 `/reibi-login/forgot-password`：輸入 email 觸發重設信，`/reibi-login` 加上入口連結。
 - `/auth/complete` 文案微調為邀請與重設共用（原本寫死「完成邀請」）。
 - 四道驗證關卡（`pip check`、3,903 項 pytest、`tsc --noEmit`、Next.js build）均已重跑通過。
-- **2026-08-22 補充**：`/api/analyze` 上傳防護補完後，pytest 增至 3,907 項；再加上結構性惡意內容檢查後增至 3,920 項；再加上 ClamAV 病毒掃描整合（`scan_for_malware()`，本機 Docker 完整驗證，見 [ClamAV 部署說明](reibi-clamav-setup.md)）後，最終 **3,925 項全數通過**。
+- **2026-08-22 補充**：`/api/analyze` 上傳防護補完後，pytest 增至 3,907 項；再加上結構性惡意內容檢查後增至 3,920 項；再加上 ClamAV 病毒掃描整合（`scan_for_malware()`，本機 Docker 完整驗證，見 [ClamAV 部署說明](reibi-clamav-setup.md)）後增至 3,925 項；再加上下方 §2.5 的通行碼登入節流後，最終 **3,942 項 Python 測試與 170 項 pgTAP 全數通過**。
 
 **這解決的範圍**：任何已經被邀請、有 Supabase Auth email 帳號的人，忘記密碼可以自救。
 **這沒解決的範圍**：既有靠 PIN 自動建立、從未留下 email 的帳號，仍然沒有 email 可寄，
@@ -180,6 +180,42 @@ where org_code = 'ORG-XXXX-26-000001';
 （`main.py` 約 333 行）。因此知道單位代碼與通行碼的人可以用任意姓名無限產生帳號 ——
 遠端目前 25 個 `member`、10 個 `admin`、20 個 `individual` 多半由此累積。
 這在 staging 無害，但與 §8.3「staging 與正式共用同一個 Supabase 專案」相加就不是無害。
+
+---
+
+## 2.5 ✅ 單位通行碼登入的暴力破解節流（2026-08-22 補上，Artifact 原有但移植時漏掉）
+
+2026-08-22 重新逐檔比對 `reibi/` 四個 JSX 時發現的**移植缺口**，不是新需求。
+
+Artifact（`reibi-v10_3_34` 的 `checkLk`／`failPin`／`clearLk`，常數 `PIN_MAX=5`、
+`PIN_MS=30*60*1000`）本來就有通行碼錯 5 次鎖 30 分鐘的機制，SetupWizard 畫面還對使用者
+明白承諾過「管理者PIN錯誤5次鎖定30分鐘，並記錄於稽核日誌」。新系統 `/api/auth/login` 的
+單位登入分支對 `fail`／`attempt`／`lock`／`429`／`limit` **零匹配**，全域也只註冊了 CORS 一個
+middleware —— 也就是說，四條登入路徑中**唯一沒有節流的，剛好是憑證最弱的那條**：通行碼
+全組織共用、通常較短（開發期的除錯腳本裡就是 `aaaa`／`bbbb`／`cccc`），猜中一次即可讀取
+整間企業的健康資料。同專案的 Supabase Auth 登入（`reibi_batch_g.trusted_login`）反而早有
+10 分鐘 5 次的限制。
+
+補上的東西：
+
+| 項目 | 內容 |
+|---|---|
+| Migration | `20260822120000_org_login_attempt_throttle.sql`：新增 `reibi_org_login_attempts`。只存 HMAC 指紋，**不存單位代碼明文、不存原始 IP**；RLS 啟用且 `anon`／`authenticated` 無權限 |
+| 後端 | `backend/org_login_throttle.py`，接在 `main.py` 通行碼比對**之前** |
+| 鎖定範圍 | 兩層：`(單位+角色+IP)` 30 分鐘 5 次、`(單位+角色)` 跨 IP 30 分鐘 20 次 |
+| 測試 | 17 項 Python（含走真實端點的三項）＋ 11 項 pgTAP |
+
+**為什麼分兩層**：只鎖單位的話，任何知道單位代碼的人都能故意輸錯、癱瘓整間公司的登入
+（通行碼沒有自助重設管道，這種癱瘓特別痛）；只鎖 IP 則擋不住分散來源的嘗試。兩層都是
+滾動時間窗**自動解除**，不需要人工解鎖。
+
+**已知取捨（刻意如此，不是疏漏）**：節流檢查讀取失敗時**放行並記錄例外**，而不是擋下登入。
+理由是節流屬縱深防禦，讓它的儲存出問題就擋掉所有單位使用者，是拿真實的可用性損失換
+邊際的安全收益，何況攻擊者仍要過 bcrypt 那一關。代價是**這張表沒建立時防護會安靜失效**，
+因此用 pgTAP 結構測試把表、欄位與存取邊界釘住 —— 這正是本文件 §3 記錄過的教訓
+（程式 8/18 上線、migration 8/20 才套用，中間兩天無聲中斷）。
+
+⬜ **部署前必做**：`20260822120000` 這個 migration **尚未套用至遠端**，套用前節流不會生效。
 
 ---
 
