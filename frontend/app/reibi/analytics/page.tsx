@@ -47,6 +47,98 @@ function Metric({ label, value, suffix = "" }: { label: string; value: unknown; 
   return <div className={card}><div className="text-xs font-bold text-slate-500">{label}</div><div className="mt-2 text-2xl font-black text-slate-900">{valueText(value, suffix)}</div></div>;
 }
 
+function GoalBar({ label, current, target, unit = "" }: { label: string; current: number; target: number; unit?: string }) {
+  const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+  return (
+    <div className="rounded-xl border border-slate-200 p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-bold text-slate-500">{label}</span>
+        <span className="text-xs text-slate-400">{pct}%</span>
+      </div>
+      <div className="mt-1 text-sm font-black text-slate-900">
+        {money(current)}{unit} / {money(target)}{unit}
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-teal-600" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/** 策略彙整。原本整包用 JSON.stringify 傾印，能看但沒法用；
+ *  其中 NPS 回訪是唯一有行動意義的欄位（合約滿 3 個月或 1 年），特別拉出來。 */
+function StrategyPanel({ strategy }: { strategy: Row | null | undefined }) {
+  if (!strategy) return <div className={card}><p className="text-sm text-slate-500">尚無策略資料。</p></div>;
+  const goals = strategy.goals || {};
+  const regions: Array<[string, number]> = Object.entries(strategy.by_region || {}) as any;
+  const partners: Array<[string, Row]> = Object.entries(strategy.by_partner || {}) as any;
+  const followUps: string[] = strategy.nps_follow_up_org_codes || [];
+
+  return (
+    <div className="space-y-4">
+      {followUps.length > 0 && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+          <h2 className="font-black text-amber-900">NPS 客戶滿意度回訪</h2>
+          <p className="mt-1 text-xs text-amber-800">以下企業合約已滿 3 個月或 1 年，請安排主動聯繫。</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {followUps.map(code => (
+              <span key={code} className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-bold text-amber-900">{code}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className={card}>
+        <h2 className="font-black">年度目標達成</h2>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <GoalBar label="企業家數" current={Number(strategy.enterprise_count || 0)} target={Number(goals.annual_enterprises || 0)} unit=" 家" />
+          <GoalBar label="簽約金額" current={Number(strategy.contracted_revenue || 0)} target={Number(goals.annual_revenue || 0)} unit=" 元" />
+          <GoalBar label="授權使用率" current={Number(strategy.used_members || 0)} target={Number(strategy.licensed_members || 0)} unit=" 人" />
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <Metric label="有效合約企業" value={strategy.active_enterprise_count} suffix=" 家" />
+          <Metric label="經銷商總數" value={strategy.distributor_count} suffix=" 家" />
+          <Metric label="待回訪企業" value={followUps.length} suffix=" 家" />
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className={card}>
+          <h2 className="font-black">區域佈點</h2>
+          {regions.length === 0 ? <p className="mt-3 text-sm text-slate-500">尚無區域資料。</p> : (
+            <div className="mt-3 space-y-2">
+              {regions.sort((a, b) => b[1] - a[1]).map(([region, count]) => (
+                <div key={region} className="flex justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
+                  <span>{region}</span><b>{count} 家</b>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className={card}>
+          <h2 className="font-black">經銷商貢獻</h2>
+          {partners.length === 0 ? <p className="mt-3 text-sm text-slate-500">尚無經銷商資料。</p> : (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-xs text-slate-500"><th className="pb-2">代碼</th><th className="pb-2">企業數</th><th className="pb-2 text-right">簽約金額</th></tr></thead>
+                <tbody>
+                  {partners.sort((a, b) => Number(b[1].revenue || 0) - Number(a[1].revenue || 0)).map(([code, row]) => (
+                    <tr key={code} className="border-t border-slate-100">
+                      <td className="py-2 font-bold">{code}</td>
+                      <td className="py-2">{row.enterprise_count}</td>
+                      <td className="py-2 text-right">{money(row.revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ReibiAnalyticsPage() {
   const { session } = useAuth();
   const isSuper = session?.systemRole === "reibi_super";
@@ -180,7 +272,7 @@ export default function ReibiAnalyticsPage() {
 
       {!isSuper && activeTab === "gri" && <section className="space-y-4">{(overview?.gri || []).map((row: Row) => <div key={row.standard} className={card}><h2 className="font-black">{row.standard} · {row.title}</h2><p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{row.content}</p></div>)}</section>}
 
-      {isSuper && activeTab === "cross" && <section className="space-y-4"><div className="rounded-xl bg-teal-50 p-4 text-sm text-teal-800">{cross?.privacy}</div><div className="grid gap-4 sm:grid-cols-3"><Metric label="合格企業數" value={cross?.health?.organization_count} /><Metric label="研究同意樣本" value={cross?.health?.sample_size} suffix=" 人" /><Metric label="有效合約" value={cross?.strategy?.active_enterprise_count} /></div><div className={card}><div className="flex justify-between"><h2 className="font-black">跨企業健康（每企業 k≥5）</h2><button className={secondary} onClick={() => downloadCsv("reibi-cross-org.csv", cross?.health?.organizations || [])}><Download className="h-4 w-4" />CSV</button></div><pre className="mt-4 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(cross?.health?.organizations || [], null, 2)}</pre></div><div className={card}><h2 className="font-black">區域與夥伴策略</h2><pre className="mt-4 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(cross?.strategy || {}, null, 2)}</pre></div></section>}
+      {isSuper && activeTab === "cross" && <section className="space-y-4"><div className="rounded-xl bg-teal-50 p-4 text-sm text-teal-800">{cross?.privacy}</div><div className="grid gap-4 sm:grid-cols-3"><Metric label="合格企業數" value={cross?.health?.organization_count} /><Metric label="研究同意樣本" value={cross?.health?.sample_size} suffix=" 人" /><Metric label="有效合約" value={cross?.strategy?.active_enterprise_count} /></div><div className={card}><div className="flex justify-between"><h2 className="font-black">跨企業健康（每企業 k≥5）</h2><button className={secondary} onClick={() => downloadCsv("reibi-cross-org.csv", cross?.health?.organizations || [])}><Download className="h-4 w-4" />CSV</button></div><pre className="mt-4 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(cross?.health?.organizations || [], null, 2)}</pre></div><StrategyPanel strategy={cross?.strategy} /></section>}
 
       {isSuper && activeTab === "directory" && <section className={card}><div className="flex flex-wrap items-end gap-3"><label className="text-xs font-bold">名冊<select className={`${input} mt-1 block`} value={directoryKind} onChange={event => setDirectoryKind(event.target.value as any)}><option value="enterprise">企業</option><option value="distributor">經銷商</option></select></label><label className="text-xs font-bold">搜尋<input className={`${input} mt-1 block`} value={search} maxLength={100} onChange={event => setSearch(event.target.value)} /></label><button className={primary} onClick={() => void loadDirectory()}><Search className="h-4 w-4" />搜尋</button><button className={secondary} onClick={() => downloadCsv(`reibi-${directoryKind}.csv`, directory)}><Download className="h-4 w-4" />CSV</button></div><div className="mt-5 overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr className="border-b">{["代碼", "名稱", "狀態", "聯絡人", "電話", "Email", "地區／產業"].map(label => <th key={label} className="p-2">{label}</th>)}</tr></thead><tbody>{directory.map(row => <tr key={row.id} className="border-b"><td className="p-2 font-bold">{row.org_code}</td><td className="p-2">{row.org_name || row.name}</td><td className="p-2">{row.status}</td><td className="p-2">{row.contact_name}</td><td className="p-2">{row.phone}</td><td className="p-2">{row.email}</td><td className="p-2">{row.region || row.industry}</td></tr>)}</tbody></table></div><p className="mt-3 text-xs text-slate-500">此名冊只包含企業／經銷商資料，不提供任何個人健康名冊。</p></section>}
 
