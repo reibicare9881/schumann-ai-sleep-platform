@@ -32,6 +32,8 @@ export default function AssessmentPage() {
 
   const [step, setStep] = useState(0); 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // 預設不同意：組織彙整必須由本人明確勾選，且與 k>=5 抑制是兩層獨立保護。
+  const [orgConsent, setOrgConsent] = useState(false);
 
   // --- 表單狀態 ---
   const [profile, setProfile] = useState<any>({
@@ -137,7 +139,8 @@ export default function AssessmentPage() {
             },
             sleep_scores: sAns,
             pain_scores: pAns,
-            work_scores: wAns
+            work_scores: wAns,
+            consent_org_aggregate: orgConsent
         };
 
         // 2. 呼叫我們已經上好鎖的 FastAPI 端點
@@ -380,6 +383,22 @@ export default function AssessmentPage() {
           )}
 
         </div>
+
+        {step === 3 && session?.orgCode && (
+          <label className="mb-4 flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4"
+              checked={orgConsent}
+              onChange={e => setOrgConsent(e.target.checked)}
+            />
+            <span className="text-slate-600">
+              <strong className="text-slate-800">同意將本次評估納入單位健康彙整</strong>
+              <br />
+              單位僅能看到 5 人以上的去識別統計，看不到你的個人分數。不勾選不影響你取得個人報告。
+            </span>
+          </label>
+        )}
 
         <div className="flex items-center justify-between gap-4">
           <button onClick={() => setStep(Math.max(0, step - 1))} className={`px-6 py-3 rounded-xl font-bold ${step === 0 ? 'invisible' : 'bg-white border text-slate-600 hover:bg-slate-50'}`}><ChevronLeft className="w-5 h-5" /> 上一步</button>

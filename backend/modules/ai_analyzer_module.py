@@ -3,6 +3,7 @@ from google.genai import types
 import json
 from pydantic import BaseModel, Field
 from config import settings
+from safe_logging import log_exception
 
 # ==========================================
 # 🟢 1. 極度細緻的「資料表單」(Pydantic Schema)
@@ -332,10 +333,12 @@ def generate_ai_explanation(data, language="🇹🇼 繁體中文"):
         }
         
     except Exception as e:
-        print(f"AI 生成或解析失敗: {e}")
+        # 例外訊息不進 log、也不回傳給前端：Gemini 與解析的例外可能夾帶送進去的
+        # 健康資料原文。使用者只需要知道失敗了，開發者從 log 的位置與類型即可定位。
+        log_exception("ai_analyzer.generate", e)
         return {
-            "section_1": f"生成失敗，錯誤資訊：{str(e)}",
-            "section_2": "請確認您的網路連線或 API Key 額度狀態。",
-            "section_3": "", "section_4": "", "section_5": "", 
+            "section_1": "生成失敗，請稍後再試。",
+            "section_2": "若持續失敗，請確認網路連線或聯絡管理者。",
+            "section_3": "", "section_4": "", "section_5": "",
             "section_6": "", "section_7": "", "section_8": ""
         }

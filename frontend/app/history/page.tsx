@@ -37,6 +37,8 @@ export default function HistoryPage() {
   const [dateTo, setDateTo] = useState("");
   const [platformFilter, setPlatformFilter] = useState<"all" | "sleep" | "schumann">("all");
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [hiddenCount, setHiddenCount] = useState(0);
+  const [historyLimited, setHistoryLimited] = useState(false);
 
   // 1. 載入資料：前端同時並發請求兩支現有 API，免改後端！
   useEffect(() => {
@@ -82,6 +84,10 @@ export default function HistoryPage() {
         }
 
         setReports(combined);
+        // 免費個人用戶的睡眠歷史由後端裁到最近 3 個月，並回報被隱藏的筆數。
+        // 資料沒有被刪除，所以一定要把筆數說出來，否則使用者會以為紀錄不見了。
+        setHiddenCount(Number(sleepRes?.hidden_count || 0));
+        setHistoryLimited(Boolean(sleepRes?.history_limited));
       })
       .catch((err) => {
         console.error("API 獲取歷史紀錄失敗:", err);
@@ -144,6 +150,19 @@ export default function HistoryPage() {
           </Link>
         </div>
       </div>
+
+      {/* 免費版歷史範圍提示。較早的紀錄是隱藏不是刪除，所以明講還有幾筆。 */}
+      {historyLimited && hiddenCount > 0 && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="font-bold text-amber-900 text-sm">⭐ 免費版僅顯示最近 3 個月記錄</div>
+          <p className="mt-1 text-xs text-amber-800">
+            您還有 {hiddenCount} 筆較早的評估記錄已完整保留，升級訂閱版即可查閱全部歷史。
+          </p>
+          <Link href="/subscribe" className="mt-3 inline-flex rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700">
+            ⭐ 升級訂閱版
+          </Link>
+        </div>
+      )}
 
       {/* 平台切換 Tabs (新功能) */}
       <div className="flex bg-slate-100 p-1 rounded-xl mb-6 self-start inline-flex">

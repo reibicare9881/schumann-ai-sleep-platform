@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import API from "@/lib/api";
@@ -280,7 +281,10 @@ export default function ReportPage() {
             profile: dbData.profile || {},
             sAns: dbData.sleep_scores || {},
             pAns: dbData.pain_scores || {},
-            recs: (dbData.recs && Object.keys(dbData.recs).length > 0) ? dbData.recs : FR
+            // recs 為空代表這份報告沒有 AI 個人化建議：免費個人用戶的評估不呼叫
+            // Gemini（訂閱版功能），此時退回標準衛教內容，並在畫面上標示可升級。
+            recs: (dbData.recs && Object.keys(dbData.recs).length > 0) ? dbData.recs : FR,
+            aiPersonalised: Boolean(dbData.recs && Object.keys(dbData.recs).length > 0),
           });
         } else {
           setError(true);
@@ -421,9 +425,23 @@ export default function ReportPage() {
 
       {/* 衛教建議區塊 */}
       <h3 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-        <BookOpen className="w-6 h-6 text-emerald-600" /> 個人化健康促進建議
+        <BookOpen className="w-6 h-6 text-emerald-600" />
+        {report.aiPersonalised ? "個人化健康促進建議" : "健康促進建議"}
       </h3>
-      
+
+      {/* 免費版看得到標準衛教內容，AI 個人化建議為訂閱版功能。 */}
+      {!report.aiPersonalised && (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 print:hidden">
+          <div className="text-sm font-bold text-amber-900">⭐ 以下為標準衛教內容</div>
+          <p className="mt-1 text-xs text-amber-800">
+            AI 六面向個人化建議（依您的痛點部位、慢病史與輪班情況客製，2000 字以上）為訂閱版功能。
+          </p>
+          <Link href="/subscribe" className="mt-3 inline-flex rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700">
+            ⭐ 升級訂閱解鎖 AI 報告
+          </Link>
+        </div>
+      )}
+
       <div className="space-y-4">
         <RecBox title="綜合健康方針" content={recs.generalHealth} icon="🏃" colorClass="border-teal-500" />
         <RecBox title="睡眠衛教建議" content={recs.sleepEducation} icon="🌙" colorClass="border-indigo-500" />

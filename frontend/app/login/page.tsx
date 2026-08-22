@@ -137,6 +137,10 @@ export default function LoginPage() {
       return; 
     }
     const code = oCode.trim().toUpperCase();
+    if (["member", "dept_head"].includes(oRole) && !oDept.trim()) {
+      setErr("請填寫所屬部門，供個人資料歸屬及經同意後的去識別化彙整使用");
+      return;
+    }
     setLoading(true);
 
     try {
@@ -146,7 +150,7 @@ export default function LoginPage() {
         org_code: code,
         name: oName.trim(),
         org_name: oOrgName.trim() || code,
-        dept: oRole === "dept_head" ? oDept.trim() : undefined
+        dept: ["member", "dept_head"].includes(oRole) ? oDept.trim() : undefined
       });
       
       if (apiResult.status === 'success') {
@@ -157,6 +161,7 @@ export default function LoginPage() {
           orgCode: code,
           orgName: oOrgName.trim() || code,
           systemRole: oRole,
+          dept: ["member", "dept_head"].includes(oRole) ? oDept.trim() : undefined,
           loginTs: new Date().toISOString(),
           apiSession: session,
           platform: 'sleep',
@@ -184,7 +189,9 @@ export default function LoginPage() {
     }
   };
 
-  const nonAdminRoles = Object.entries(ROLES).filter(([k]) => k !== "individual");
+  // The shared-PIN compatibility flow must never expose trusted-only roles.
+  const legacyPinRoles = new Set(["member", "dept_head", "admin", "occupational_health"]);
+  const nonAdminRoles = Object.entries(ROLES).filter(([key]) => legacyPinRoles.has(key));
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
@@ -244,6 +251,11 @@ export default function LoginPage() {
                 </div>
               </Link>
             </div>
+          </div>
+          <div className="mt-6 text-center">
+            <Link href="/reibi-login" className="inline-flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-slate-700">
+              <ShieldCheck className="h-4 w-4" /> 受邀帳號安全登入
+            </Link>
           </div>
         </>
       ) : (
@@ -345,7 +357,7 @@ export default function LoginPage() {
                 </div>
                 
                 {/* 🟢 新增：部門名稱輸入框 (只有當角色選到 dept_head 時才會出現) */}
-                {oRole === "dept_head" && (
+                {["member", "dept_head"].includes(oRole) && (
                   <div className="animate-in fade-in slide-in-from-top-2">
                     <label className="block text-sm font-medium text-purple-800 mb-2">
                       管理的部門名稱 <span className="text-red-500">*</span>

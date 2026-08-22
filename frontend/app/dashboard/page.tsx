@@ -11,7 +11,7 @@ import { MappedSleepReport, BackendSleepReport } from "@/types";
 import { useRouter } from "next/navigation";
 import { 
   ClipboardEdit, FileText, BarChart3, Target, 
-  CalendarDays, Leaf, TrendingUp, AlertTriangle, ShieldCheck, LogOut, ChevronRight, RefreshCw, ChevronDown, Activity, Moon, HeartPulse
+  CalendarDays, Leaf, TrendingUp, AlertTriangle, ShieldCheck, LogOut, ChevronRight, RefreshCw, ChevronDown, Activity, Moon, HeartPulse, Database, Headphones, LayoutDashboard, Star, MapPin, Info
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -89,6 +89,15 @@ export default function DashboardPage() {
     { id: "esg", icon: <Leaf className="w-8 h-8 text-green-600" />, label: "ESG健康效益", sub: "降本/增效/社會責任", color: "border-green-200 hover:border-green-500", link: "/esg", show: isAdmin || can(session.systemRole, "view_esg") },
     { id: "analysis", icon: <TrendingUp className="w-8 h-8 text-indigo-600" />, label: "健康分析 & 趨勢", sub: "睡眠/疼痛曲線・預測", color: "border-indigo-200 hover:border-indigo-500", link: "/analysis", show: !isAdmin && can(session.systemRole, "view_history") },
     { id: "highrisk", icon: <AlertTriangle className="w-8 h-8 text-red-600" />, label: "高風險族群分析", sub: "健康分布・介入建議", color: "border-red-200 hover:border-red-500", link: "/highrisk", show: isAdmin || can(session.systemRole, "view_org") || can(session.systemRole, "view_dept_okr") },
+    { id: "reibi-health", icon: <HeartPulse className="w-8 h-8 text-rose-600" />, label: "個人健康與職安", sub: "行動積分・健康日誌・職安問卷・OHS", color: "border-rose-200 hover:border-rose-500", link: "/reibi/health", show: can(session.systemRole, "health_self") || can(session.systemRole, "health_aggregate") || can(session.systemRole, "manage_ohs") || can(session.systemRole, "oh_interview") },
+    { id: "reibi-analytics", icon: <TrendingUp className="w-8 h-8 text-violet-700" />, label: "組織分析與 Gemini 報告", sub: "KPI・888・ROI・GRI・跨企業策略", color: "border-violet-200 hover:border-violet-600", link: "/reibi/analytics", show: can(session.systemRole, "org_analytics") || can(session.systemRole, "cross_org_analytics") },
+    { id: "reibi-l5", icon: <LayoutDashboard className="w-8 h-8 text-teal-700" />, label: "L5 營運總覽", sub: "依角色顯示 KPI・待辦・即時通知", color: "border-teal-200 hover:border-teal-600", link: "/reibi/l5", show: ["reibi_super", "reibi_finance", "reibi_data", "reibi_cs", "partner_primary", "partner_sub"].includes(session.systemRole) },
+    { id: "reibi", icon: <Database className="w-8 h-8 text-cyan-700" />, label: "REIBI 管理中心", sub: "企業資料・商務文件・Artifact 搬移預檢", color: "border-cyan-200 hover:border-cyan-600", link: "/reibi", show: can(session.systemRole, "manage_reibi") },
+    { id: "reibi-service", icon: <Headphones className="w-8 h-8 text-sky-700" />, label: "REIBI 服務中心", sub: "服務案件・公告報名・權限協助", color: "border-sky-200 hover:border-sky-600", link: "/reibi/service", show: can(session.systemRole, "service_center") },
+    // 只有自行註冊的個人用戶需要訂閱；企業員工的功能由公司合約涵蓋。
+    { id: "subscribe", icon: <Star className="w-8 h-8 text-amber-500" />, label: "個人訂閱", sub: "AI 個人報告・完整歷史・年度改善追蹤", color: "border-amber-200 hover:border-amber-500", link: "/subscribe", show: session.systemRole === "individual" },
+    { id: "venues", icon: <MapPin className="w-8 h-8 text-teal-600" />, label: "REIBI 體驗場域", sub: "體驗中心據點・首次免費體驗", color: "border-teal-200 hover:border-teal-500", link: "/venues", show: true },
+    { id: "about-reibi", icon: <Info className="w-8 h-8 text-slate-500" />, label: "關於 REIBI", sub: "使命・理論框架・SDG・888 計畫", color: "border-slate-200 hover:border-slate-500", link: "/about-reibi", show: true },
     { id: "privacy", icon: <ShieldCheck className="w-8 h-8 text-slate-600" />, label: "隱私 & 安全中心", sub: "加密機制・法規・稽核", color: "border-slate-200 hover:border-slate-500", link: "/privacy", show: true },
   ].filter(t => t.show);
 

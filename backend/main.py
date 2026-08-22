@@ -4,6 +4,7 @@ Unified Backend: Schumann Platform + Sleep Platform
 支持兩個應用的無縫切換
 """
 
+import hashlib
 import io
 import json
 from modules.parser_module import parse_schumann_report
@@ -11,13 +12,13 @@ from modules.ai_analyzer_module import generate_ai_explanation
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from auth import create_access_token, get_current_user, require_admin
+from auth import create_access_token, get_current_user, require_admin, configure_reibi_super_session_validator
 from config import settings
 import fitz      # PyMuPDF
 import requests
@@ -35,6 +36,27 @@ from google import genai
 from google.genai import types
 from modules.pdf_generator_module import create_full_report_pdf
 from auth import create_access_token, get_current_user, require_admin, require_org_manager, require_member_or_above
+from reibi_api import create_reibi_router
+from reibi_batch_c import create_reibi_batch_c_router
+from reibi_batch_d import create_reibi_batch_d_router
+from reibi_batch_e import create_reibi_batch_e_router
+from reibi_batch_f import create_reibi_batch_f_router
+from reibi_batch_g import create_internal_session_validator, create_reibi_batch_g_router
+from reibi_l5 import create_reibi_l5_router
+from reibi_onboarding import create_reibi_onboarding_router
+from reibi_subscription_gate import (
+    limit_history,
+    load_access as subscription_access,
+    require_pro,
+    resolve as resolve_subscription,
+)
+from health import build_health_report
+from safe_logging import log_exception
+from org_login_throttle import assert_not_throttled, client_ip, record_attempt
+from upload_safety import scan_for_malware, validate_pdf_bytes
+
+# 查別人的資料時不套用個人訂閱限制：管理者看的是企業合約涵蓋的範圍。
+NO_LIMIT_ACCESS = resolve_subscription("member", [])
 
 app = FastAPI(
     title="統一多平台 API",
@@ -65,6 +87,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+configure_reibi_super_session_validator(create_internal_session_validator(supabase))
+
+# REIBI business and Artifact-import endpoints use the same authenticated,
+# server-side Supabase client. No service-role credential is exposed to clients.
+app.include_router(create_reibi_router(supabase))
+app.include_router(create_reibi_batch_c_router(supabase))
+app.include_router(create_reibi_batch_d_router(supabase))
+app.include_router(create_reibi_batch_e_router(supabase))
+app.include_router(create_reibi_batch_f_router(supabase))
+app.include_router(create_reibi_batch_g_router(supabase))
+app.include_router(create_reibi_l5_router(supabase))
+app.include_router(create_reibi_onboarding_router(supabase, frontend_url=settings.frontend_url))
 
 # 建立密碼加密上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -140,6 +174,10 @@ class WorkScores(BaseModel):
     w2: int = Field(..., ge=0, le=10)
     w3: int = Field(..., ge=0, le=10)
 
+# Artifact AssessWizard 完成一次評估給 10 積分。
+SLEEP_ASSESSMENT_POINTS = 10
+
+
 class AssessmentData(BaseModel):
     """完整評估提交資料 (具備嚴格型別驗證)"""
     user_id: str = Field(..., description="提交者的 User ID")
@@ -147,6 +185,9 @@ class AssessmentData(BaseModel):
     sleep_scores: SleepScores
     pain_scores: PainScores
     work_scores: WorkScores
+    # 預設不同意：沒有明確勾選就不進入所屬企業的組織彙整。
+    # 跨企業研究彙整另由 profiles.research_opt_in 控制，兩者互不取代。
+    consent_org_aggregate: bool = False
     
 class OrgSettingsUpdate(BaseModel):
     """單位 OKR/ESG 參數更新模型"""
@@ -164,15 +205,32 @@ class OrgSettingsUpdate(BaseModel):
 # ==========================================
 
 @app.get("/")
-def health_check():
-    """系統健康檢查"""
+def root():
+    """服務識別。這裡刻意**不**做健康檢查 —— 監控請改用 /health。
+
+    原本這個端點回傳寫死的 "online"，Supabase 掛掉也照樣 200，
+    監控接上去只能確認機器活著，不能確認服務可用。
+    """
     return {
         "status": "online",
         "service": "統一多平台 API",
         "version": "2.0.0",
         "platforms": ["schumann", "sleep"],
+        "health_endpoint": "/health",
         "timestamp": datetime.now().isoformat()
     }
+
+
+@app.get("/health")
+def health_check(response: Response):
+    """實際檢查依賴的健康檢查。任一必要依賴失敗回 503。
+
+    回應刻意不含例外訊息或連線細節：這個端點未經驗證即可存取。
+    """
+    report = build_health_report(supabase)
+    if report["status"] != "healthy":
+        response.status_code = 503
+    return report
 
 @app.get("/api/platforms")
 def list_platforms():
@@ -212,9 +270,9 @@ async def verify_org_code(org_code: str):
     return {"status": "success", "data": {"org_name": res.data[0]["org_name"]}}
 
 @app.post("/api/auth/login")
-async def unified_login(request: LoginRequest):
+async def unified_login(request: LoginRequest, http_request: Request):
     """統一登入 - 支持舒曼和睡眠平台，並整合 Supabase 與 JWT"""
-    
+
     platform = request.platform.lower()
     
     if platform not in ["schumann", "sleep"]:
@@ -284,13 +342,23 @@ async def unified_login(request: LoginRequest):
             expected_pin_hash = org_data.get("dept_pin")
         elif request.role == "admin":
             expected_pin_hash = org_data.get("admin_pin")
+        elif request.role == "occupational_health":
+            expected_pin_hash = org_data.get("occupational_health_pin")
         else:
              raise HTTPException(status_code=400, detail="未知的角色")
-            
+
+        # 通行碼是全組織共用的憑證，猜中一次即可讀取整間企業的健康資料，
+        # 因此比對前先擋暴力嘗試（Artifact 原本就有，移植時漏掉）。
+        source_ip = client_ip(http_request)
+        assert_not_throttled(supabase, org_code, request.role, source_ip)
+
         # 🟢 修正：使用 bcrypt 進行安全比對，嚴禁使用 request.pin != expected_pin_hash
         if not expected_pin_hash or not pwd_context.verify(request.pin, expected_pin_hash):
+            record_attempt(supabase, org_code, request.role, source_ip, succeeded=False)
             raise HTTPException(status_code=401, detail="通行碼錯誤")
-            
+
+        record_attempt(supabase, org_code, request.role, source_ip, succeeded=True)
+
         # 3. 尋找或建立該員工的 profile 資料 (把名字跟 org_code 綁定)
         user_res = supabase.table("profiles").select("*").eq("full_name", request.name).eq("org_code", org_code).eq("system_role", request.role).execute()
         
@@ -440,16 +508,30 @@ async def update_org_settings(
     return {"status": "success", "data": res.data[0] if res.data else None}
 
 @app.get("/api/org/settings/{org_code}")
-async def get_org_settings(org_code: str):
-    """獲取單位 OKR/ESG 設定參數"""
-    
-    # 從資料庫中抓取該單位的資料
-    res = supabase.table("organizations").select("*").eq("org_code", org_code.upper()).execute()
+async def get_org_settings(
+    org_code: str,
+    current_user: dict = Depends(require_org_manager),
+):
+    """獲取所屬單位的 OKR/ESG 設定參數（限管理員與部門主管）。"""
+    normalized_org_code = org_code.upper()
+    if current_user.get("org_code") != normalized_org_code:
+        raise HTTPException(status_code=403, detail="越權存取：只能查看所屬單位的設定")
+
+    # 明確列出非敏感欄位，避免 member/dept/admin PIN hash 被回傳。
+    public_settings_columns = (
+        "org_code,org_name,base_budget,activation_pct,value_multiplier,"
+        "sick_days,daily_salary,ins_saving,impl_cost,eff_gain,prod_gain,created_at"
+    )
+    res = (
+        supabase.table("organizations")
+        .select(public_settings_columns)
+        .eq("org_code", normalized_org_code)
+        .execute()
+    )
     
     if not res.data:
         raise HTTPException(status_code=404, detail="找不到該單位的設定資料")
         
-    # 將整包資料回傳，讓前端提取需要的 base_budget, sick_days 等參數
     return {"status": "success", "data": res.data[0]}
 
 
@@ -465,6 +547,30 @@ class AppointmentCreate(BaseModel):
     execution_date: str # 對應前端的 date
     appointment_time: str # 對應前端的 time
     service_type: str # 對應前端的 svc (schumann 或 laser)
+    service_site_id: Optional[int] = None # 服務場域；由 /api/appointments/sites 取得
+    note: Optional[str] = Field(default=None, max_length=500)
+
+
+def _org_service_sites(org_code: Optional[str]) -> list[dict]:
+    """回傳該單位的服務場域。單位沒有對應 REIBI 企業時回空清單而不是報錯。"""
+    code = str(org_code or "").strip()
+    if not code:
+        return []
+    enterprise = supabase.table("reibi_enterprises").select("id").eq("org_code", code).limit(1).execute()
+    if not enterprise.data:
+        return []
+    rows = supabase.table("reibi_enterprise_sites")         .select("id,label,address,note")         .eq("enterprise_id", enterprise.data[0]["id"])         .order("sort_order").order("id").execute()
+    return rows.data or []
+
+
+@app.get("/api/appointments/sites")
+async def list_appointment_sites(current_user: dict = Depends(require_member_or_above)):
+    """預約前置：列出登入者所屬單位的服務場域。
+
+    /api/reibi/enterprise/sites 需要 manage_reibi，一般成員拿不到，因此預約流程
+    需要這個只讀自身單位、欄位最小化的入口。
+    """
+    return {"status": "success", "data": _org_service_sites(current_user.get("org_code"))}
 
 @app.get("/api/appointments")
 async def get_appointments(
@@ -483,8 +589,16 @@ async def get_appointments(
         query = query.eq("user_id", current_user.get("uid"))
 
     res = query.order("execution_date", desc=False).order("appointment_time", desc=False).execute()
-    
-    return {"status": "success", "data": res.data}
+
+    # 附上場域名稱供前端直接顯示，避免每列各發一次查詢
+    rows = res.data or []
+    if any(row.get("service_site_id") for row in rows):
+        labels = {int(site["id"]): site.get("label") for site in _org_service_sites(org_code)}
+        for row in rows:
+            site_id = row.get("service_site_id")
+            row["service_site_label"] = labels.get(int(site_id)) if site_id else None
+
+    return {"status": "success", "data": rows}
 
 @app.post("/api/appointments")
 async def create_appointment(
@@ -496,6 +610,12 @@ async def create_appointment(
          raise HTTPException(status_code=403, detail="越權操作：只能為自己預約")
          
     # 組裝寫入 Supabase 的資料 (讓 Supabase 自己生成 uuid)
+    # 場域必須屬於登入者所屬單位；不接受瀏覽器自行帶入任意 site id
+    if appt.service_site_id is not None:
+        allowed = {int(row["id"]) for row in _org_service_sites(current_user.get("org_code"))}
+        if int(appt.service_site_id) not in allowed:
+            raise HTTPException(status_code=403, detail="越權操作：此服務場域不屬於您的單位")
+
     payload = {
         "user_id": appt.user_id,
         "org_code": current_user.get("org_code"),
@@ -504,6 +624,8 @@ async def create_appointment(
         "execution_date": appt.execution_date,
         "appointment_time": appt.appointment_time,
         "service_type": appt.service_type,
+        "service_site_id": appt.service_site_id,
+        "note": appt.note,
         "status": "pending"
     }
 
@@ -524,7 +646,14 @@ async def update_appointment_status(
     # 因為 Depends 已經擋掉了，這裡可以把原本的 if 判斷刪除
     # if current_user.get("role") not in ["admin", "dept_head"]: ...
         
-    res = supabase.table("appointments").update({"status": status}).eq("id", appt_id).execute()
+    if status not in {"pending", "approved", "rejected", "completed", "cancelled"}:
+        raise HTTPException(status_code=422, detail="不支援的預約狀態")
+    existing = supabase.table("appointments").select("id,org_code").eq("id", appt_id).limit(1).execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="找不到該預約單")
+    if existing.data[0].get("org_code") != current_user.get("org_code"):
+        raise HTTPException(status_code=403, detail="越權操作：不可更新其他單位的預約")
+    res = supabase.table("appointments").update({"status": status}).eq("id", appt_id).eq("org_code", current_user.get("org_code")).execute()
     if not res.data:
         raise HTTPException(status_code=404, detail="找不到該預約單")
         
@@ -544,7 +673,8 @@ async def delete_appointment(
     appt = res.data[0]
     
     # 只有本人或管理層可以刪除
-    if current_user.get("uid") != appt.get("user_id") and current_user.get("role") not in ["admin", "dept_head"]:
+    is_same_org_manager = current_user.get("role") in ["admin", "dept_head"] and current_user.get("org_code") == appt.get("org_code")
+    if current_user.get("uid") != appt.get("user_id") and not is_same_org_manager:
         raise HTTPException(status_code=403, detail="越權操作：無法刪除他人的預約")
         
     supabase.table("appointments").delete().eq("id", appt_id).execute()
@@ -554,6 +684,9 @@ async def delete_appointment(
 # 舒曼共振平台 API (/api/schumann/*)
 # ==========================================
 
+MAX_REPORT_BYTES = 10 * 1024 * 1024
+REPORT_CONTENT_TYPE = "application/pdf"
+
 @app.post("/api/analyze")
 async def analyze_schumann_report(
     file: UploadFile = File(...),
@@ -562,16 +695,33 @@ async def analyze_schumann_report(
     language: str = Form("🇹🇼 繁體中文"),
     current_user: dict = Depends(get_current_user)
 ):
-    
+
     if str(current_user.get("uid")) != user_id:
         raise HTTPException(status_code=403, detail="越權操作：您只能為自己的帳號上傳報告")
-    
+
+    if file.content_type != REPORT_CONTENT_TYPE:
+        raise HTTPException(status_code=422, detail="只接受 PDF 檔案")
+
     tmp_path = ""
     try:
-        # 🟢 優化 1：安全地將大型上傳檔案分塊寫入硬碟暫存檔，避免塞爆 RAM
+        # 🟢 優化 1：安全地將大型上傳檔案分塊寫入硬碟暫存檔，避免塞爆 RAM，
+        # 邊寫邊限制大小並計算雜湊，避免讀完整個檔案才發現超過上限。
+        digest = hashlib.sha256()
+        total_bytes = 0
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            shutil.copyfileobj(file.file, tmp)
             tmp_path = tmp.name
+            while chunk := file.file.read(1024 * 1024):
+                total_bytes += len(chunk)
+                if total_bytes > MAX_REPORT_BYTES:
+                    raise HTTPException(status_code=422, detail="檔案超過 10 MB 上限")
+                digest.update(chunk)
+                tmp.write(chunk)
+        if total_bytes == 0:
+            raise HTTPException(status_code=422, detail="檔案是空的")
+        with open(tmp_path, 'rb') as f:
+            report_bytes = f.read()
+        validate_pdf_bytes(report_bytes)
+        scan_for_malware(report_bytes)
 
         # 🟢 優化 2：從檔名擷取名字
         extracted_name = None
@@ -583,33 +733,33 @@ async def analyze_schumann_report(
         # 🟢 優化 3：開啟磁碟上的暫存檔交給 Parser 處理
         with open(tmp_path, 'rb') as f:
             file_obj = io.BytesIO(f.read())
-            file_obj.name = file.filename 
-            parsed_data = parse_schumann_report(file_obj) 
-        
+            file_obj.name = file.filename
+            parsed_data = parse_schumann_report(file_obj)
+
         if extracted_name:
             parsed_data["Name"] = extracted_name
         public_url = ""
         try:
-            file_ext = file.filename.split('.')[-1].lower()
-            safe_name = f"report_{user_id}_{int(time.time())}.{file_ext}"
-            
+            # 儲存路徑用內容雜湊而非使用者可控的檔名，避免路徑穿越或覆蓋他人檔案。
+            safe_name = f"report_{user_id}_{digest.hexdigest()}.pdf"
+
             with open(tmp_path, 'rb') as f:
                 file_bytes = f.read()
-                
+
             supabase.storage.from_("reports").upload(
                 file=file_bytes,
                 path=safe_name,
-                file_options={"content-type": file.content_type}
+                file_options={"content-type": REPORT_CONTENT_TYPE}
             )
             public_url = supabase.storage.from_("reports").get_public_url(safe_name)
         except Exception as e:
-            print(f"上傳至 Storage 失敗: {e}")
+            log_exception("analyze.storage_upload", e)
         # ... (下方保留你原本的「4. 呼叫 AI 撰寫深度解說報告」邏輯) ...
         try:
             ai_summary_dict = generate_ai_explanation(parsed_data, language=language)
             ai_summary_text = json.dumps(ai_summary_dict, ensure_ascii=False)
         except Exception as e:
-            print(f"AI 報告生成失敗: {e}")
+            log_exception("analyze.ai_report", e)
             ai_summary_text = None # 容錯機制：就算 AI 寫作失敗，原始數據還是要存進去
 
         # 5. 【關鍵轉換】將 AI 抓出的 JSON 映射到 Supabase 的蛇行欄位
@@ -690,21 +840,41 @@ async def analyze_schumann_report(
             }
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"分析錯誤: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    
+        log_exception("analyze.report", e)
+        raise HTTPException(status_code=500, detail="報告解析失敗，請稍後再試")
+
     finally:
         # 🟢 優化 4：確保無論成功或失敗，硬碟上的暫存檔都會被刪除
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
 
+def assert_can_read_user_records(current_user: dict, user_id: str) -> None:
+    """個人紀錄的統一存取規則：本人，或同單位的平台管理者。
+
+    JWT 只帶 uid/role/org_code（見 /api/auth/login 的 token_payload），沒有
+    system_role 或 id；早期用那兩個 key 判斷的守門形同虛設或直接崩潰。
+    """
+    if current_user.get("uid") == user_id:
+        return
+
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="越權存取：您只能查詢自己的紀錄")
+
+    target = supabase.table("profiles").select("org_code").eq("id", user_id).limit(1).execute()
+    if not target.data:
+        raise HTTPException(status_code=404, detail="找不到該用戶")
+    if current_user.get("org_code") != target.data[0].get("org_code"):
+        raise HTTPException(status_code=403, detail="越權存取：您只能查詢自己或同單位成員的紀錄")
+
+
 @app.get("/api/schumann/trend/{user_id}")
 async def get_schumann_trend(user_id: str, current_user: dict = Depends(get_current_user)):
+    # 1. 確保只能看自己的，或是同單位管理員才能看別人的 (權限防護)
+    assert_can_read_user_records(current_user, user_id)
     try:
-        # 1. 確保只能看自己的，或是管理員/主管才能看別人的 (權限防護)
-        if current_user["system_role"] == "individual" and current_user["id"] != user_id:
-            raise HTTPException(status_code=403, detail="權限不足")
 
         # 2. 從 Supabase 撈取該使用者的所有舒曼紀錄，並按時間排序 (舊到新)
         res = supabase.table("records") \
@@ -752,13 +922,10 @@ async def list_schumann_reports(
     current_user: dict = Depends(get_current_user)
 ):
     """獲取用戶舒曼報告列表 (連接 Supabase)"""
-    # 權限驗證：只能看自己的，或者是管理員看同單位的
-    is_owner = str(current_user.get("uid")) == user_id
-    is_admin = current_user.get("role") in ["admin", "dept_head"]
-    
-    if not is_owner and not is_admin:
-        raise HTTPException(status_code=403, detail="越權存取：無權查看此列表")
-        
+    # 權限驗證：只能看自己的，或者是「同單位」管理員看單位成員的。
+    # 舊版只檢查角色不檢查組織，任一單位的 admin／dept_head 都能列出任何人的報告。
+    assert_can_read_user_records(current_user, user_id)
+
     # 從 analysis_records 資料表撈取舒曼報告
     res = supabase.table("analysis_records").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
     
@@ -777,13 +944,17 @@ async def get_merged_pdf(record_id: str, current_user: dict = Depends(get_curren
     3. 下載儲存在 Storage 的原始 PDF
     4. 使用 PyMuPDF 縫合兩者並回傳
     """
+    # 1. 抓取資料庫紀錄並確認存取權。
+    #    這段刻意放在 try 之外：下方的 except Exception 會把 403／404 轉成 500，
+    #    授權結果不能被那個攔截器吃掉。
+    res = supabase.table("analysis_records").select("*").eq("id", record_id).limit(1).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="找不到分析紀錄")
+
+    record_data = res.data[0]
+    assert_can_read_user_records(current_user, record_data.get("user_id"))
+
     try:
-        # 1. 抓取資料庫紀錄
-        res = supabase.table("analysis_records").select("*").eq("id", record_id).execute()
-        if not res.data:
-            raise HTTPException(status_code=404, detail="找不到分析紀錄")
-        
-        record_data = res.data[0]
         # 解析 AI 摘要內容 (原本存的是字串)
         ai_summary_dict = json.loads(record_data.get("ai_summary", "{}"))
         report_url = record_data.get("report_url")
@@ -812,7 +983,7 @@ async def get_merged_pdf(record_id: str, current_user: dict = Depends(get_curren
                     orig_doc = fitz.open(stream=response.content, filetype="pdf")
                     final_pdf.insert_pdf(orig_doc)
             except Exception as e:
-                print(f"⚠️ 下載或合併原始 PDF 失敗: {e}")
+                log_exception("pdf.download_merge", e)
 
         # 5. 再接上「AI 分析報告」
         report_doc = fitz.open(stream=report_pdf_bytes, filetype="pdf")
@@ -828,7 +999,7 @@ async def get_merged_pdf(record_id: str, current_user: dict = Depends(get_curren
         )
 
     except Exception as e:
-        print(f"❌ PDF 處理發生錯誤: {str(e)}")
+        log_exception("pdf.process", e)
         raise HTTPException(status_code=500, detail=f"PDF 處理失敗: {str(e)}")
 
 @app.get("/api/schumann/reports/{report_id}")
@@ -843,14 +1014,12 @@ async def get_schumann_report(
         raise HTTPException(status_code=404, detail="舒曼報告不存在")
         
     report = res.data[0]
-    
-    # 權限驗證
-    is_owner = report.get("user_id") == current_user.get("uid")
-    # 如果有 org_code 關聯，這裡也可以加入管理員判斷
-    
-    if not is_owner and current_user.get("role") not in ["admin", "dept_head"]:
-        raise HTTPException(status_code=403, detail="越權存取：您無權查看此份報告")
-        
+
+    # 權限驗證：本人或同單位管理者。
+    # 舊版只要角色是 admin／dept_head 就放行，不論報告屬於哪個單位。
+    assert_can_read_user_records(current_user, report.get("user_id"))
+
+
     return {
         "status": "success",
         "platform": "schumann",
@@ -898,19 +1067,26 @@ async def submit_sleep_assessment(
     }}
     """
     
-    try:
-        ai_res = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json"
+    # AI 個人化建議是訂閱版功能（Artifact PersonalReportScreen 的 isPro 閘門）。
+    # 免費個人用戶完全不呼叫 Gemini：評估照常儲存、燈號照常計算，
+    # 只是 recs 留空，前端會顯示標準衛教內容與升級提示。
+    # 擋在生成端而不是顯示端，否則我們付了錢產生一份不給看的報告。
+    access = subscription_access(supabase, current_user)
+    custom_recs = None
+    if access["is_pro"]:
+        try:
+            ai_res = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
             )
-        )
-        custom_recs = json.loads(ai_res.text)
-    except Exception as e:
-        print(f"AI 生成衛教建議失敗: {e}")
-        custom_recs = None
-    
+            custom_recs = json.loads(ai_res.text)
+        except Exception as e:
+            log_exception("sleep_assessment.recommendations", e)
+            custom_recs = None
+
     report_id = str(uuid.uuid4())
     
     report = {
@@ -929,17 +1105,37 @@ async def submit_sleep_assessment(
         "work_score": work_score,
         "work_scores": request.work_scores.model_dump(),
         "status": "completed",
-        "recs": custom_recs
+        "recs": custom_recs,
+        "consent_org_aggregate": request.consent_org_aggregate
     }
     
     supabase.table("sleep_reports").insert(report).execute()
+
+    # Artifact 的 AssessWizard 完成評估給 +10 積分（reibi-v10_3_34 第 699 行）。
+    # 積分是附帶獎勵，寫入失敗不應讓已儲存的報告變成錯誤回應。
+    assessment_points = None
+    try:
+        assessment_points = supabase.rpc("reibi_adjust_points", {
+            "p_profile_id": request.user_id,
+            "p_org_code": current_user.get("org_code"),
+            "p_event_code": "sleep_assessment",
+            "p_event_key": f"sleep_assessment:{report_id}",
+            "p_points": SLEEP_ASSESSMENT_POINTS,
+            "p_metadata": {"report_id": report_id},
+            "p_created_by": request.user_id,
+        }).execute().data
+    except Exception as exc:
+        log_exception("sleep_assessment.points", exc)
     
     return {
         "status": "success",
         "platform": "sleep",
         "report_id": report_id,
         "message": "睡眠評估已提交",
-        "report": report
+        "report": report,
+        "points": assessment_points,
+        # 前端據此在 AI 建議區塊顯示升級提示，而不是自己去猜角色。
+        "subscription": access,
     }
 
 @app.get("/api/sleep/reports")
@@ -963,12 +1159,22 @@ async def list_sleep_reports(
     # 💡 修正：改從 Supabase 讀取資料
     res = supabase.table("sleep_reports").select("*").eq("user_id", user_id).execute()
     reports = res.data
-    
+
+    # 免費個人用戶只看得到最近 3 個月（Artifact HistoryScreen v10.3.24）。
+    # 限制只在查自己時套用：管理者查轄下員工看的是企業合約涵蓋的資料，
+    # 不該因為被查的人自己沒訂閱就少一截。
+    access = subscription_access(supabase, current_user) if current_user.get("uid") == user_id else NO_LIMIT_ACCESS
+    limited = limit_history(reports, access)
+
     return {
         "status": "success",
         "platform": "sleep",
-        "count": len(reports),
-        "reports": reports
+        "count": len(limited["rows"]),
+        "reports": limited["rows"],
+        # 較早的紀錄是隱藏不是刪除；不回報筆數，使用者會以為資料不見了。
+        "hidden_count": limited["hidden_count"],
+        "history_limited": limited["limited"],
+        "subscription": access,
     }
 
 @app.get("/api/sleep/reports/{report_id}")
@@ -1003,15 +1209,8 @@ async def get_sleep_analysis(
     current_user: dict = Depends(get_current_user)
 ):
     """獲取睡眠趨勢分析"""
-    # 💡 修正：權限隔離邏輯與 list_sleep_reports 相同
-    target_user_res = supabase.table("profiles").select("org_code").eq("id", user_id).execute()
-    if not target_user_res.data:
-        raise HTTPException(status_code=404, detail="找不到該用戶")
-    target_org_code = target_user_res.data[0].get("org_code")
-
-    if current_user.get("uid") != user_id:
-        if current_user.get("role") != "admin" or current_user.get("org_code") != target_org_code:
-            raise HTTPException(status_code=403, detail="越權存取：您只能查詢自己或同單位成員的分析")
+    # 權限隔離邏輯與其他個人紀錄端點共用同一份規則
+    assert_can_read_user_records(current_user, user_id)
 
     # 💡 修正：改從 Supabase 讀取
     res = supabase.table("sleep_reports").select("*").eq("user_id", user_id).execute()
@@ -1048,20 +1247,27 @@ async def get_sleep_analysis(
 # ==========================================
 @app.get("/api/history/{user_id}")
 async def get_user_history(user_id: str, current_user: dict = Depends(get_current_user)):
-    try:
-        # 權限防護：個人用戶只能看自己的，管理員/主管可以看轄下員工的
-        if current_user["system_role"] == "individual" and current_user["id"] != user_id:
-            raise HTTPException(status_code=403, detail="權限不足，無法存取他人歷史紀錄")
+    # 權限防護：只能看自己的，同單位管理者可以看轄下員工的
+    assert_can_read_user_records(current_user, user_id)
 
+    access = subscription_access(supabase, current_user) if current_user.get("uid") == user_id else NO_LIMIT_ACCESS
+    try:
         # 從 Supabase 撈取該使用者的所有紀錄，不分平台，依時間由新到舊排序
         res = supabase.table("records") \
             .select("*") \
             .eq("user_id", user_id) \
             .order("created_at", desc=True) \
             .execute()
-        
-        return {"status": "success", "data": res.data}
 
+        limited = limit_history(res.data, access)
+        return {
+            "status": "success", "data": limited["rows"],
+            "hidden_count": limited["hidden_count"], "history_limited": limited["limited"],
+            "subscription": access,
+        }
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -1071,10 +1277,9 @@ async def get_user_history(user_id: str, current_user: dict = Depends(get_curren
 
 @app.get("/api/sleep/latest-profile/{user_id}")
 async def get_latest_profile(user_id: str, current_user: dict = Depends(get_current_user)):
-    # 安全檢查：確保個人用戶只能存取自己的資料
-    if current_user.get("system_role") == "individual" and current_user.get("id") != user_id:
-        raise HTTPException(status_code=403, detail="權限不足")
-        
+    # 安全檢查：確保只能存取自己或同單位成員的資料
+    assert_can_read_user_records(current_user, user_id)
+
     try:
         # 撈取該使用者最新的一筆報告紀錄
         res = supabase.table("sleep_reports") \
@@ -1116,9 +1321,13 @@ async def generate_ai_trend_analysis(
     platform: str = "sleep", 
     current_user: dict = Depends(get_current_user)
 ):
-    # 1. 權限防護
-    if current_user.get("uid") != user_id and current_user.get("role") not in ["admin", "dept_head"]:
-        raise HTTPException(status_code=403, detail="越權存取")
+    # 1. 權限防護：本人或同單位管理者。
+    #    舊版只比對角色，任一單位的 admin／dept_head 都能對任何人的健康資料產生 AI 分析。
+    assert_can_read_user_records(current_user, user_id)
+
+    # 2. 年度改善追蹤報告是訂閱版功能（Artifact PersonalReportScreen 的 annual 分頁）。
+    #    這是第二個會呼叫 Gemini 的端點，同樣擋在生成前。
+    require_pro(subscription_access(supabase, current_user), "年度改善追蹤報告")
 
     history_text = []
     prompt = ""
