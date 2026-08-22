@@ -69,6 +69,9 @@ export default function ReibiInternalLoginPage() {
               安全登入
             </button>
           </form>
+          <div className="mt-4 text-center">
+            <Link href="/reibi-login/forgot-password" className="text-xs font-bold text-slate-400 hover:text-slate-200">忘記密碼？</Link>
+          </div>
           <p className="mt-5 text-[11px] leading-5 text-slate-500">工作階段 30 分鐘後自動失效；登出或後台撤銷後立即失效。瀏覽器不會取得 Supabase service-role 或 refresh token。</p>
         </section>
       </div>

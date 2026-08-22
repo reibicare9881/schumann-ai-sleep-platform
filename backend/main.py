@@ -4,6 +4,7 @@ Unified Backend: Schumann Platform + Sleep Platform
 支持兩個應用的無縫切換
 """
 
+import hashlib
 import io
 import json
 from modules.parser_module import parse_schumann_report
@@ -51,6 +52,7 @@ from reibi_subscription_gate import (
 )
 from health import build_health_report
 from safe_logging import log_exception
+from upload_safety import scan_for_malware, validate_pdf_bytes
 
 # 查別人的資料時不套用個人訂閱限制：管理者看的是企業合約涵蓋的範圍。
 NO_LIMIT_ACCESS = resolve_subscription("member", [])
@@ -673,6 +675,9 @@ async def delete_appointment(
 # 舒曼共振平台 API (/api/schumann/*)
 # ==========================================
 
+MAX_REPORT_BYTES = 10 * 1024 * 1024
+REPORT_CONTENT_TYPE = "application/pdf"
+
 @app.post("/api/analyze")
 async def analyze_schumann_report(
     file: UploadFile = File(...),
@@ -681,16 +686,33 @@ async def analyze_schumann_report(
     language: str = Form("🇹🇼 繁體中文"),
     current_user: dict = Depends(get_current_user)
 ):
-    
+
     if str(current_user.get("uid")) != user_id:
         raise HTTPException(status_code=403, detail="越權操作：您只能為自己的帳號上傳報告")
-    
+
+    if file.content_type != REPORT_CONTENT_TYPE:
+        raise HTTPException(status_code=422, detail="只接受 PDF 檔案")
+
     tmp_path = ""
     try:
-        # 🟢 優化 1：安全地將大型上傳檔案分塊寫入硬碟暫存檔，避免塞爆 RAM
+        # 🟢 優化 1：安全地將大型上傳檔案分塊寫入硬碟暫存檔，避免塞爆 RAM，
+        # 邊寫邊限制大小並計算雜湊，避免讀完整個檔案才發現超過上限。
+        digest = hashlib.sha256()
+        total_bytes = 0
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            shutil.copyfileobj(file.file, tmp)
             tmp_path = tmp.name
+            while chunk := file.file.read(1024 * 1024):
+                total_bytes += len(chunk)
+                if total_bytes > MAX_REPORT_BYTES:
+                    raise HTTPException(status_code=422, detail="檔案超過 10 MB 上限")
+                digest.update(chunk)
+                tmp.write(chunk)
+        if total_bytes == 0:
+            raise HTTPException(status_code=422, detail="檔案是空的")
+        with open(tmp_path, 'rb') as f:
+            report_bytes = f.read()
+        validate_pdf_bytes(report_bytes)
+        scan_for_malware(report_bytes)
 
         # 🟢 優化 2：從檔名擷取名字
         extracted_name = None
@@ -702,23 +724,23 @@ async def analyze_schumann_report(
         # 🟢 優化 3：開啟磁碟上的暫存檔交給 Parser 處理
         with open(tmp_path, 'rb') as f:
             file_obj = io.BytesIO(f.read())
-            file_obj.name = file.filename 
-            parsed_data = parse_schumann_report(file_obj) 
-        
+            file_obj.name = file.filename
+            parsed_data = parse_schumann_report(file_obj)
+
         if extracted_name:
             parsed_data["Name"] = extracted_name
         public_url = ""
         try:
-            file_ext = file.filename.split('.')[-1].lower()
-            safe_name = f"report_{user_id}_{int(time.time())}.{file_ext}"
-            
+            # 儲存路徑用內容雜湊而非使用者可控的檔名，避免路徑穿越或覆蓋他人檔案。
+            safe_name = f"report_{user_id}_{digest.hexdigest()}.pdf"
+
             with open(tmp_path, 'rb') as f:
                 file_bytes = f.read()
-                
+
             supabase.storage.from_("reports").upload(
                 file=file_bytes,
                 path=safe_name,
-                file_options={"content-type": file.content_type}
+                file_options={"content-type": REPORT_CONTENT_TYPE}
             )
             public_url = supabase.storage.from_("reports").get_public_url(safe_name)
         except Exception as e:
@@ -809,10 +831,12 @@ async def analyze_schumann_report(
             }
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         log_exception("analyze.report", e)
-        raise HTTPException(status_code=500, detail=str(e))
-    
+        raise HTTPException(status_code=500, detail="報告解析失敗，請稍後再試")
+
     finally:
         # 🟢 優化 4：確保無論成功或失敗，硬碟上的暫存檔都會被刪除
         if tmp_path and os.path.exists(tmp_path):

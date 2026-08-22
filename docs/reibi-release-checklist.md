@@ -1,6 +1,6 @@
 # REIBI 移植：合併 `main` 前的發布檢查清單
 
-建立日期：2026-08-17（Asia/Taipei）
+建立日期：2026-08-17（Asia/Taipei）；目前狀態校正：2026-08-21
 
 分支：`codex/reibi-fastapi-merge` → `main`
 
@@ -10,7 +10,7 @@
 
 ## 1. 自動化驗證關卡（開發代理，每次提交前）
 
-四道關卡都必須綠燈才可推送。
+四道關卡都必須綠燈才可推送。下表的舊數字僅為 2026-08-17 歷史紀錄；目前基準與缺口請見 [完整進度與缺漏報告](reibi-migration-status-report.md)。
 
 ```powershell
 Set-Location C:\sleepm_merge\backend
@@ -39,10 +39,10 @@ npm.cmd run e2e
 | 關卡 | 現況（2026-08-17） | 執行者 |
 |---|---|---|
 | `pip check` | 無衝突 | 開發代理 |
-| Python 測試 | 3,275 passed | 開發代理 |
+| Python 測試 | 歷史：3,275 passed；目前基準：3,903 passed | 開發代理 |
 | TypeScript `--noEmit` | 通過 | 開發代理 |
 | Next.js production build | 通過 | 開發代理 |
-| pgTAP（`db:test`） | 146 passed，`Result: PASS` | 開發代理 |
+| pgTAP（`db:test`） | 歷史：146 passed；目前 159 項計畫，需在 Docker 本機堆疊重跑 | 開發代理 |
 | Database lint | `No schema errors found` | 開發代理 |
 | Playwright E2E | 24 passed（18 desktop + 6 mobile） | 開發代理 |
 
@@ -61,13 +61,15 @@ E2E 前置條件：Docker Desktop Engine running → `npm run supabase -- start`
 | 跨企業 `org_code` 越權 | ✅ 完成 | 開發代理 |
 | 瀏覽器不取得 service role／refresh token | ✅ E2E 驗證 | 開發代理 |
 | k≥5 隱私門檻（SQL 層強制） | ✅ 驗證 | 開發代理 |
-| **Supabase leaked-password protection** | ⬜ **未啟用** | **專案負責人** |
+| **Supabase leaked-password protection** | ⬜ **未啟用，2026-08-22 查明需要 Pro 方案** | **專案負責人** |
 | **正式 secrets 最終核對** | ⬜ 待辦 | **專案負責人** |
 | **正式 CORS／網域／HTTPS** | ⬜ 待辦 | **專案負責人** |
 
 ### 2.1 啟用 leaked-password protection（專案負責人）
 
-1. Supabase Dashboard → Authentication → Policies → Password security。
+**2026-08-22 查明：Dashboard 上該開關標註「Only available on Pro plan and above」，目前 Free 方案下無法確認能否真的存檔生效。** 與第 3.3 節「Supabase 升級 Pro」綁在一起處理，待升級後再回來完成下列步驟。
+
+1. Supabase Dashboard → Authentication → Sign In / Providers → Email → Prevent use of leaked passwords。
 2. 開啟 “Prevent use of leaked passwords”。
 3. 回歸測試：
    - 用一個**已知外洩的弱密碼**（例如 `password123456`）走一次 `/auth/complete` 邀請設定密碼，應被拒絕並顯示可理解的訊息。
@@ -99,9 +101,9 @@ Vercel 前端必須有：`NEXT_PUBLIC_API_URL` 指向正式 backend。
 
 | 環境 | 分支／commit | 最後狀態 |
 |---|---|---|
-| Railway `staging` | `codex/reibi-fastapi-merge`（最新 `220e41d`） | 正常，**這是實際在服務的後端** |
-| Vercel `Preview` | `codex/reibi-fastapi-merge`（最新 `220e41d`） | 正常，**這是實際在使用的前端** |
-| Railway `production` | — | **連續三次 failure**（2026-06-02 ×2、2026-06-05），之後未再嘗試 |
+| Railway `staging` | `codex/reibi-fastapi-merge`（基準 `ed75d9b`） | 正常，**這是實際在服務的後端** |
+| Vercel `Preview` | `codex/reibi-fastapi-merge`（基準 `ed75d9b`） | 正常，**這是實際在使用的前端** |
+| Railway `production` | — | **連續三次 failure**（2026-06-02 ×2、2026-06-05），之後未再嘗試；**2026-08-22 已刪除** |
 | Vercel `Production` | `main` `b1e7af3`（2026-06-05） | 部署成功但其後端不通 |
 
 也就是說目前**以 staging 環境充當正式環境**，而 Railway 的 production 環境是壞的。
@@ -109,10 +111,12 @@ Vercel 前端必須有：`NEXT_PUBLIC_API_URL` 指向正式 backend。
 這對合併 `main` 有直接影響 —— 合併會觸發 production 部署，而該環境自 6 月起未曾成功。合併前必須先決定：
 
 - [ ] **選項 A**：修好 Railway production 環境（找出 6/2 起的失敗原因、補齊 §2.2 的所有環境變數），合併後才有可用的正式站。
-- [ ] **選項 B**：正式承認 staging 環境就是正式環境，更新本文件與交接手冊的用語，並確認其環境變數符合 §2.2 的正式要求（特別是 `DEBUG=false`）。
-- [ ] **選項 C**：合併前先停用 production 環境的自動部署，避免合併後出現一個壞掉的正式站。
+- [x] **選項 B（2026-08-22 已決定並執行）**：正式承認 staging 環境就是正式環境，更新本文件與交接手冊的用語，並確認其環境變數符合 §2.2 的正式要求（特別是 `DEBUG=false`）。**未**變更 Railway 環境名稱或網域（仍為 `schumann-ai-sleep-platform-staging.up.railway.app`），刻意避免網域切換造成的服務中斷風險。
+- [x] **選項 C（2026-08-22 以刪除取代停用）**：原計畫僅停用 production 環境的自動部署，但 Railway CLI 的來源分支設定為整個 service 共用一份、無法個別環境停用；且該環境持續失敗兩個多月、選項 B 已使 staging 成為正式認定環境，故直接**刪除**該 Railway `production` 環境（ID `085c8256-1f29-45c5-9818-4083178f0b0f`），不再保留。刪除前確認 staging 部署與 `/health` 未受影響。
 
-無論選哪一個，都要確認 Vercel `Production` 的 `NEXT_PUBLIC_API_URL` 指向實際可用的後端；目前它指向的後端不通。
+無論選哪一個，都要確認 Vercel `Production` 的 `NEXT_PUBLIC_API_URL` 指向實際可用的後端；目前它指向的後端不通，且其對應的 Railway `production` 環境已不存在，需另外決定 Vercel Production 要指向哪個後端。
+
+**2026-08-22 執行結果**：確認 Railway `staging` 環境的 `DEBUG=False`、`GEMINI_API_KEY`／`JWT_SECRET_KEY`／`SUPABASE_URL`／`SUPABASE_SERVICE_ROLE_KEY`／`FRONTEND_URL` 均已設定，符合 §2.2 正式要求。`FRONTEND_URL` 指向 Vercel Preview（受 SSO 保護），因為那就是目前實際服務的前端。Railway `production` 環境已刪除。**Vercel 那一側（Production 網域指向哪個後端、是否／如何解除 SSO）尚未變更**，需要另外決定，見下方待辦。
 
 ### 這與資安無關
 
@@ -120,9 +124,30 @@ Vercel 前端必須有：`NEXT_PUBLIC_API_URL` 指向正式 backend。
 
 ---
 
-## 2.4 🔴 單位通行碼沒有任何自助重設管道（專案負責人）
+## 2.4 🟡 單位通行碼沒有任何自助重設管道（2026-08-22 已補上 email 重設路徑，PIN 本身仍保留）
 
 **2026-08-20 實際踩到。** 這一項比功能缺口更接近「會擋住上線」。
+
+**2026-08-22 執行結果**：選擇下方選項 2（遷移到 Supabase Auth 邀請制），且發現既有的邀請
+（`/reibi/accounts`）、登入（`/reibi-login`）、設定密碼（`/auth/complete`）三段基礎建設
+早已完整支援組織角色（`ORG_ADMIN_ASSIGNABLE_ROLES` 已含 `member`／`dept_head`／
+`occupational_health` 等），只是從未被串上「忘記密碼」——`reibi_manual.py` 站內手冊文字
+宣稱「密碼由本人透過 Email 重設」，但程式碼裡完全沒有觸發重設信的機制，文件與實作對不上。
+
+補上的東西：
+- 後端 `POST /api/auth/request-password-reset`（`backend/reibi_batch_g.py`）：呼叫 Supabase
+  `reset_password_for_email`，導回既有的 `/auth/complete` 設密碼頁；不論帳號是否存在都回相同
+  訊息，避免被拿來枚舉已註冊信箱。已登記進 `test_permission_matrix.py` 的 `PUBLIC_ROUTES`。
+- 前端 `/reibi-login/forgot-password`：輸入 email 觸發重設信，`/reibi-login` 加上入口連結。
+- `/auth/complete` 文案微調為邀請與重設共用（原本寫死「完成邀請」）。
+- 四道驗證關卡（`pip check`、3,903 項 pytest、`tsc --noEmit`、Next.js build）均已重跑通過。
+- **2026-08-22 補充**：`/api/analyze` 上傳防護補完後，pytest 增至 3,907 項；再加上結構性惡意內容檢查後增至 3,920 項；再加上 ClamAV 病毒掃描整合（`scan_for_malware()`，本機 Docker 完整驗證，見 [ClamAV 部署說明](reibi-clamav-setup.md)）後，最終 **3,925 項全數通過**。
+
+**這解決的範圍**：任何已經被邀請、有 Supabase Auth email 帳號的人，忘記密碼可以自救。
+**這沒解決的範圍**：既有靠 PIN 自動建立、從未留下 email 的帳號，仍然沒有 email 可寄，
+必須先由組織 admin 提供姓名＋email 名冊、經 `reibi_super` 或已遷移的組織 admin 逐一補發邀請，
+這步驟本質是人工協調，非程式可解。PIN 登入本身**沒有移除**，與 email 登入並存，待各組織
+陸續遷移完成後再個別評估是否關閉。
 
 企業成員、部門主管與單位管理者透過 `/login` 以「單位代碼 + 通行碼」登入，通行碼是
 `organizations` 表上的 bcrypt 雜湊（`member_pin`／`dept_pin`／`admin_pin`）。**忘記之後沒有任何管道可以救：**
@@ -164,14 +189,14 @@ where org_code = 'ORG-XXXX-26-000001';
 |---|---|
 | ⬜ 備份確認 | Supabase Dashboard → Database → Backups，確認自動備份已啟用且有可用還原點 |
 | ⬜ 還原演練 | 在**非正式**專案或分支資料庫實際還原一次，記錄耗時與步驟 |
-| ✅ 套用待補的 migration | 2026-08-20 已套用三個待補版本，遠端與 repo 同為 19 個 |
-| ✅ Migration 歷史核對 | `supabase migration list --linked` 19 筆 local／remote 全數對齊 |
+| ✅ 套用待補的 migration | 2026-08-20 已套用第 17–19 個版本；其後第 20 個場域 migration 亦已套用，遠端與 repo 同為 20 個 |
+| ✅ Migration 歷史核對 | 遠端與 repo 目前 20 筆對齊 |
 | ⬜ 監控與告警 | 設定後端錯誤率、Supabase 連線數與 Gemini 失敗的告警管道 |
 
 > 這段原本寫「本次移植未新增任何 migration，遠端 schema 維持 16 個版本」。該敘述自 2026-08-18 起不成立，
 > 已於 2026-08-19 更正並於 2026-08-20 完成套用。保留此段是為了記錄「敘述過期會讓人跳過必要步驟」這件事。
 
-**2026-08-20 已完成。** 遠端與 repo 同為 19 個 migration。套用前後的實際步驟：
+**2026-08-20 歷史紀錄。** 當時遠端與 repo 同為 19 個 migration；目前已為 20 個。套用前後的實際步驟：
 
 | 步驟 | 結果 |
 |---|---|
@@ -192,7 +217,7 @@ where org_code = 'ORG-XXXX-26-000001';
 
 | 步驟 | 說明 |
 |---|---|
-| ⬜ 開 Draft PR | 見下方 §6，`gh` CLI 未安裝，需用網頁開啟 |
+| ✅ 開 Draft PR | 已由專案負責人建立；仍待 review 與轉為 ready |
 | ⬜ Review 範圍 | migration、API 授權、前端、runbook |
 | ⬜ 轉 Ready for review | 四道自動化關卡全綠後 |
 | ⬜ 合併 `main` | Review 通過後 |
@@ -254,7 +279,7 @@ where org_code = 'ORG-XXXX-26-000001';
 https://github.com/reibicare9881/schumann-ai-sleep-platform/compare/main...codex/reibi-fastapi-merge?expand=1
 ```
 
-建立時請勾選 **Create draft pull request**。標題與內文見 [reibi-pull-request.md](reibi-pull-request.md)。
+Draft PR 已建立。更新 PR 描述時，請以[完整進度與缺漏報告](reibi-migration-status-report.md)與當次測試輸出為準，不要沿用已刪除的過期範本。
 
 ---
 

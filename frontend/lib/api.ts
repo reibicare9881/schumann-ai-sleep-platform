@@ -265,6 +265,12 @@ export const API = {
     });
   },
 
+  async requestPasswordReset(email: string) {
+    return this.request('/api/auth/request-password-reset', {
+      method: 'POST', body: JSON.stringify({ email })
+    });
+  },
+
   async enrollIdentityMfa(email: string, password: string) {
     return this.request('/api/auth/mfa/enroll', {
       method: 'POST', body: JSON.stringify({ email, password })

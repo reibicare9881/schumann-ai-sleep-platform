@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     line_channel_access_token: str | None = None
     line_api_url: str = "https://api.line.me/v2/bot/message/push"
 
+    # --- 上傳檔案病毒掃描（未設定 host 時整段停用，不會假裝已掃描） ---
+    clamav_host: str | None = None
+    clamav_port: int = 3310
+
     # 即使 .env 裡有其他沒定義在 class 裡的變數，也不會報錯
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

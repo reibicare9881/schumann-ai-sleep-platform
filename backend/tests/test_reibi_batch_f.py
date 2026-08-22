@@ -1,8 +1,10 @@
 import base64
+import io
 import unittest
 from types import SimpleNamespace
 
 from fastapi import HTTPException
+from PIL import Image
 
 from reibi_batch_f import (
     RemittanceOcrRequest,
@@ -72,8 +74,13 @@ class ReibiBatchFTests(unittest.TestCase):
         self.assertEqual(result["confidence"], 0.75)
 
     def test_receipt_base64_decoding_is_strict(self):
-        payload = RemittanceOcrRequest(remittance_id=1, mime_type="image/png", data_base64=base64.b64encode(b"png").decode())
-        self.assertEqual(decode_receipt(payload), b"png")
+        # 內容驗證加進來之後，這裡要用真的解得開的 PNG，而不是隨便三個 byte，
+        # 才能單獨測到「base64 解碼」這件事，不會被結構驗證擋下來混淆結果。
+        buffer = io.BytesIO()
+        Image.new("RGB", (2, 2), color="white").save(buffer, format="PNG")
+        real_png = buffer.getvalue()
+        payload = RemittanceOcrRequest(remittance_id=1, mime_type="image/png", data_base64=base64.b64encode(real_png).decode())
+        self.assertEqual(decode_receipt(payload), real_png)
         with self.assertRaises(HTTPException):
             decode_receipt(RemittanceOcrRequest(remittance_id=1, mime_type="image/png", data_base64="%%%bad"))
 

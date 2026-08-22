@@ -50,6 +50,10 @@ class CompleteInviteRequest(StrictModel):
     password: str = Field(min_length=12, max_length=1024)
 
 
+class RequestPasswordResetRequest(StrictModel):
+    email: str = Field(min_length=3, max_length=254)
+
+
 class MfaEnrollRequest(StrictModel):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=8, max_length=1024)
@@ -572,6 +576,29 @@ def create_reibi_batch_g_router(client: Client) -> APIRouter:
             raise
         except Exception as exc:
             raise HTTPException(status_code=401, detail="邀請連結無效或已過期") from exc
+
+    @router.post("/request-password-reset")
+    def request_password_reset(payload: RequestPasswordResetRequest):
+        email = payload.email.strip().lower()
+        rows = _execute(
+            client.table("reibi_internal_users")
+            .select("auth_user_id")
+            .eq("email", email)
+            .eq("is_active", True)
+            .limit(1),
+            "檢查可信帳號",
+        )
+        if rows:
+            auth_client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+            try:
+                auth_client.auth.reset_password_for_email(
+                    email,
+                    {"redirect_to": f"{settings.frontend_url.rstrip('/')}/auth/complete"},
+                )
+            except Exception:
+                pass
+        # 不論帳號是否存在都回傳相同訊息，避免被用來枚舉已註冊信箱。
+        return {"status": "success", "message": "如果這個信箱有對應的可信帳號，重設密碼信已寄出"}
 
     @router.post("/mfa/enroll")
     def enroll_mfa(payload: MfaEnrollRequest):

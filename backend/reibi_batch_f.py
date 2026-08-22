@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from auth import get_current_user, require_reibi_manager, require_reibi_super
 from config import settings
 from reibi_l5 import partner_scope_codes
+from upload_safety import scan_for_malware, validate_image_bytes, validate_pdf_bytes
 from roles import PARTNER_ROLES, has_permission
 
 
@@ -298,6 +299,11 @@ def decode_receipt(payload: RemittanceOcrRequest) -> bytes:
         raise HTTPException(status_code=422, detail="憑證內容不是有效的 Base64") from exc
     if not content or len(content) > MAX_RECEIPT_BYTES:
         raise HTTPException(status_code=422, detail="憑證必須介於 1 byte 與 10 MB 之間")
+    if payload.mime_type == "application/pdf":
+        validate_pdf_bytes(content)
+    else:
+        validate_image_bytes(content, payload.mime_type)
+    scan_for_malware(content)
     return content
 
 

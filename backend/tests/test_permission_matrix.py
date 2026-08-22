@@ -36,6 +36,7 @@ PUBLIC_ROUTES = {
     ("POST", "/api/auth/account/login"): "可信帳號登入",
     ("POST", "/api/auth/internal/login"): "REIBI 內部登入",
     ("POST", "/api/auth/complete-invite"): "邀請連結設定密碼，此時尚無應用 JWT",
+    ("POST", "/api/auth/request-password-reset"): "忘記密碼：寄送 Supabase 重設信，回應不揭露帳號是否存在",
     ("POST", "/api/auth/mfa/enroll"): "邀請流程首次綁定 TOTP，以邀請憑證換取 QR Code",
     ("POST", "/api/auth/mfa/verify-enrollment"): "邀請流程驗證六位碼",
 }

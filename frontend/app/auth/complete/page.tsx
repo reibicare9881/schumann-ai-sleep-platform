@@ -27,7 +27,7 @@ export default function CompleteInvitePage() {
     setError("");
     setMessage("");
     if (!accessToken) {
-      setError("邀請連結缺少驗證資訊，請要求管理者重新寄送邀請。");
+      setError("連結缺少驗證資訊，請重新申請邀請或重設密碼連結。");
       return;
     }
     if (password.length < 12) {
@@ -47,7 +47,7 @@ export default function CompleteInvitePage() {
         setMfaEmail(response.data?.email || "");
       } else setMessage(setup?.already_enrolled ? "密碼設定完成，MFA 已經啟用。" : (response.message || "密碼設定完成"));
     }
-    else setError(response.message || response.detail || "無法完成邀請");
+    else setError(response.message || response.detail || "連結無效或已過期，請重新申請");
     setLoading(false);
   };
 
@@ -65,7 +65,7 @@ export default function CompleteInvitePage() {
       <section className="mx-auto max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-7 shadow-2xl">
         <div className="flex items-center gap-3">
           <div className="rounded-2xl bg-teal-500/15 p-3 text-teal-300"><KeyRound className="h-6 w-6" /></div>
-          <div><h1 className="text-xl font-black">完成帳號邀請</h1><p className="mt-1 text-xs text-slate-400">設定密碼後即可使用可信帳號登入。</p></div>
+          <div><h1 className="text-xl font-black">設定密碼</h1><p className="mt-1 text-xs text-slate-400">無論是完成邀請或重設密碼，設定後即可使用可信帳號登入。</p></div>
         </div>
         {message ? (
           <div className="mt-7">
