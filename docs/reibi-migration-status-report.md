@@ -305,9 +305,13 @@ Artifact 角色對照完整測試、Artifact mapping 合成 fixture 回歸測試
 
 除第 8.1 節已列項目外：
 
-- 全站逐 endpoint 未授權矩陣仍待整併
+- ~~全站逐 endpoint 未授權矩陣仍待整併~~ —— **此項描述已過期**，2026-08-22 複查確認早已完成
+  （`test_permission_matrix.py`／`test_role_authorization.py` 直接掃描 FastAPI 實際註冊的
+  189 條路由自動產生矩陣，非手動清單），見第 8.1 節
 - 管理者憑證復原完整情境的 E2E 尚待驗收（人工核驗佇列已實作）
 - LINE 推播的正式 channel token 端對端驗收（範本、草稿、API 發送、失敗記錄均已完成）
+- 效能、併發、大檔匯入測試（被 Supabase Branching 卡住，見第 3.3 節）
+- 備份還原演練（Free 方案沒有還原點可演練，同樣被第 3.3 節卡住）
 
 ---
 
