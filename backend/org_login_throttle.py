@@ -31,6 +31,29 @@ ORG_FAILURE_LIMIT = 20
 _TABLE = "reibi_org_login_attempts"
 
 
+def client_ip(request: Any) -> Optional[str]:
+    """取得來源位址。
+
+    Railway 在反向代理後方，`request.client.host` 拿到的是邊緣節點的內部位址，且**同一個
+    使用者連續請求會拿到不同的值**（2026-08-22 在 staging 實測：7 次請求出現 5 個不同位址），
+    只靠它會讓 IP 這層永遠累積不到門檻。所以優先讀 X-Forwarded-For 的最左端（原始來源）。
+
+    X-Forwarded-For 是呼叫端可偽造的，因此攻擊者每次換一個假位址就能繞過這一層 ——
+    這正是第二層（單位層跨 IP 計數）存在的理由：它不看位址，偽造標頭繞不過。
+    IP 這層負責的是把一般的猜測擋在早期，不是唯一防線。
+    """
+    forwarded = None
+    headers = getattr(request, "headers", None)
+    if headers is not None:
+        forwarded = headers.get("x-forwarded-for")
+    if forwarded:
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first
+    client = getattr(request, "client", None)
+    return getattr(client, "host", None) if client else None
+
+
 def fingerprint(value: Optional[str]) -> Optional[str]:
     """與 reibi_batch_g._fingerprint 同一套做法：只存 HMAC，不存明文。"""
     if not value:

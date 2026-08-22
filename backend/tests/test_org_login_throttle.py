@@ -20,6 +20,7 @@ from org_login_throttle import (
     ORG_FAILURE_LIMIT,
     WINDOW_MINUTES,
     assert_not_throttled,
+    client_ip,
     fingerprint,
     record_attempt,
 )
@@ -43,6 +44,47 @@ def _seed_failures(fake_supabase, count, *, ip=IP, org=ORG, role=ROLE, minutes_a
         }
         for index in range(count)
     ])
+
+
+class _FakeRequest:
+    def __init__(self, headers=None, host=None):
+        self.headers = headers or {}
+        self.client = type("C", (), {"host": host})() if host else None
+
+
+class TestClientIp:
+    """來源位址的取得方式。
+
+    2026-08-22 在 staging 實測抓到的問題：Railway 在反向代理後方，`request.client.host`
+    回傳的是邊緣節點位址，**同一個使用者連續 7 次請求出現 5 個不同的值**，於是 IP 這層
+    永遠累積不到門檻、節流形同虛設。本機測試抓不到，因為 TestClient 永遠回報同一個
+    `testclient`。這組測試就是把那個情境釘住。
+    """
+
+    def test_prefers_the_forwarded_client_address(self):
+        request = _FakeRequest({"x-forwarded-for": "203.0.113.9"}, host="10.0.0.7")
+        assert client_ip(request) == "203.0.113.9"
+
+    def test_takes_the_leftmost_hop_when_several_proxies_chain(self):
+        request = _FakeRequest({"x-forwarded-for": "203.0.113.9, 10.0.0.7, 10.0.0.8"})
+        assert client_ip(request) == "203.0.113.9"
+
+    def test_a_proxy_that_rotates_its_own_address_no_longer_splits_the_count(self):
+        # 這是 staging 上真正發生的事：同一使用者、每次請求的 client.host 都不同。
+        seen = {
+            client_ip(_FakeRequest({"x-forwarded-for": "203.0.113.9"}, host=f"10.0.0.{hop}"))
+            for hop in range(7)
+        }
+        assert seen == {"203.0.113.9"}, "同一來源必須算成同一個位址，否則門檻永遠踩不到"
+
+    def test_falls_back_to_the_peer_address_without_the_header(self):
+        assert client_ip(_FakeRequest(host="198.51.100.4")) == "198.51.100.4"
+
+    def test_ignores_a_blank_header(self):
+        assert client_ip(_FakeRequest({"x-forwarded-for": "  "}, host="198.51.100.4")) == "198.51.100.4"
+
+    def test_returns_none_when_there_is_no_source_at_all(self):
+        assert client_ip(_FakeRequest()) is None
 
 
 class TestThrottleGate:
@@ -159,11 +201,19 @@ class TestThroughTheLoginEndpoint:
             "admin_pin": pwd_context.hash("correct-horse"),
         }])
 
-    def _login(self, client, pin):
+    def _login(self, client, pin, forwarded_for=None):
+        headers = {"X-Forwarded-For": forwarded_for} if forwarded_for else None
         return client.post("/api/auth/login", json={
             "platform": "sleep", "role": ROLE, "org_code": ORG,
             "name": "測試管理者", "pin": pin,
-        })
+        }, headers=headers)
+
+    def test_each_forwarded_source_is_counted_separately(self, client, seeded_org):
+        for _ in range(IP_FAILURE_LIMIT):
+            assert self._login(client, "wrong", forwarded_for="203.0.113.9").status_code == 401
+        # 打滿的是那個來源，不是這一個。
+        assert self._login(client, "wrong", forwarded_for="198.51.100.4").status_code == 401
+        assert self._login(client, "wrong", forwarded_for="203.0.113.9").status_code == 429
 
     def test_a_wrong_passcode_still_returns_401_before_the_limit(self, client, seeded_org):
         assert self._login(client, "wrong").status_code == 401

@@ -52,7 +52,7 @@ from reibi_subscription_gate import (
 )
 from health import build_health_report
 from safe_logging import log_exception
-from org_login_throttle import assert_not_throttled, record_attempt
+from org_login_throttle import assert_not_throttled, client_ip, record_attempt
 from upload_safety import scan_for_malware, validate_pdf_bytes
 
 # 查別人的資料時不套用個人訂閱限制：管理者看的是企業合約涵蓋的範圍。
@@ -349,15 +349,15 @@ async def unified_login(request: LoginRequest, http_request: Request):
 
         # 通行碼是全組織共用的憑證，猜中一次即可讀取整間企業的健康資料，
         # 因此比對前先擋暴力嘗試（Artifact 原本就有，移植時漏掉）。
-        client_ip = http_request.client.host if http_request.client else None
-        assert_not_throttled(supabase, org_code, request.role, client_ip)
+        source_ip = client_ip(http_request)
+        assert_not_throttled(supabase, org_code, request.role, source_ip)
 
         # 🟢 修正：使用 bcrypt 進行安全比對，嚴禁使用 request.pin != expected_pin_hash
         if not expected_pin_hash or not pwd_context.verify(request.pin, expected_pin_hash):
-            record_attempt(supabase, org_code, request.role, client_ip, succeeded=False)
+            record_attempt(supabase, org_code, request.role, source_ip, succeeded=False)
             raise HTTPException(status_code=401, detail="通行碼錯誤")
 
-        record_attempt(supabase, org_code, request.role, client_ip, succeeded=True)
+        record_attempt(supabase, org_code, request.role, source_ip, succeeded=True)
 
         # 3. 尋找或建立該員工的 profile 資料 (把名字跟 org_code 綁定)
         user_res = supabase.table("profiles").select("*").eq("full_name", request.name).eq("org_code", org_code).eq("system_role", request.role).execute()
