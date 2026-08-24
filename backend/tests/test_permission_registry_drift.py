@@ -45,6 +45,11 @@ ENFORCED_BY_ROLE_GUARD = {
     "reibi_overview": "/api/reibi/l5/overview 依角色裁切內容",
     "health_self": "個人資料端點的物件層本人檢查（見 test_object_authorization）",
     "submit_org": "評估寫入時的 consent_org_aggregate 旗標，非端點守門",
+    # 2026-08-23 決定：維持現狀，不補專屬端點也不改名。
+    # admin_hr 想看高風險族群時走的是 /api/org/records（由 org_analytics 守門，該角色也持有），
+    # 前端 /highrisk 就是這樣取數的。能力真的存在，只是標籤比實作細一階 ——
+    # 屬命名粒度而非權限缺口，不影響任何人能做什麼。
+    "high_risk": "org_analytics 的 /api/org/records 涵蓋；標籤粒度較細，非獨立端點",
 }
 
 # 已知「有承諾、沒有對應能力」的權限。列在這裡代表**已知且尚未決定怎麼處理**，
@@ -53,10 +58,6 @@ KNOWN_UNBACKED = {
     # security_audit 已於 2026-08-23 收斂：新增 GET /api/reibi/audit，
     # 以 has_permission("security_audit") 守門並強制綁定呼叫者的 org_code。
     # 這正是這支測試的用意 —— 補上端點後，上面那兩條測試會失敗逼人回來更新這裡。
-    "high_risk": (
-        "admin_hr 持有，但沒有專屬端點；前端 /highrisk 走的是通用的 /api/org/records，"
-        "實際由 org_analytics 涵蓋。屬標籤與實作粒度不一致，非越權。"
-    ),
     "message_manage": (
         "reibi_cs（客服）持有，但 /integrations/messages 系列（含 LINE dispatch）"
         "由 require_reibi_super 守門，客服打不進去。手冊承諾與實際守門不一致。"
@@ -119,7 +120,7 @@ class TestKnownGaps:
     """把已知落差釘住，避免它們在無人注意時擴大。"""
 
     def test_the_known_gap_list_does_not_grow_silently(self):
-        assert set(KNOWN_UNBACKED) == {"high_risk", "message_manage"}, (
+        assert set(KNOWN_UNBACKED) == {"message_manage"}, (
             "已知落差清單變動了。新增代表又出現一個手冊承諾但做不到的能力，"
             "移除代表已經處理完 —— 兩者都應該是有意識的決定並更新文件。"
         )

@@ -43,7 +43,7 @@ JSX 原始碼逐檔比對的過程在 [reibi-jsx-migration-gap-report.md](reibi-
 ## 2. 一句話總結
 
 **核心業務功能（計價、分潤、量表、狀態機、L5 營運、健康評估、訂閱閘門）已完整移植並逐項驗證，
-3,983 項 Python 測試與 170 項 pgTAP 全數通過，staging 環境實際跑通。**
+3,982 項 Python 測試與 170 項 pgTAP 全數通過，staging 環境實際跑通。**
 剩下的缺口分兩類：**三項需要你提供內容或決策**（定價確認、體驗場域資料、關於 REIBI
 三段文案），以及**一批不影響功能、但影響「能不能安心給外部客戶用」的基礎建設**
 （資料庫備份策略、通用元件、逐 endpoint 權限矩陣測試等）。
@@ -207,7 +207,7 @@ NMQ 肌肉骨骼（取 15 部位最大值）、BSRS-5（附加題大於等於 2 
 
 | 驗證項目 | 結果 |
 |---|---|
-| Python 單元／整合測試 | **3,983 項全數通過** |
+| Python 單元／整合測試 | **3,982 項全數通過** |
 | pgTAP 資料庫測試 | **170 項全數通過**（21 個 migration 於空資料庫全量重播後，2026-08-22） |
 | TypeScript 型別檢查 | 通過 |
 | Next.js production build | 通過 |
@@ -292,7 +292,7 @@ repo 與遠端 Supabase 均為 **21 個 migration**，完全同步（2026-08-22 
 | 權限 registry 與實際守門的落差 | **2026-08-22 查清並釘住。**「20 個未使用權限」是舊數字且描述失準：實際是 29 個宣告權限中，13 個由 `has_permission()` 直接檢查，13 個的能力由角色守門函式落實（非缺陷，已逐一登記負責的守門），**3 個是真的落差**。關鍵在於權限不只用於執行，還會透過 `documented_role_catalog()` 渲染到 `/reibi/l5/manual` 的角色權限表 —— 也就是**對使用者的承諾**。已新增 `test_permission_registry_drift.py`（10 項）：新增權限未分類即測試失敗，已知落差清單變動也會失敗 |
 | ✅ `security_audit`（admin_it） | **2026-08-23 已補上。** 原本手冊承諾但全站沒有端點，該角色實際只剩 `service_center` 可用。新增 `GET /api/reibi/audit` 與 `/reibi/audit` 頁面：讀取早已在累積的 `audit_logs`（七個寫入點），以 `has_permission("security_audit")` 守門，**企業角色強制綁定自身 `org_code`，帶別家代碼一律 403 而非安靜忽略**。含動作／日期篩選、分頁與 CSV 匯出。19 項測試，其中一半在守跨組織界線 |
 | ⚠️ `message_manage`（reibi_cs） | **手冊承諾但守門不符。** `/integrations/messages` 系列（含 LINE dispatch）由 `require_reibi_super` 守門，客服打不進去。待決：放寬守門、或移除承諾 |
-| `high_risk`（admin_hr） | 無專屬端點，前端 `/highrisk` 走通用的 `/api/org/records`，實際由 `org_analytics` 涵蓋。屬標籤粒度不一致，非越權 |
+| ✅ `high_risk`（admin_hr） | **2026-08-23 決定維持現狀。** 能力真的存在 —— admin_hr 走 `/api/org/records`（由其同時持有的 `org_analytics` 守門），前端 `/highrisk` 就是這樣取數。只是標籤比實作細一階，屬命名粒度而非權限缺口，不影響任何人能做什麼，因此不補專屬端點也不改名 |
 
 ### 8.3 低優先
 
