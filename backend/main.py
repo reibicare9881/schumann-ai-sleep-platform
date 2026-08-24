@@ -37,6 +37,7 @@ from google.genai import types
 from modules.pdf_generator_module import create_full_report_pdf
 from auth import create_access_token, get_current_user, require_admin, require_org_manager, require_member_or_above
 from reibi_api import create_reibi_router
+from reibi_audit import create_reibi_audit_router
 from reibi_batch_c import create_reibi_batch_c_router
 from reibi_batch_d import create_reibi_batch_d_router
 from reibi_batch_e import create_reibi_batch_e_router
@@ -92,6 +93,7 @@ configure_reibi_super_session_validator(create_internal_session_validator(supaba
 # REIBI business and Artifact-import endpoints use the same authenticated,
 # server-side Supabase client. No service-role credential is exposed to clients.
 app.include_router(create_reibi_router(supabase))
+app.include_router(create_reibi_audit_router(supabase))
 app.include_router(create_reibi_batch_c_router(supabase))
 app.include_router(create_reibi_batch_d_router(supabase))
 app.include_router(create_reibi_batch_e_router(supabase))

@@ -898,6 +898,10 @@ export const API = {
     return this.request('/api/reibi/access-requests', { method: 'POST', body: JSON.stringify(payload) });
   },
   async listReibiAccessRequests() { return this.request('/api/reibi/access-requests'); },
+
+  async listReibiAudit(query: Record<string, any> = {}) {
+    return this.request('/api/reibi/audit', { query });
+  },
   async reviewReibiAccessRequest(id: number, payload: Record<string, any>) {
     return this.request(`/api/reibi/access-requests/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
   },

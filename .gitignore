@@ -71,4 +71,4 @@ yarn-error.log*
 # 移植來源素材：四個 JSX Artifact 與其說明文件。
 # 保留在本機供對照，但不進 main —— 15,322 行輸入素材會佔掉 PR 三分之一的 diff，
 # 淹掉真正需要審閱的程式碼。歷史仍保留，需要時可從 git 取回。
-reibi/
+/reibi/

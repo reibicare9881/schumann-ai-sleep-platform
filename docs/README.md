@@ -30,6 +30,6 @@
 - 工作分支：`codex/reibi-fastapi-merge`；基準 commit：`ed75d9b`。
 - repo 與遠端 Supabase：**21 個 migration**，完全同步（2026-08-22 套用第 21 個：單位通行碼登入節流）。
 - 遠端：47 張 `public` tables，其中 41 張為 `reibi_*`。
-- Python：3,959 tests；pgTAP：170 項（2026-08-22 於本機空資料庫全量重播 21 個 migration 後通過，`db:lint` 無錯誤）；TypeScript 與 production build 最近一次均已通過。
+- Python：3,982 tests；pgTAP：170 項（2026-08-22 於本機空資料庫全量重播 21 個 migration 後通過，`db:lint` 無錯誤）；TypeScript 與 production build 最近一次均已通過。
 - 已決定不匯出或匯入舊 Artifact 的 `window.storage`。
 - 第一位 `reibi_super` 已完成 TOTP 與 AAL2；不得在 SQL 直接把未驗證帳號的 `mfa_required` 設為 `true`。
