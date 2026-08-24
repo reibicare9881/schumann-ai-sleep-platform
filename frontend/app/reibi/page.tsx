@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, BadgeDollarSign, BarChart3, Boxes, Building2, CalendarClock, FileCheck2, FileText, HardHat, Headphones, HeartPulse, KeyRound, LayoutDashboard, MapPin, Network, Pencil, Plus, RefreshCw, Save, Search, Tag, Trash2, Upload, Users } from "lucide-react";
+import { ArrowLeft, BadgeDollarSign, BarChart3, Boxes, Building2, CalendarClock, FileCheck2, FileText, HardHat, Headphones, HeartPulse, KeyRound, LayoutDashboard, MapPin, Network, Pencil, Plus, RefreshCw, Save, Search, ShieldCheck, Tag, Trash2, Upload, Users } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
 import API from "@/lib/api";
@@ -475,6 +475,7 @@ export default function ReibiManagementPage() {
           <Link href="/reibi/service" className="inline-flex items-center gap-2 rounded-xl bg-sky-700 px-4 py-2 text-sm font-bold text-white"><Headphones className="w-4 h-4" /> 服務與整合</Link>
           <Link href="/reibi/mfa" className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white"><KeyRound className="w-4 h-4" /> MFA 安全設定</Link>
           {["admin", "reibi_super"].includes(session.systemRole) && <Link href="/reibi/accounts" className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white"><Users className="w-4 h-4" /> 身分與角色</Link>}
+          {can(session.systemRole, "security_audit") && <Link href="/reibi/audit" className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-bold text-white"><ShieldCheck className="w-4 h-4" /> 資安稽核</Link>}
           <button onClick={() => void refreshAll()} disabled={loading} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-600 disabled:opacity-50">
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> 重新整理
           </button>

@@ -28,10 +28,10 @@ export const ROLES: Record<string, any> = {
   dept_head: { label: "部門主管", icon: "📋", color: C.amber, desc: "查閱本部門去識別化統計及OKR", perms: ["assess", "view_own", "dl_own", "view_history", "submit_org", "view_dept_okr", "dl_dept", "view_appt", "view_date_report", "health_self", "health_aggregate", "org_analytics", "service_center"] },
   admin_hr: { label: "HR 管理者", icon: "👥", color: C.amber, desc: "組織健康、風險、臨場服務與人員作業", perms: ["view_org", "view_appt", "view_date_report", "view_esg", "health_aggregate", "manage_ohs", "org_analytics", "service_center"] },
   admin_finance: { label: "財務管理者", icon: "💰", color: C.amber, desc: "組織健康效益與財務資料", perms: ["view_org", "view_date_report", "view_esg", "org_analytics", "service_center"] },
-  admin_it: { label: "IT 管理者", icon: "🔐", color: C.amber, desc: "稽核與平台安全管理", perms: ["service_center"] },
+  admin_it: { label: "IT 管理者", icon: "🔐", color: C.amber, desc: "稽核與平台安全管理", perms: ["security_audit", "service_center"] },
   admin: { label: "單位平台管理者", icon: "🔐", color: C.plum, desc: "HR人資高管／財務高管／負責人", perms: ["assess", "view_own", "dl_own", "view_history", "view_org", "dl_org", "view_okr", "manage_okr", "view_appt", "manage_appt", "dl_appt", "view_kpi", "edit_params", "view_date_report", "dl_date_report", "view_esg", "manage_reibi", "health_aggregate", "manage_ohs", "org_analytics", "generate_org_reports", "service_center"] },
   occupational_health: { label: "臨場醫護人員", icon: "🩺", color: C.coral, desc: "僅存取去識別化 roster 與過負荷面談記錄", perms: ["oh_interview"] },
-  reibi_super: { label: "REIBI 內部超級管理者", icon: "🛡️", color: C.teal, desc: "跨企業營運、財務、夥伴與資料搬移", perms: ["manage_reibi", "health_aggregate", "manage_ohs", "cross_org_analytics", "service_center"] },
+  reibi_super: { label: "REIBI 內部超級管理者", icon: "🛡️", color: C.teal, desc: "跨企業營運、財務、夥伴與資料搬移", perms: ["manage_reibi", "health_aggregate", "manage_ohs", "cross_org_analytics", "security_audit", "service_center"] },
   reibi_finance: { label: "REIBI 財務管理員", icon: "💰", color: C.amber, desc: "費用、收款、分潤與報表", perms: ["manage_reibi", "service_center"] },
   reibi_data: { label: "REIBI 數據分析師", icon: "📊", color: C.teal, desc: "跨企業去識別化分析與報表", perms: ["cross_org_analytics", "service_center"] },
   reibi_cs: { label: "REIBI 客服管理員", icon: "🎧", color: C.sage, desc: "服務案件、訊息與客戶協助", perms: ["service_center"] },
@@ -57,6 +57,7 @@ export const PERMS = [
   { p: "view_esg", label: "ESG健康效益報告", roles: ["admin"] },
   { p: "manage_reibi", label: "REIBI 企業與資料搬移管理", roles: ["admin", "reibi_super"] },
   { p: "service_center", label: "REIBI 服務中心", roles: ["individual", "member", "dept_head", "admin", "reibi_super"] },
+  { p: "security_audit", label: "資安稽核紀錄檢視", roles: ["admin_it", "reibi_super"] },
 ];
 
 export const can = (role: string, p: string) => ROLES[role]?.perms?.includes(p) ?? false;

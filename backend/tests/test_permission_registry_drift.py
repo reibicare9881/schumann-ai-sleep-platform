@@ -50,10 +50,9 @@ ENFORCED_BY_ROLE_GUARD = {
 # 已知「有承諾、沒有對應能力」的權限。列在這裡代表**已知且尚未決定怎麼處理**，
 # 不是預設可接受 —— 每一項都應該收斂成：補上端點、改守門、或從登錄表移除承諾。
 KNOWN_UNBACKED = {
-    "security_audit": (
-        "admin_it（IT 管理者）唯二權限之一，但全站沒有任何資安稽核端點。"
-        "該角色實際上只剩 service_center 可用，手冊卻公告它能檢視資安稽核紀錄。"
-    ),
+    # security_audit 已於 2026-08-23 收斂：新增 GET /api/reibi/audit，
+    # 以 has_permission("security_audit") 守門並強制綁定呼叫者的 org_code。
+    # 這正是這支測試的用意 —— 補上端點後，上面那兩條測試會失敗逼人回來更新這裡。
     "high_risk": (
         "admin_hr 持有，但沒有專屬端點；前端 /highrisk 走的是通用的 /api/org/records，"
         "實際由 org_analytics 涵蓋。屬標籤與實作粒度不一致，非越權。"
@@ -120,7 +119,7 @@ class TestKnownGaps:
     """把已知落差釘住，避免它們在無人注意時擴大。"""
 
     def test_the_known_gap_list_does_not_grow_silently(self):
-        assert set(KNOWN_UNBACKED) == {"security_audit", "high_risk", "message_manage"}, (
+        assert set(KNOWN_UNBACKED) == {"high_risk", "message_manage"}, (
             "已知落差清單變動了。新增代表又出現一個手冊承諾但做不到的能力，"
             "移除代表已經處理完 —— 兩者都應該是有意識的決定並更新文件。"
         )
@@ -129,15 +128,16 @@ class TestKnownGaps:
     def test_every_known_gap_still_carries_a_reason(self, permission):
         assert KNOWN_UNBACKED[permission].strip(), f"{permission} 缺少說明"
 
-    def test_admin_it_is_currently_a_nearly_empty_role(self):
-        """這條會在 admin_it 拿到真正的能力時失敗 —— 那正是我們想要的提醒。"""
+    def test_admin_it_can_actually_do_what_the_manual_promises(self):
+        """2026-08-23 之前這條是反過來寫的 —— 斷言該角色幾乎是空的。
+
+        補上 `GET /api/reibi/audit` 後改成正向斷言：IT 管理者的每一項公告能力
+        都要有實際支撐，任何一項退回無實作都會在這裡失敗。
+        """
         permissions = set(ROLE_DEFINITIONS["admin_it"].permissions)
         assert permissions == {"security_audit", "service_center"}
-        backed = {p for p in permissions if _is_checked_in_code(p) or p in ENFORCED_BY_ROLE_GUARD}
-        assert backed == {"service_center"}, (
-            "admin_it 目前實際上只有 service_center 可用；若已補上資安稽核端點，"
-            "請更新 KNOWN_UNBACKED 與 L5 手冊。"
-        )
+        unbacked = {p for p in permissions if not (_is_checked_in_code(p) or p in ENFORCED_BY_ROLE_GUARD)}
+        assert unbacked == set(), f"admin_it 又出現做不到的公告能力：{sorted(unbacked)}"
 
 
 class TestManualPromises:

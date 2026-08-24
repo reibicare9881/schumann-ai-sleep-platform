@@ -18,7 +18,7 @@
 - 舊 Artifact 的 `window.storage` **不匯出、不匯入**；新系統資料乾淨起始。選用匯入程式雖保留，未經新的範圍核准不得使用。
 - repo 與遠端 Supabase 目前同為 **21 個 migration**（2026-08-22 套用第 21 個：單位通行碼登入節流，並在 staging 實測確認節流生效）。遠端有 47 張 `public` tables，其中 41 張為 `reibi_*`。
 - 第一位正式 `reibi_super` 已完成 Email、TOTP 與 AAL2；本 repo 不保存密碼、TOTP secret 或 recovery code。
-- 最近一次完整本機驗證（2026-08-22）：3,959 項 Python 測試、170 項 pgTAP（21 個 migration 於空資料庫全量重播後）、`db:lint` 無錯誤、`pip check` 無衝突；TypeScript 檢查與 production build 通過。
+- 最近一次完整本機驗證（2026-08-22）：3,983 項 Python 測試、170 項 pgTAP（21 個 migration 於空資料庫全量重播後）、`db:lint` 無錯誤、`pip check` 無衝突；TypeScript 檢查與 production build 通過。
 - Railway Staging：`https://schumann-ai-sleep-platform-staging.up.railway.app`；Vercel Preview 受 SSO 保護。**2026-08-22 起正式認定為正式環境**（環境變數已核對符合正式要求），但網域與名稱未變更、Vercel SSO 保護尚未處理，見 [完整進度與缺漏報告第 11 節](reibi-migration-status-report.md)。
 
 ## 2. 架構與安全邊界
