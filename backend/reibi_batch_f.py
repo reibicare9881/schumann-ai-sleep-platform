@@ -20,6 +20,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from auth import get_current_user, require_reibi_manager, require_reibi_super
 from config import settings
 from reibi_l5 import partner_scope_codes
+import notifications
+from safe_logging import log_exception
 from upload_safety import scan_for_malware, validate_image_bytes, validate_pdf_bytes
 from roles import PARTNER_ROLES, has_permission
 
@@ -457,7 +459,31 @@ def create_reibi_batch_f_router(client: Any) -> APIRouter:
                        "closed_at": _now() if payload.status in {"已完成", "已關閉"} else None})
         updated = _execute(client.table("reibi_service_tickets").update(values).eq("id", ticket_id), "更新服務案件")
         _audit(client, user, "reibi_ticket_status", f"ticket={ticket_id}; {current}->{payload.status}")
-        return {"status": "success", "data": updated[0]}
+        return {
+            "status": "success",
+            "data": updated[0],
+            "notification": _notify_ticket_org(updated[0], current, payload.status),
+        }
+
+    def _notify_ticket_org(ticket: dict[str, Any], previous: str, current: str) -> dict[str, Any]:
+        """通知案件所屬企業的管理者。寄信失敗不影響已完成的狀態變更。"""
+        try:
+            enterprise_id = ticket.get("enterprise_id")
+            enterprise = {}
+            if enterprise_id:
+                rows = client.table("reibi_enterprises").select("org_code,org_name").eq("id", enterprise_id).limit(1).execute().data or []
+                enterprise = rows[0] if rows else {}
+            return notifications.notify_status_change(
+                client,
+                org_code=enterprise.get("org_code") or ticket.get("org_code"),
+                org_name=enterprise.get("org_name") or "",
+                label="服務案件",
+                doc_no=str(ticket.get("ticket_no") or f"#{ticket.get('id')}"),
+                previous=previous, current=current,
+            )
+        except Exception as exc:
+            log_exception("notify.ticket_status", exc)
+            return {"configured": notifications.is_configured(), "sent": False, "recipients": 0}
 
     @router.get("/announcements")
     def list_announcements(user: dict = Depends(get_current_user)):

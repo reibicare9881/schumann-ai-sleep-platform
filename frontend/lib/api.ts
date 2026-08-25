@@ -831,6 +831,36 @@ export const API = {
   async deleteReibiOhs(id: number, orgCode?: string) {
     return this.request(`/api/reibi/health/ohs/${id}`, { method: 'DELETE', query: { org_code: orgCode } });
   },
+  /** 下載職安計畫 PDF。
+   *  端點需要 Bearer token，所以不能用單純的 <a href> —— 那樣不會帶 Authorization
+   *  標頭，一定 401。改成 fetch 後轉 blob 再觸發下載。 */
+  async downloadOhsPlanPdf(orgCode?: string): Promise<{ ok: boolean; message?: string }> {
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const query = orgCode ? `?org_code=${encodeURIComponent(orgCode)}` : '';
+    const session = this.getSession();
+    try {
+      const response = await fetch(`${base}/api/reibi/health/ohs/plan.pdf${query}`, {
+        headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        let detail = '產生 PDF 失敗';
+        try { detail = (await response.json())?.detail || detail; } catch { /* 非 JSON 錯誤回應 */ }
+        return { ok: false, message: detail };
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `ohs-plan-${orgCode || 'plan'}.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : '下載失敗' };
+    }
+  },
+
   async getReibiOhsSnapshot(orgCode?: string) {
     return this.request('/api/reibi/health/ohs/plan/snapshot', { query: { org_code: orgCode } });
   },

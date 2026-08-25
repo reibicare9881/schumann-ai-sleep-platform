@@ -20,6 +20,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from auth import require_reibi_manager, require_reibi_super
 import reibi_audit
+import notifications
+from safe_logging import log_exception
 from reibi_work_order_catalog import (
     acceptance_checklist,
     catalog_payload,
@@ -1795,6 +1797,23 @@ def create_reibi_router(client: Any) -> APIRouter:
             raise HTTPException(status_code=404, detail="找不到資料，或資料不屬於目前企業")
         return enterprise_id, rows[0]
 
+    def _notify_enterprise(
+        enterprise_id: int, label: str, doc_no: str, previous: str, current: str,
+    ) -> dict[str, Any]:
+        """通知該企業的管理者。失敗一律不影響已完成的狀態變更。"""
+        try:
+            rows = client.table("reibi_enterprises").select("org_code,org_name").eq("id", enterprise_id).limit(1).execute().data or []
+            enterprise = rows[0] if rows else {}
+            return notifications.notify_status_change(
+                client,
+                org_code=enterprise.get("org_code"),
+                org_name=enterprise.get("org_name") or "",
+                label=label, doc_no=doc_no, previous=previous, current=current,
+            )
+        except Exception as exc:
+            log_exception("notify.work_order_status", exc)
+            return {"configured": notifications.is_configured(), "sent": False, "recipients": 0}
+
     def update_scoped_status(
         kind: str,
         table: str,
@@ -1825,7 +1844,14 @@ def create_reibi_router(client: Any) -> APIRouter:
         label = rows[0].get("doc_no") or rows[0].get("work_order_no") or f"#{record_id}"
         reibi_audit.record(client, current_user, action,
             f"{label} 狀態由「{existing.get('status')}」改為「{payload.status}」")
-        return {"status": "success", "data": rows[0]}
+        result: dict[str, Any] = {"status": "success", "data": rows[0]}
+        # 只有工單會通知企業端：報價與合約仍在議約階段，狀態變動由業務直接溝通，
+        # 自動寄信反而會在還沒談定時先驚動客戶。
+        if kind == "work_order":
+            result["notification"] = _notify_enterprise(
+                enterprise_id, "工單", label, str(existing.get("status") or ""), payload.status,
+            )
+        return result
 
     @router.post("/quotes/calculate")
     def calculate_quote(payload: QuoteCalculationRequest, _: dict = Depends(require_reibi_manager)):
