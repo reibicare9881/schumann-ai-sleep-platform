@@ -68,6 +68,29 @@ export const API = {
     return null;
   },
   
+  /** 個人模式的裝置身分。
+   *
+   *  個人登入原本以姓名查帳號，查得到就登入成那個人 —— 猜中名字即可讀取他人的
+   *  健康資料。改為：真正的身分是這組首次使用時產生的隨機值，姓名只是顯示標籤。
+   *
+   *  刻意與 api_session 分開保存：登出會清掉 session，但裝置身分要留著，
+   *  否則使用者每次登出就變成一個全新的人、看不到自己先前的紀錄。
+   */
+  getDeviceToken(): string {
+    if (typeof window === 'undefined') return '';
+    const KEY = 'reibi_device_token';
+    let token = localStorage.getItem(KEY);
+    if (!token) {
+      token = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        // 舊瀏覽器沒有 randomUUID 時的替代路徑，仍取自 CSPRNG。
+        : Array.from(crypto.getRandomValues(new Uint8Array(32)))
+            .map(b => b.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem(KEY, token);
+    }
+    return token;
+  },
+
   // 清除會話
   clearSession() {
     this.currentSession = null;
@@ -181,6 +204,8 @@ export const API = {
       method: 'POST',
       body: JSON.stringify({
         platform,
+        // 個人模式的身分來源；在這裡統一帶上，呼叫端不必各自記得。
+        ...(loginData.role === 'individual' ? { device_token: this.getDeviceToken() } : {}),
         ...loginData
       })
     });

@@ -125,6 +125,8 @@ class LoginRequest(BaseModel):
     pin: Optional[str] = None
     org_code: Optional[str] = None
     dept: Optional[str] = None
+    # 個人模式的真正身分。由瀏覽器首次使用時產生並保存，姓名只是顯示標籤。
+    device_token: Optional[str] = Field(default=None, max_length=200)
 
 # --- 新增：為 AssessmentData 建立子模型 ---
 
@@ -286,30 +288,50 @@ async def unified_login(request: LoginRequest, http_request: Request):
     if request.role == "individual":
         if not request.name:
             raise HTTPException(status_code=400, detail="個人用戶需提供姓名/代稱")
-            
-        # 1. 在 Supabase 的 profiles 表中尋找這個名字的個人用戶
-        # 假設你的表名叫做 profiles，並且有 full_name 和 user_type 欄位
-        response = supabase.table("profiles").select("*").eq("full_name", request.name).eq("system_role", "individual").execute()
-        
-        user_data = None
+
+        # 身分一律由裝置 token 決定，**絕不**用姓名查。
+        #
+        # 原本這裡是拿 full_name 查 profiles，查得到就登入成那個人 —— 等於任何人猜中
+        # 名字就能讀取他的健康資料。Artifact 這樣寫沒問題，因為它的資料在瀏覽器
+        # localStorage、每台裝置各自獨立；搬到共用資料庫後同一段邏輯就變成認證漏洞。
+        token = (request.device_token or "").strip()
+        if len(token) < 16:
+            raise HTTPException(
+                status_code=400,
+                detail="個人模式需要裝置識別碼；請重新整理頁面後再試",
+            )
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+        response = supabase.table("profiles").select("*").eq("device_token_hash", token_hash).limit(1).execute()
+
         if not response.data:
-            # 2. 找不到，就自動在 Supabase 建立一個新的 (免密碼註冊)
+            # 這台裝置第一次使用：建立新帳號（仍是免密碼，但身分綁在 token 上）。
             new_user = {
                 "id": str(uuid.uuid4()),
-                "full_name": request.name, 
-                "system_role": "individual"
+                "full_name": request.name,
+                "system_role": "individual",
+                "device_token_hash": token_hash,
             }
             # 🛡️ 加入防呆攔截，避免 Foreign Key 報錯導致伺服器崩潰
             try:
                 insert_res = supabase.table("profiles").insert(new_user).execute()
                 user_data = insert_res.data[0]
             except Exception as e:
+                log_exception("login.individual_create", e)
                 raise HTTPException(
-                    status_code=500, 
+                    status_code=500,
                     detail="無法建立使用者。請確認 Supabase 中 profiles 資料表已解除對 auth.users 的外鍵 (Foreign Key) 限制。"
                 )
         else:
             user_data = response.data[0]
+            # 姓名只是顯示標籤，使用者隨時可改；改了就順手更新，但它不參與身分判定。
+            if request.name != user_data.get("full_name"):
+                try:
+                    supabase.table("profiles").update({"full_name": request.name}).eq("id", user_data["id"]).execute()
+                    user_data["full_name"] = request.name
+                except Exception as e:
+                    # 更新顯示名稱失敗不該擋住登入。
+                    log_exception("login.individual_rename", e)
 
         # 3. 準備打包進 JWT 的資料
         token_payload = {
