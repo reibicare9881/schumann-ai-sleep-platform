@@ -23,6 +23,17 @@ class Settings(BaseSettings):
     clamav_host: str | None = None
     clamav_port: int = 3310
 
+    # --- 通知信（未設定 host 時整段停用，不會假裝已寄出） ---
+    #
+    # 刻意用一般 SMTP 而非任何廠商的 SDK：Brevo、Resend 等都提供 SMTP 介面，
+    # 換服務只要改這幾個變數，不必改程式，也不必為此多一個依賴。
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None
+    smtp_from_name: str = "REIBI 健康自主管理平台"
+
     # 即使 .env 裡有其他沒定義在 class 裡的變數，也不會報錯
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

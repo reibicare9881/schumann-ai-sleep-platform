@@ -7,7 +7,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from passlib.context import CryptContext
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -20,6 +20,7 @@ from reibi_subscription_gate import (
     subscription_page_payload,
 )
 from reibi_venues import VENUE_SELECT, build_venue_payload
+from modules.ohs_pdf import build_ohs_plan_pdf
 from roles import has_permission
 
 
@@ -889,5 +890,31 @@ def create_reibi_batch_d_router(client: Any) -> APIRouter:
                         .order("created_at"), "無法產生 OHS 計畫快照")
         grouped = {key: [row for row in rows if row["record_type"] == key] for key in ("hazard", "measure", "review", "meta")}
         return {"status": "success", "data": {"org_code": org, "generated_at": _now(), **grouped}}
+
+    @router.get("/ohs/plan.pdf")
+    def ohs_plan_pdf(org_code: Optional[str] = None, current_user: dict = Depends(require_ohs_manager)):
+        """伺服器產生的職安計畫 PDF。
+
+        與上面的 snapshot 走同一份資料與同一個守門，差別只在輸出形式：瀏覽器列印的
+        版面會隨環境變動，而職安記錄要留存數年，存查文件不該每次印出來都不一樣。
+        """
+        org = _org_code(current_user, org_code, required=True)
+        rows = _execute(client.table("reibi_ohs_records").select("id,artifact_id,record_type,status,risk_level,owner,due_date,verified_at,source_payload,created_at,updated_at")
+                        .eq("org_code", org).in_("record_type", ["hazard", "measure", "review", "meta"])
+                        .order("created_at"), "無法產生 OHS 計畫快照")
+        grouped = {key: [row for row in rows if row["record_type"] == key] for key in ("hazard", "measure", "review", "meta")}
+        snapshot = {"org_code": org, "generated_at": _now(), **grouped}
+
+        names = _execute(client.table("reibi_enterprises").select("org_name").eq("org_code", org).limit(1), "查詢企業名稱")
+        org_name = (names[0].get("org_name") if names else "") or org
+
+        content = build_ohs_plan_pdf(snapshot, org_name)
+        filename = f"ohs-plan-{org}-{snapshot['generated_at'][:10]}.pdf"
+        return Response(
+            content=content,
+            media_type="application/pdf",
+            # inline：管理者多半是想先看過再決定要不要存檔或列印。
+            headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        )
 
     return router
